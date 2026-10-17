@@ -1,0 +1,9 @@
+**/node_modules
+**/dist
+data
+.env
+.env.*
+.git
+web/android
+apps/desktop/release
+*.log

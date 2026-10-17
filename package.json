@@ -1,0 +1,28 @@
+{
+  "name": "daytime-ninja",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Self-hosted, tablet-first family chore tracker: chores, points, goals and rewards, run by a raccoon.",
+  "license": "MIT",
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace server & npm run dev --workspace web",
+    "dev:server": "npm run dev --workspace server",
+    "dev:web": "npm run dev --workspace web",
+    "build": "npm run build --workspace web",
+    "start": "npm start --workspace server",
+    "test": "node --test \"shared/**/*.test.ts\" \"server/src/**/*.test.ts\"",
+    "typecheck": "tsc -p server && tsc -p web --noEmit"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "@types/node": "^24.10.1"
+  }
+}
