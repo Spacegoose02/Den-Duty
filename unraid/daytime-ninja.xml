@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>DaytimeNinja</Name>
+  <Repository>ghcr.io/spacegoose02/daytime-ninja:latest</Repository>
+  <Registry>https://github.com/Spacegoose02/Daytime-Ninja/pkgs/container/daytime-ninja</Registry>
+  <Network>bridge</Network>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/Spacegoose02/Daytime-Ninja/issues</Support>
+  <Project>https://github.com/Spacegoose02/Daytime-Ninja</Project>
+  <Overview>Daytime Ninja is a self-hosted, tablet-first family chore tracker: chores on daily, weekday or one-off schedules, kids tap their raccoon on a family tablet to tick them off, parents approve, and points fill up goals and rewards. Custom points name and icon, an append-only points history, Home Assistant support, and strong sign-in for parents (passwords, two-factor, passkeys, Google).</Overview>
+  <Category>HomeAutomation: Productivity: Tools:</Category>
+  <WebUI>http://[IP]:[PORT:8080]/</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/Spacegoose02/Daytime-Ninja/main/unraid/daytime-ninja.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/Spacegoose02/Daytime-Ninja/main/web/public/icon.svg</Icon>
+  <ExtraParams>--restart unless-stopped</ExtraParams>
+  <Requires>Optional: a Google OAuth client for Google sign-in.</Requires>
+  <Config Name="Web UI port" Target="8080" Default="8080" Mode="tcp" Description="Port for the web app" Type="Port" Display="always" Required="true" Mask="false">8080</Config>
+  <Config Name="Data" Target="/data" Default="/mnt/user/appdata/daytime-ninja" Mode="rw" Description="Database and the generated session secret" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/daytime-ninja</Config>
+  <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="User the app runs as. 99 is Unraid's nobody user." Type="Variable" Display="advanced" Required="false" Mask="false">99</Config>
+  <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="Group the app runs as. 100 is Unraid's users group." Type="Variable" Display="advanced" Required="false" Mask="false">100</Config>
+  <Config Name="Public URL" Target="PUBLIC_URL" Default="http://[IP]:8080" Mode="" Description="The address people use to open the app, e.g. https://chores.example.com. Needed for Google sign-in and passkeys." Type="Variable" Display="always" Required="true" Mask="false">http://192.168.1.10:8080</Config>
+  <Config Name="Time zone" Target="TZ" Default="America/New_York" Mode="" Description="Fallback time zone for new homes (each home can change its own in Settings)." Type="Variable" Display="always" Required="false" Mask="false">America/New_York</Config>
+  <Config Name="Google client ID" Target="GOOGLE_CLIENT_ID" Default="" Mode="" Description="Optional. Turns on Google sign-in. Redirect URI: PUBLIC_URL/api/auth/google/callback" Type="Variable" Display="always" Required="false" Mask="false"></Config>
+  <Config Name="Google client secret" Target="GOOGLE_CLIENT_SECRET" Default="" Mode="" Description="Optional. Goes with the Google client ID." Type="Variable" Display="always" Required="false" Mask="true"></Config>
+  <Config Name="Sign-up mode" Target="SIGNUP_MODE" Default="invite" Mode="" Description="Who can make a parent account: invite (needs a home join code), open, or closed. The first account is always allowed and becomes the admin." Type="Variable" Display="always" Required="false" Mask="false">invite</Config>
+  <Config Name="Quick sign-in" Target="LOCAL_LOGIN" Default="" Mode="" Description="Name-only sign-in for parents: lan (home network only), off, or anywhere. Leave empty for lan without Google, off with Google." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+  <Config Name="Trusted proxies" Target="TRUST_PROXY" Default="" Mode="" Description="Optional. Reverse proxies allowed to set X-Forwarded headers. Defaults to loopback and private networks." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+  <Config Name="Session secret" Target="SESSION_SECRET" Default="" Mode="" Description="Optional. Leave empty to generate one automatically in the data folder." Type="Variable" Display="advanced" Required="false" Mask="true"></Config>
+</Container>
