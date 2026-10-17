@@ -1,0 +1,200 @@
+// Therapy section per kid: appointments, development / doctor / speech / feeding goals, and progress notes.
+// Parents only. A parent can choose to show a kid their own active goals and upcoming appointments (never notes).
+import type { FastifyInstance } from 'fastify';
+import type { DatabaseSync } from 'node:sqlite';
+import { homeCtx, type HomeCtx } from '../auth.ts';
+import { tx, type Row } from '../db.ts';
+import { HttpError, newId, num, requireStr, str } from '../util.ts';
+import { homeInfo, homeToday } from '../chores.ts';
+import { getKid } from './homes.ts';
+import { isIsoDate } from '../../../shared/schedule.ts';
+
+export const APPOINTMENT_KINDS = ['doctor', 'speech', 'feeding', 'occupational', 'physical', 'behavioral', 'dental', 'other'] as const;
+export const GOAL_AREAS = ['development', 'speech', 'feeding', 'doctor', 'motor', 'social', 'other'] as const;
+const STATUSES = ['scheduled', 'done', 'cancelled', 'missed'] as const;
+const LOCAL_DT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+
+const oneOf = <T extends string>(list: readonly T[], v: unknown, field: string, fallback?: T): T => {
+  if (v == null && fallback) return fallback;
+  if (typeof v !== 'string' || !(list as readonly string[]).includes(v)) throw new HttpError(400, `${field} must be one of: ${list.join(', ')}`);
+  return v as T;
+};
+
+function progressValue(v: unknown): number {
+  const n = num(v);
+  if (n == null || !Number.isInteger(n) || n < 0 || n > 100) throw new HttpError(400, 'Progress is a whole number from 0 to 100');
+  return n;
+}
+
+const appointmentView = (r: Row) => ({
+  id: r.id as string, memberId: r.member_id as string, kind: r.kind as string, title: r.title as string, provider: r.provider as string | null,
+  location: r.location as string | null, startsAt: r.starts_at as string, durationMinutes: r.duration_minutes as number | null,
+  status: r.status as string, notes: r.notes as string | null,
+});
+
+function goalView(db: DatabaseSync, r: Row) {
+  const history = (db.prepare('SELECT date, progress FROM therapy_notes WHERE goal_id = ? AND progress IS NOT NULL ORDER BY date, created_at').all(r.id as string) as Row[])
+    .map((h) => ({ date: h.date as string, progress: h.progress as number }));
+  return {
+    id: r.id as string, memberId: r.member_id as string, area: r.area as string, title: r.title as string, description: r.description as string | null,
+    targetDate: r.target_date as string | null, status: r.status as string, progress: r.progress as number,
+    createdAt: r.created_at as string, metAt: r.met_at as string | null, history,
+  };
+}
+
+function ownRow(db: DatabaseSync, table: 'therapy_appointments' | 'therapy_goals' | 'therapy_notes', ctx: HomeCtx, id: string): Row {
+  const r = db.prepare(`SELECT * FROM ${table} WHERE id = ? AND home_id = ?`).get(id, ctx.homeId) as Row | undefined;
+  if (!r) throw new HttpError(404, 'That is gone');
+  return r;
+}
+
+/** What a kid may see about their own therapy, when a parent has turned it on. */
+export function kidTherapyView(db: DatabaseSync, memberId: string, today: string) {
+  const m = db.prepare('SELECT therapy_kid_visible FROM members WHERE id = ?').get(memberId) as Row | undefined;
+  if (!m?.therapy_kid_visible) return null;
+  return {
+    goals: (db.prepare("SELECT id, area, title, progress FROM therapy_goals WHERE member_id = ? AND status = 'active' ORDER BY created_at").all(memberId) as Row[])
+      .map((g) => ({ id: g.id as string, area: g.area as string, title: g.title as string, progress: g.progress as number })),
+    upcoming: (db.prepare(`SELECT id, kind, title, provider, starts_at FROM therapy_appointments
+      WHERE member_id = ? AND status = 'scheduled' AND starts_at >= ? ORDER BY starts_at LIMIT 3`).all(memberId, today) as Row[])
+      .map((a) => ({ id: a.id as string, kind: a.kind as string, title: a.title as string, provider: a.provider as string | null, startsAt: a.starts_at as string })),
+  };
+}
+
+export function therapyRoutes(app: FastifyInstance, db: DatabaseSync): void {
+  app.get('/api/homes/:homeId/kids/:memberId/therapy', async (req) => {
+    const ctx = homeCtx(db, req, 'parent');
+    const kid = getKid(db, ctx, (req.params as { memberId: string }).memberId);
+    const id = kid.id as string;
+    return {
+      kidVisible: !!kid.therapy_kid_visible,
+      appointments: (db.prepare('SELECT * FROM therapy_appointments WHERE member_id = ? ORDER BY starts_at DESC LIMIT 200').all(id) as Row[]).map(appointmentView),
+      goals: (db.prepare("SELECT * FROM therapy_goals WHERE member_id = ? ORDER BY status = 'active' DESC, created_at DESC").all(id) as Row[]).map((g) => goalView(db, g)),
+      notes: (db.prepare(`SELECT n.*, g.title AS goal_title FROM therapy_notes n LEFT JOIN therapy_goals g ON g.id = n.goal_id
+        WHERE n.member_id = ? ORDER BY n.date DESC, n.created_at DESC LIMIT 100`).all(id) as Row[]).map((n) => ({
+        id: n.id as string, goalId: n.goal_id as string | null, goalTitle: n.goal_title as string | null, appointmentId: n.appointment_id as string | null,
+        body: n.body as string, progress: n.progress as number | null, date: n.date as string, by: n.by_name as string | null,
+      })),
+    };
+  });
+
+  app.patch('/api/homes/:homeId/kids/:memberId/therapy', async (req) => {
+    const ctx = homeCtx(db, req, 'parent');
+    const kid = getKid(db, ctx, (req.params as { memberId: string }).memberId);
+    if (typeof (req.body as Row)?.kidVisible !== 'boolean') throw new HttpError(400, 'kidVisible must be true or false');
+    db.prepare('UPDATE members SET therapy_kid_visible = ? WHERE id = ?').run((req.body as Row).kidVisible ? 1 : 0, kid.id as string);
+    return { ok: true };
+  });
+
+  // Everyone's next appointments, for the parents' home screen.
+  app.get('/api/homes/:homeId/therapy/upcoming', async (req) => {
+    const ctx = homeCtx(db, req, 'parent');
+    const today = homeToday(homeInfo(db, ctx.homeId));
+    return (db.prepare(`SELECT a.*, m.name AS kid_name, m.avatar AS kid_avatar FROM therapy_appointments a JOIN members m ON m.id = a.member_id
+      WHERE a.home_id = ? AND a.status = 'scheduled' AND a.starts_at >= ? ORDER BY a.starts_at LIMIT 10`).all(ctx.homeId, today) as Row[])
+      .map((r) => ({ ...appointmentView(r), kidName: r.kid_name as string, kidAvatar: r.kid_avatar as string }));
+  });
+
+  // ----- appointments -----
+  app.post('/api/homes/:homeId/kids/:memberId/therapy/appointments', async (req) => {
+    const ctx = homeCtx(db, req, 'parent');
+    const kid = getKid(db, ctx, (req.params as { memberId: string }).memberId);
+    const b = (req.body ?? {}) as Row;
+    if (typeof b.startsAt !== 'string' || !LOCAL_DT.test(b.startsAt)) throw new HttpError(400, 'Pick a date and time');
+    const id = newId();
+    db.prepare(`INSERT INTO therapy_appointments (id, home_id, member_id, kind, title, provider, location, starts_at, duration_minutes, notes, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, ctx.homeId, kid.id as string, oneOf(APPOINTMENT_KINDS, b.kind, 'Kind', 'other'),
+      requireStr(b.title, 'Title', 100), str(b.provider, 100), str(b.location, 200), b.startsAt, num(b.durationMinutes), str(b.notes, 2000), ctx.user?.id ?? null);
+    return appointmentView(ownRow(db, 'therapy_appointments', ctx, id));
+  });
+
+  app.patch('/api/homes/:homeId/therapy/appointments/:id', async (req) => {
+    const ctx = homeCtx(db, req, 'parent');
+    const cur = ownRow(db, 'therapy_appointments', ctx, (req.params as { id: string }).id);
+    const b = (req.body ?? {}) as Row;
+    if ('startsAt' in b && (typeof b.startsAt !== 'string' || !LOCAL_DT.test(b.startsAt))) throw new HttpError(400, 'Pick a date and time');
+    db.prepare(`UPDATE therapy_appointments SET kind = ?, title = ?, provider = ?, location = ?, starts_at = ?, duration_minutes = ?, status = ?, notes = ? WHERE id = ?`).run(
+      'kind' in b ? oneOf(APPOINTMENT_KINDS, b.kind, 'Kind') : cur.kind as string,
+      'title' in b ? requireStr(b.title, 'Title', 100) : cur.title as string,
+      'provider' in b ? str(b.provider, 100) : cur.provider as string | null,
+      'location' in b ? str(b.location, 200) : cur.location as string | null,
+      'startsAt' in b ? b.startsAt as string : cur.starts_at as string,
+      'durationMinutes' in b ? num(b.durationMinutes) : cur.duration_minutes as number | null,
+      'status' in b ? oneOf(STATUSES, b.status, 'Status') : cur.status as string,
+      'notes' in b ? str(b.notes, 2000) : cur.notes as string | null,
+      cur.id as string);
+    return appointmentView(ownRow(db, 'therapy_appointments', ctx, cur.id as string));
+  });
+
+  app.delete('/api/homes/:homeId/therapy/appointments/:id', async (req) => {
+    const ctx = homeCtx(db, req, 'parent');
+    db.prepare('DELETE FROM therapy_appointments WHERE id = ? AND home_id = ?').run((req.params as { id: string }).id, ctx.homeId);
+    return { ok: true };
+  });
+
+  // ----- goals -----
+  app.post('/api/homes/:homeId/kids/:memberId/therapy/goals', async (req) => {
+    const ctx = homeCtx(db, req, 'parent');
+    const kid = getKid(db, ctx, (req.params as { memberId: string }).memberId);
+    const b = (req.body ?? {}) as Row;
+    if (b.targetDate != null && b.targetDate !== '' && !isIsoDate(b.targetDate)) throw new HttpError(400, 'Target dates look like 2026-12-01');
+    const id = newId();
+    db.prepare(`INSERT INTO therapy_goals (id, home_id, member_id, area, title, description, target_date, progress, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(id, ctx.homeId, kid.id as string, oneOf(GOAL_AREAS, b.area, 'Area', 'development'), requireStr(b.title, 'Goal', 120), str(b.description, 2000),
+        (b.targetDate as string) || null, b.progress == null ? 0 : progressValue(b.progress), ctx.user?.id ?? null);
+    return goalView(db, ownRow(db, 'therapy_goals', ctx, id));
+  });
+
+  app.patch('/api/homes/:homeId/therapy/goals/:id', async (req) => {
+    const ctx = homeCtx(db, req, 'parent');
+    const cur = ownRow(db, 'therapy_goals', ctx, (req.params as { id: string }).id);
+    const b = (req.body ?? {}) as Row;
+    const status = 'status' in b ? oneOf(['active', 'met', 'paused'] as const, b.status, 'Status') : cur.status as string;
+    if ('targetDate' in b && b.targetDate != null && b.targetDate !== '' && !isIsoDate(b.targetDate)) throw new HttpError(400, 'Target dates look like 2026-12-01');
+    db.prepare(`UPDATE therapy_goals SET area = ?, title = ?, description = ?, target_date = ?, status = ?, progress = ?, updated_at = datetime('now'),
+      met_at = CASE WHEN ? = 'met' THEN COALESCE(met_at, datetime('now')) ELSE NULL END WHERE id = ?`).run(
+      'area' in b ? oneOf(GOAL_AREAS, b.area, 'Area') : cur.area as string,
+      'title' in b ? requireStr(b.title, 'Goal', 120) : cur.title as string,
+      'description' in b ? str(b.description, 2000) : cur.description as string | null,
+      'targetDate' in b ? (b.targetDate as string) || null : cur.target_date as string | null,
+      status,
+      'progress' in b ? progressValue(b.progress) : status === 'met' ? 100 : cur.progress as number,
+      status, cur.id as string);
+    return goalView(db, ownRow(db, 'therapy_goals', ctx, cur.id as string));
+  });
+
+  app.delete('/api/homes/:homeId/therapy/goals/:id', async (req) => {
+    const ctx = homeCtx(db, req, 'parent');
+    db.prepare('DELETE FROM therapy_goals WHERE id = ? AND home_id = ?').run((req.params as { id: string }).id, ctx.homeId);
+    return { ok: true };
+  });
+
+  // ----- notes -----
+  // A note can belong to a goal and/or an appointment. A progress value on a goal note moves the goal and adds a chart point.
+  app.post('/api/homes/:homeId/kids/:memberId/therapy/notes', async (req) => {
+    const ctx = homeCtx(db, req, 'parent');
+    const kid = getKid(db, ctx, (req.params as { memberId: string }).memberId);
+    const b = (req.body ?? {}) as Row;
+    const goalId = str(b.goalId, 60);
+    const appointmentId = str(b.appointmentId, 60);
+    if (goalId && ownRow(db, 'therapy_goals', ctx, goalId).member_id !== kid.id) throw new HttpError(400, "That goal is someone else's");
+    if (appointmentId && ownRow(db, 'therapy_appointments', ctx, appointmentId).member_id !== kid.id) throw new HttpError(400, "That appointment is someone else's");
+    const progress = b.progress == null || b.progress === '' ? null : progressValue(b.progress);
+    if (progress != null && !goalId) throw new HttpError(400, 'Progress goes with a goal');
+    const date = isIsoDate(b.date) ? b.date : homeToday(homeInfo(db, ctx.homeId));
+    const id = newId();
+    tx(db, () => {
+      db.prepare(`INSERT INTO therapy_notes (id, home_id, member_id, goal_id, appointment_id, body, progress, date, by_name, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, ctx.homeId, kid.id as string, goalId, appointmentId, requireStr(b.body, 'Note', 4000), progress, date,
+        ctx.user?.name ?? null, ctx.user?.id ?? null);
+      if (goalId && progress != null) db.prepare("UPDATE therapy_goals SET progress = ?, updated_at = datetime('now') WHERE id = ?").run(progress, goalId);
+    });
+    return { id };
+  });
+
+  app.delete('/api/homes/:homeId/therapy/notes/:id', async (req) => {
+    const ctx = homeCtx(db, req, 'parent');
+    db.prepare('DELETE FROM therapy_notes WHERE id = ? AND home_id = ?').run((req.params as { id: string }).id, ctx.homeId);
+    return { ok: true };
+  });
+}

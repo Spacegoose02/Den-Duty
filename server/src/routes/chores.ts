@@ -8,6 +8,7 @@ import {
   reviewQueue, setStarted, submitInstance, syncChore, todayList, unapproveInstance, unclaimBonus, unsubmitInstance, type By,
 } from '../chores.ts';
 import { achievements, kidStats, levelOf, streaks } from '../progress.ts';
+import { kidTherapyView } from './therapy.ts';
 import { cleanIcon, getKid, kidView, listKids } from './homes.ts';
 import { addDays, cleanWeekdays, describeSchedule, isIsoDate, startOfWeek, type ScheduleKind } from '../../../shared/schedule.ts';
 
@@ -175,6 +176,8 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
       streak: streaks(db, memberId, today),
       achievements: achievements(db, memberId, today),
       recent: ledger(db, memberId, 8),
+      // Only when a parent chose to share it; parents see the full therapy section on its own page.
+      therapy: kidTherapyView(db, memberId, today),
     };
   });
 

@@ -269,6 +269,72 @@ const MIGRATIONS: string[] = [
     PRIMARY KEY (poll_id, member_id)
   );
   `,
+  // Phase 4: therapy tracking per kid (parents only unless they share goals with the kid), and the parents' honey-do board.
+  `
+  ALTER TABLE members ADD COLUMN therapy_kid_visible INTEGER NOT NULL DEFAULT 0;
+  CREATE TABLE therapy_appointments (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL DEFAULT 'other',
+    title TEXT NOT NULL,
+    provider TEXT,
+    location TEXT,
+    -- Local wall-clock time in the home's time zone, 'YYYY-MM-DDTHH:MM'.
+    starts_at TEXT NOT NULL,
+    duration_minutes INTEGER,
+    status TEXT NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'done', 'cancelled', 'missed')),
+    notes TEXT,
+    created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX therapy_appointments_member ON therapy_appointments(member_id, starts_at);
+  CREATE TABLE therapy_goals (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    area TEXT NOT NULL DEFAULT 'development',
+    title TEXT NOT NULL,
+    description TEXT,
+    target_date TEXT,
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'met', 'paused')),
+    progress INTEGER NOT NULL DEFAULT 0 CHECK (progress BETWEEN 0 AND 100),
+    created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    met_at TEXT
+  );
+  CREATE INDEX therapy_goals_member ON therapy_goals(member_id, status);
+  -- Progress notes. A note with a progress value is also the goal's progress history (for its chart).
+  CREATE TABLE therapy_notes (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    goal_id TEXT REFERENCES therapy_goals(id) ON DELETE CASCADE,
+    appointment_id TEXT REFERENCES therapy_appointments(id) ON DELETE SET NULL,
+    body TEXT NOT NULL,
+    progress INTEGER CHECK (progress BETWEEN 0 AND 100),
+    date TEXT NOT NULL,
+    by_name TEXT,
+    created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX therapy_notes_member ON therapy_notes(member_id, date);
+  CREATE TABLE honeydo (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    notes TEXT,
+    assignee_id TEXT REFERENCES members(id) ON DELETE SET NULL,
+    status TEXT NOT NULL DEFAULT 'todo' CHECK (status IN ('todo', 'doing', 'done')),
+    due_date TEXT,
+    position REAL NOT NULL DEFAULT 0,
+    created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    done_at TEXT
+  );
+  CREATE INDEX honeydo_home ON honeydo(home_id, status, position);
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {
