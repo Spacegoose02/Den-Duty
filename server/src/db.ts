@@ -349,6 +349,13 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX events_home ON events(home_id, id);
   `,
+  // Generic OpenID Connect and reverse-proxy (forward-auth) sign-in.
+  `
+  ALTER TABLE users ADD COLUMN oidc_sub TEXT;
+  ALTER TABLE users ADD COLUMN forward_user TEXT COLLATE NOCASE;
+  CREATE UNIQUE INDEX users_oidc_sub ON users(oidc_sub);
+  CREATE UNIQUE INDEX users_forward_user ON users(forward_user);
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

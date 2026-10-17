@@ -28,6 +28,8 @@ export interface User {
   disabled: number;
   last_home_id: string | null;
   google_sub: string | null;
+  oidc_sub: string | null;
+  forward_user: string | null;
   password_hash: string | null;
   totp_secret: string | null;
   totp_enabled: number;
@@ -130,10 +132,14 @@ export function getUser(db: DatabaseSync, id: string): User | undefined {
 }
 
 /** Creates a user. The very first account on a server becomes its admin. */
-export function createUser(db: DatabaseSync, u: { name: string; username?: string | null; email?: string | null; googleSub?: string | null; passwordHash?: string | null }): User {
+export function createUser(db: DatabaseSync, u: {
+  name: string; username?: string | null; email?: string | null; googleSub?: string | null; oidcSub?: string | null;
+  forwardUser?: string | null; passwordHash?: string | null;
+}): User {
   const id = newId();
-  db.prepare("INSERT INTO users (id, name, username, email, google_sub, password_hash, is_admin, theme) VALUES (?, ?, ?, ?, ?, ?, ?, 'home')")
-    .run(id, u.name, u.username ?? null, u.email ?? null, u.googleSub ?? null, u.passwordHash ?? null, hasUsers(db) ? 0 : 1);
+  db.prepare(`INSERT INTO users (id, name, username, email, google_sub, oidc_sub, forward_user, password_hash, is_admin, theme)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'home')`)
+    .run(id, u.name, u.username ?? null, u.email ?? null, u.googleSub ?? null, u.oidcSub ?? null, u.forwardUser ?? null, u.passwordHash ?? null, hasUsers(db) ? 0 : 1);
   return getUser(db, id)!;
 }
 
@@ -168,9 +174,58 @@ function signedCookie(req: FastifyRequest, name: string): string | null {
   return un.valid ? un.value : null;
 }
 
+/**
+ * Finds the account for a single sign-on identity: by its id at the provider, then by verified email (and links it).
+ * New people get an account the same way the rest of sign-up works: open, invite-only (needs a home join code from
+ * before the round trip), or closed. Returns the reason instead of a user when it can't.
+ */
+export function findOrCreateSsoUser(db: DatabaseSync, req: FastifyRequest, reply: FastifyReply | null,
+  id: { column: 'google_sub' | 'oidc_sub' | 'forward_user'; sub: string; email: string | null; name: string; skipInvite?: boolean }): User | 'closed' | 'invite' {
+  let user = db.prepare(`SELECT * FROM users WHERE ${id.column} = ?`).get(id.sub) as User | undefined;
+  if (!user && id.email) {
+    user = db.prepare('SELECT * FROM users WHERE email = ? COLLATE NOCASE').get(id.email) as User | undefined;
+    if (user) db.prepare(`UPDATE users SET ${id.column} = ? WHERE id = ?`).run(id.sub, user.id);
+  }
+  if (user) return user;
+  const fields = {
+    name: id.name, email: id.email,
+    googleSub: id.column === 'google_sub' ? id.sub : null,
+    oidcSub: id.column === 'oidc_sub' ? id.sub : null,
+    forwardUser: id.column === 'forward_user' ? id.sub : null,
+  };
+  const mode = signupMode(db);
+  if (!hasUsers(db) || mode === 'open') return createUser(db, fields);
+  if (mode === 'closed') return 'closed';
+  // The reverse proxy already decided who gets in, so it doesn't need a join code; they'll create or join a home next.
+  if (id.skipInvite) return createUser(db, fields);
+  const pending = req.cookies.dn_invite ? req.unsignCookie(req.cookies.dn_invite) : null;
+  const home = pending?.valid && pending.value ? db.prepare('SELECT id FROM homes WHERE join_code = ?').get(pending.value) as Row | undefined : undefined;
+  if (!home) return 'invite';
+  const created = createUser(db, fields);
+  addParent(db, home.id as string, created);
+  reply?.clearCookie('dn_invite', { path: '/' });
+  return created;
+}
+
+/** Is the machine that sent this request one of the reverse proxies allowed to vouch for people? */
+export function trustedPeer(addr: string | undefined, trusted: string[]): boolean {
+  if (!addr) return false;
+  const ip = addr.replace(/^::ffff:/, '');
+  const ipv4 = /^\d+\.\d+\.\d+\.\d+$/;
+  const toNum = (s: string) => s.split('.').reduce((n, o) => (n << 8) + Number(o), 0) >>> 0;
+  return trusted.some((t) => {
+    if (t === 'private') return isPrivateAddress(ip);
+    if (!t.includes('/')) return t === ip;
+    const [net, bits] = t.split('/');
+    if (!ipv4.test(ip) || !ipv4.test(net)) return false;
+    const mask = Number(bits) === 0 ? 0 : (~0 << (32 - Number(bits))) >>> 0;
+    return (toNum(ip) & mask) === (toNum(net) & mask);
+  });
+}
+
 /** Accounts protected by a password, Google, two-factor or a passkey can never be used through name-only sign-in. */
 function isQuickAccount(db: DatabaseSync, u: User): boolean {
-  return !u.password_hash && !u.google_sub && !u.email && !u.totp_enabled
+  return !u.password_hash && !u.google_sub && !u.oidc_sub && !u.forward_user && !u.email && !u.totp_enabled
     && !db.prepare('SELECT 1 FROM passkeys WHERE user_id = ?').get(u.id);
 }
 
@@ -205,7 +260,10 @@ export function installAuth(app: FastifyInstance, db: DatabaseSync): void {
       }
       sessionId = token;
     }
-    if (!sessionId) return;
+    if (!sessionId) {
+      resolveForwardAuth(db, req);
+      return;
+    }
     const hash = sha256(sessionId);
     const row = db.prepare(`
       SELECT u.*, s.last_seen_at AS session_seen FROM sessions s JOIN users u ON u.id = s.user_id
@@ -217,6 +275,23 @@ export function installAuth(app: FastifyInstance, db: DatabaseSync): void {
       db.prepare("UPDATE sessions SET last_seen_at = datetime('now'), ip = ? WHERE id = ?").run(req.ip, hash);
     }
   });
+}
+
+/** A reverse proxy in front of us signed this person in and says who they are in a header. */
+function resolveForwardAuth(db: DatabaseSync, req: FastifyRequest): void {
+  const fa = config.forwardAuth;
+  if (!fa) return;
+  const header = (name: string) => {
+    const v = req.headers[name];
+    return str(Array.isArray(v) ? v[0] : v, 200);
+  };
+  const username = header(fa.userHeader);
+  // Only the proxy itself may send this header; anyone else could just type it.
+  if (!username || !trustedPeer(req.socket.remoteAddress, fa.trusted)) return;
+  const emailRaw = header(fa.emailHeader);
+  const email = emailRaw && /^[^@\s]+@[^@\s]+$/.test(emailRaw) ? emailRaw.toLowerCase() : null;
+  const user = findOrCreateSsoUser(db, req, null, { column: 'forward_user', sub: username, email, name: header(fa.nameHeader) ?? username, skipInvite: true });
+  if (typeof user !== 'string' && !user.disabled) req.user = user;
 }
 
 function resolveDevice(db: DatabaseSync, req: FastifyRequest): void {
@@ -288,12 +363,37 @@ export function assertCanActFor(ctx: HomeCtx, memberId: string): void {
 
 export const isParent = (ctx: HomeCtx): boolean => ctx.actor.kind === 'parent';
 
-let googleConfig: Promise<oidc.Configuration> | null = null;
-function google(): Promise<oidc.Configuration> {
-  if (!config.google) throw new HttpError(404, 'Google sign-in is not configured');
-  googleConfig ??= oidc.discovery(new URL('https://accounts.google.com'), config.google.clientId, config.google.clientSecret)
-    .catch((err) => { googleConfig = null; throw err; });
-  return googleConfig;
+// ---------- single sign-on: Google and any OpenID Connect provider (Authentik, Authelia, Keycloak, Pocket ID...) ----------
+
+interface Provider {
+  key: 'google' | 'oidc';
+  label: string;
+  issuer: string;
+  clientId: string;
+  clientSecret: string;
+  scope: string;
+  /** The users column that remembers who this is at the provider. */
+  column: 'google_sub' | 'oidc_sub';
+}
+
+function provider(key: string): Provider {
+  if (key === 'google' && config.google) {
+    return { key, label: 'Google', issuer: 'https://accounts.google.com', ...config.google, scope: 'openid email profile', column: 'google_sub' };
+  }
+  if (key === 'oidc' && config.oidc) {
+    return { key, label: config.oidc.name, issuer: config.oidc.issuer, clientId: config.oidc.clientId, clientSecret: config.oidc.clientSecret, scope: config.oidc.scopes, column: 'oidc_sub' };
+  }
+  throw new HttpError(404, 'That sign-in method is not configured');
+}
+
+const discovered = new Map<string, Promise<oidc.Configuration>>();
+function discover(p: Provider): Promise<oidc.Configuration> {
+  let cfg = discovered.get(p.key);
+  if (!cfg) {
+    cfg = oidc.discovery(new URL(p.issuer), p.clientId, p.clientSecret).catch((err) => { discovered.delete(p.key); throw err; });
+    discovered.set(p.key, cfg);
+  }
+  return cfg;
 }
 
 export function publicUser(u: User) {
@@ -312,6 +412,7 @@ function userHomes(db: DatabaseSync, userId: string) {
 export function registerAuthRoutes(app: FastifyInstance, db: DatabaseSync): void {
   app.get('/api/auth/config', async (req) => ({
     google: !!config.google,
+    oidc: config.oidc ? { name: config.oidc.name } : null,
     local: localLoginAllowed(db, req),
     passwords: true,
     passkeys: true,
@@ -334,59 +435,45 @@ export function registerAuthRoutes(app: FastifyInstance, db: DatabaseSync): void
     return { user: publicUser(user) };
   });
 
-  app.get('/api/auth/google', async (_req, reply) => {
-    const cfg = await google();
+  app.get('/api/auth/:provider', async (req, reply) => {
+    const p = provider((req.params as { provider: string }).provider);
+    const cfg = await discover(p);
     const verifier = oidc.randomPKCECodeVerifier();
     const state = oidc.randomState();
     const nonce = oidc.randomNonce();
     const url = oidc.buildAuthorizationUrl(cfg, {
-      redirect_uri: `${config.publicUrl}/api/auth/google/callback`,
-      scope: 'openid email profile',
+      redirect_uri: `${config.publicUrl}/api/auth/${p.key}/callback`,
+      scope: p.scope,
       code_challenge: await oidc.calculatePKCECodeChallenge(verifier),
       code_challenge_method: 'S256',
       state,
       nonce,
-      prompt: 'select_account',
+      ...(p.key === 'google' ? { prompt: 'select_account' } : {}),
     });
-    reply.setCookie('dn_oidc', JSON.stringify({ verifier, state, nonce }), { ...cookieOpts(reply), maxAge: 600 });
+    reply.setCookie('dn_oidc', JSON.stringify({ verifier, state, nonce, provider: p.key }), { ...cookieOpts(reply), maxAge: 600 });
     return reply.redirect(url.href);
   });
 
-  app.get('/api/auth/google/callback', async (req, reply) => {
-    const cfg = await google();
+  app.get('/api/auth/:provider/callback', async (req, reply) => {
+    const p = provider((req.params as { provider: string }).provider);
+    const cfg = await discover(p);
     const raw = req.cookies.dn_oidc;
     const un = raw ? req.unsignCookie(raw) : null;
     if (!un?.valid || !un.value) return reply.redirect('/?signin=expired');
     reply.clearCookie('dn_oidc', { path: '/' });
-    const { verifier, state, nonce } = JSON.parse(un.value) as { verifier: string; state: string; nonce: string };
+    const { verifier, state, nonce, provider: started } = JSON.parse(un.value) as { verifier: string; state: string; nonce: string; provider?: string };
+    if (started && started !== p.key) return reply.redirect('/?signin=expired');
     const current = new URL(req.url, config.publicUrl);
     const tokens = await oidc.authorizationCodeGrant(cfg, current, { pkceCodeVerifier: verifier, expectedState: state, expectedNonce: nonce });
     const claims = tokens.claims();
-    if (!claims) throw new HttpError(400, 'Google did not return an identity');
+    if (!claims) throw new HttpError(400, `${p.label} did not return an identity`);
     const email = typeof claims.email === 'string' && claims.email_verified ? claims.email.toLowerCase() : null;
-    let user = db.prepare('SELECT * FROM users WHERE google_sub = ?').get(claims.sub) as User | undefined;
-    if (!user && email) {
-      user = db.prepare('SELECT * FROM users WHERE email = ? COLLATE NOCASE').get(email) as User | undefined;
-      if (user) db.prepare('UPDATE users SET google_sub = ? WHERE id = ?').run(claims.sub, user.id);
-    }
-    if (!user) {
-      const mode = signupMode(db);
-      if (hasUsers(db) && mode !== 'open') {
-        // Invite-only servers: you join by using a home's join code, which links this Google account.
-        if (mode === 'closed') return reply.redirect('/?signin=closed');
-        const pending = req.cookies.dn_invite ? req.unsignCookie(req.cookies.dn_invite) : null;
-        const home = pending?.valid && pending.value ? db.prepare('SELECT id FROM homes WHERE join_code = ?').get(pending.value) as Row | undefined : undefined;
-        if (!home) return reply.redirect('/?signin=invite');
-        user = createUser(db, { name: str(claims.name, 60) ?? email?.split('@')[0] ?? 'Parent', email, googleSub: claims.sub });
-        addParent(db, home.id as string, user);
-        reply.clearCookie('dn_invite', { path: '/' });
-      } else {
-        user = createUser(db, { name: str(claims.name, 60) ?? email?.split('@')[0] ?? 'Parent', email, googleSub: claims.sub });
-      }
-    }
+    const name = str(claims.name, 60) ?? str(claims.preferred_username, 60) ?? email?.split('@')[0] ?? 'Parent';
+    const user = findOrCreateSsoUser(db, req, reply, { column: p.column, sub: claims.sub, email, name });
+    if (typeof user === 'string') return reply.redirect(`/?signin=${user}`);
     if (user.disabled) return reply.redirect('/?signin=disabled');
-    if (user.totp_enabled) return reply.redirect(`/?mfa=${encodeURIComponent(startMfa(db, user.id, 'google'))}`);
-    startSession(db, reply, user.id, 'google');
+    if (user.totp_enabled) return reply.redirect(`/?mfa=${encodeURIComponent(startMfa(db, user.id, p.key))}`);
+    startSession(db, reply, user.id, p.key);
     return reply.redirect('/');
   });
 

@@ -5,7 +5,7 @@ import { api, type Whoami } from '../api.ts';
 import { useApp, useLoad } from '../state.tsx';
 import { RaccoonAvatar } from '../components/Raccoon.tsx';
 
-interface AuthConfig { google: boolean; local: boolean; passwords: boolean; passkeys: boolean; signup: 'first' | 'open' | 'invite' | 'closed' }
+interface AuthConfig { google: boolean; oidc: { name: string } | null; local: boolean; passwords: boolean; passkeys: boolean; signup: 'first' | 'open' | 'invite' | 'closed' }
 type Mode = 'signin' | 'register' | 'pair' | 'quick' | 'mfa';
 
 const SIGNIN_ERRORS: Record<string, string> = {
@@ -66,9 +66,9 @@ export function Login({ onTablet = false }: { onTablet?: boolean }) {
     await finish();
   });
 
-  const google = () => run(async () => {
+  const sso = (provider: 'google' | 'oidc') => run(async () => {
     if (f.joinCode.trim()) await api('/api/auth/invite', { body: { code: f.joinCode } });
-    location.href = '/api/auth/google';
+    location.href = `/api/auth/${provider}`;
   });
 
   const canRegister = cfg && cfg.signup !== 'closed';
@@ -91,7 +91,8 @@ export function Login({ onTablet = false }: { onTablet?: boolean }) {
               <input placeholder="Password" type="password" value={f.password} onChange={set('password')} autoComplete="current-password" />
               <button disabled={busy || !f.username || !f.password}>Sign in</button>
             </form>
-            {cfg?.google && <button onClick={google} disabled={busy}>Sign in with Google</button>}
+            {cfg?.oidc && <button onClick={() => sso('oidc')} disabled={busy}>Sign in with {cfg.oidc.name}</button>}
+            {cfg?.google && <button onClick={() => sso('google')} disabled={busy}>Sign in with Google</button>}
             <div className="row" style={{ justifyContent: 'center' }}>
               {canRegister && <button className="ghost" onClick={() => setMode('register')}>Create an account</button>}
               <button className="ghost" onClick={() => setMode('pair')}>I have a pairing code</button>
@@ -110,7 +111,8 @@ export function Login({ onTablet = false }: { onTablet?: boolean }) {
             <input placeholder="Username" value={f.username} onChange={set('username')} autoComplete="username" autoCapitalize="none" />
             <input placeholder="Password (10+ characters)" type="password" value={f.password} onChange={set('password')} autoComplete="new-password" />
             <button className="primary" disabled={busy || !f.username || f.password.length < 10 || (needsCode && !f.joinCode)}>Create account</button>
-            {cfg?.google && (needsCode ? !!f.joinCode : true) && <button type="button" onClick={google} disabled={busy}>Use Google instead</button>}
+            {cfg?.oidc && (needsCode ? !!f.joinCode : true) && <button type="button" onClick={() => sso('oidc')} disabled={busy}>Use {cfg.oidc.name} instead</button>}
+            {cfg?.google && (needsCode ? !!f.joinCode : true) && <button type="button" onClick={() => sso('google')} disabled={busy}>Use Google instead</button>}
             {cfg?.signup !== 'first' && <button type="button" className="ghost" onClick={() => setMode('signin')}>Back to sign in</button>}
           </form>
         )}

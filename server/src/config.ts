@@ -23,6 +23,10 @@ function generatedSecret(): string {
   }
 }
 
+function list(v: string | undefined): string[] {
+  return (v || '').split(',').map((s) => s.trim()).filter(Boolean);
+}
+
 const googleClientId = process.env.GOOGLE_CLIENT_ID || '';
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET || '';
 const port = Number(process.env.PORT || 8080);
@@ -46,6 +50,26 @@ export const config = {
     || (googleClientId && googleClientSecret ? 'off' : 'lan'),
   // Who may create an account: open, invite (needs a home join code) or closed. The first account is always allowed.
   signupMode: process.env.SIGNUP_MODE || 'invite',
+  // Any OpenID Connect provider (Authentik, Authelia, Keycloak, Pocket ID, Zitadel...), next to Google.
+  oidc: process.env.OIDC_ISSUER && process.env.OIDC_CLIENT_ID
+    ? {
+      issuer: process.env.OIDC_ISSUER,
+      clientId: process.env.OIDC_CLIENT_ID,
+      clientSecret: process.env.OIDC_CLIENT_SECRET || '',
+      name: process.env.OIDC_NAME || 'single sign-on',
+      scopes: process.env.OIDC_SCOPES || 'openid email profile',
+    }
+    : null,
+  // Trust a username header from a reverse proxy that already signed the person in (TinyAuth, Authelia, Authentik
+  // outposts, oauth2-proxy...). Only honored on requests that come straight from FORWARD_AUTH_TRUSTED addresses.
+  forwardAuth: process.env.FORWARD_AUTH_HEADER
+    ? {
+      userHeader: process.env.FORWARD_AUTH_HEADER.toLowerCase(),
+      emailHeader: (process.env.FORWARD_AUTH_EMAIL_HEADER || 'remote-email').toLowerCase(),
+      nameHeader: (process.env.FORWARD_AUTH_NAME_HEADER || 'remote-name').toLowerCase(),
+      trusted: list(process.env.FORWARD_AUTH_TRUSTED || 'private'),
+    }
+    : null,
   // Fallback time zone for homes whose browser didn't say (each home stores its own).
   defaultTimezone: process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
   webDist: path.resolve(process.env.WEB_DIST || fileURLToPath(new URL('../../web/dist', import.meta.url))),

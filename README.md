@@ -24,7 +24,7 @@ Daytime Ninja is the sibling of [Nighttime Ninja](https://github.com/Spacegoose0
 - **Therapy section per kid** (parents only): appointments (doctor, speech, feeding, OT, PT and more), development / speech / feeding / doctor goals with progress notes and a progress chart. You can choose to show a kid their own goals and next appointments; notes always stay private.
 - **Honey-do board**: a kanban for the parents' own to-dos and goals, with assignees and due dates.
 - **21 themes**, from Sunny and Dino to Space and Volcano, plus two high-contrast ones. Pick one for the home, and each kid can have their own on their board.
-- **Strong sign-in** carried over from Nighttime Ninja: passwords (scrypt), **two-factor codes** with recovery codes, **passkeys**, **Google** (OIDC), invite-only sign-up, rate limiting, signed-in device list, **pairing codes**, and name-only quick sign-in that only works on your home network.
+- **Strong sign-in** carried over from Nighttime Ninja: passwords (scrypt), **two-factor codes** with recovery codes, **passkeys**, **Google** (OIDC), any **OpenID Connect** provider, **forward-auth** from TinyAuth-style proxies, invite-only sign-up, rate limiting, signed-in device list, **pairing codes**, and name-only quick sign-in that only works on your home network.
 - **Home Assistant**: a token-based summary endpoint with each kid's points and chores left today.
 - **Runs everywhere**: Docker (with an Unraid template) and any browser. Android and Windows apps are planned (same approach as Nighttime Ninja).
 
@@ -59,6 +59,8 @@ All settings are environment variables. See [.env.example](.env.example).
 | `PUBLIC_URL` | The address people use, e.g. `https://chores.example.com`. Needed for Google sign-in and passkeys. |
 | `DATA_DIR` | Where the SQLite database lives (`/data` in Docker). |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Turn on Google sign-in. See [docs/google-sign-in.md](docs/google-sign-in.md). |
+| `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_NAME` | Sign in with your own OpenID Connect provider. See [docs/single-sign-on.md](docs/single-sign-on.md). |
+| `FORWARD_AUTH_HEADER`, `FORWARD_AUTH_TRUSTED` | Let a reverse proxy like TinyAuth sign parents in. See [docs/single-sign-on.md](docs/single-sign-on.md). |
 | `SIGNUP_MODE` | `invite` (default, needs a home join code), `open`, or `closed`. Admins can change it in Settings. |
 | `LOCAL_LOGIN` | Name-only quick sign-in for parents: `lan` (home network only), `off`, or `anywhere`. |
 | `TRUST_PROXY` | Reverse proxies allowed to set X-Forwarded headers. Defaults to loopback and private networks. |
