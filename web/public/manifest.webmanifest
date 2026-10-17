@@ -1,0 +1,13 @@
+{
+  "name": "Daytime Ninja",
+  "short_name": "Chores",
+  "description": "Self-hosted family chore tracker: chores, points, goals and rewards.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#fff9ec",
+  "theme_color": "#e8590c",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
