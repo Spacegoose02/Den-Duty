@@ -127,6 +127,13 @@ function HomeSettings() {
         {POINT_ICONS.map((i) => <button key={i} className={`chip icon-chip${home.pointsIcon === i ? ' on' : ''}`} onClick={() => void patch({ pointsIcon: i })}>{i}</button>)}
       </div>
 
+      <h3>Taking points away</h3>
+      <label className="row" style={{ fontWeight: 600 }}>
+        <input type="checkbox" checked={!!home.allowNegative} onChange={(e) => void patch({ allowNegative: e.target.checked })} style={{ width: 24, minHeight: 24 }} />
+        Let balances go below zero
+      </label>
+      <p className="small muted" style={{ margin: 0 }}>Off by default: a penalty takes what's there and stops at zero.</p>
+
       <h3>Home theme</h3>
       <p className="small muted" style={{ margin: 0 }}>Used on the family tablet and by anyone who hasn't picked their own. Each kid can have their own in Kids → Edit.</p>
       <ThemePicker value={home.theme} onPick={(t) => t && void patch({ theme: t }, 'Theme changed')} />

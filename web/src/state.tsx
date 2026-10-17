@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { api, type HomeDetail, type Whoami } from './api.ts';
+import { THEME_DEFS } from '../../shared/themes.ts';
 
 interface AppState {
   who: Whoami | null;
@@ -13,6 +14,8 @@ interface AppState {
   toast: (msg: string) => void;
   /** Prefix for the current home's API routes. */
   base: string;
+  /** Whether the active theme is dark (charts pick their dark-mode colors from this). */
+  dark: boolean;
 }
 
 const Ctx = createContext<AppState | null>(null);
@@ -68,7 +71,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <Ctx.Provider value={{ who, loading, homeId, home, refresh, refreshHome, setHome, toast, base: `/api/homes/${homeId}` }}>
+    <Ctx.Provider value={{ who, loading, homeId, home, refresh, refreshHome, setHome, toast, base: `/api/homes/${homeId}`, dark: !!THEME_DEFS.find((t) => t.id === theme)?.dark }}>
       {children}
       {toastMsg && <div className="toast" role="status">{toastMsg}</div>}
     </Ctx.Provider>

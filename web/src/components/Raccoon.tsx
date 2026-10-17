@@ -63,6 +63,53 @@ function Head({ variant }: { variant: Avatar }) {
           <circle cx="70" cy="30" r="5" fill="#c2255c" />
         </g>
       )}
+      {variant === 'party' && (
+        <g>
+          <path d="M60 2 l-16 38 h32z" fill="#e64980" />
+          <path d="M52 21 l16 0 M48 30 l24 0" stroke="#ffd43b" strokeWidth="4" />
+          <circle cx="60" cy="3" r="5" fill="#ffd43b" />
+        </g>
+      )}
+      {variant === 'pirate' && (
+        <g>
+          <path d="M22 40 q38 -40 76 0 q-38 -10 -76 0z" fill="#212529" />
+          <circle cx="60" cy="26" r="5" fill="#fff" />
+          <path d="M56 32 l8 0" stroke="#fff" strokeWidth="2" />
+          <circle cx="76" cy="62" r="8" fill="#111" />
+          <path d="M30 50 l52 18" stroke="#111" strokeWidth="2.5" />
+        </g>
+      )}
+      {variant === 'wizard' && (
+        <g>
+          <path d="M60 -4 l-26 44 h52z" fill="#5f3dc4" />
+          <rect x="26" y="36" width="68" height="7" rx="3.5" fill="#4c2fa0" />
+          <path d="M52 18 l3 6 l6 1 l-5 4 l1 6 l-5 -3 l-5 3 l1 -6 l-5 -4 l6 -1z" fill="#ffd43b" />
+        </g>
+      )}
+      {variant === 'astronaut' && (
+        <g>
+          <circle cx="60" cy="64" r="50" fill="rgba(165,216,255,.28)" stroke="#dee2e6" strokeWidth="5" />
+          <path d="M28 34 q14 -14 30 -16" stroke="#fff" strokeWidth="4" fill="none" strokeLinecap="round" opacity="0.8" />
+        </g>
+      )}
+      {variant === 'superhero' && (
+        <g>
+          <path d="M22 60 q38 -24 76 0 q-6 15 -21 12 q-17 -5 -34 0 q-15 3 -21 -12z" fill="#e03131" />
+          <circle cx="44" cy="62" r="5.5" fill="#fff" />
+          <circle cx="76" cy="62" r="5.5" fill="#fff" />
+          <circle cx="45" cy="62.5" r="3" fill="#111" />
+          <circle cx="77" cy="62.5" r="3" fill="#111" />
+          <path d="M44 100 l16 10 l16 -10" fill="#ffd43b" stroke="#e03131" strokeWidth="3" />
+        </g>
+      )}
+      {variant === 'golden' && (
+        <g>
+          <ellipse cx="60" cy="66" rx="44" ry="37" fill="none" stroke="#fcc419" strokeWidth="4" opacity="0.8" />
+          <path d="M34 38 l4 -24 l11 13 l11 -18 l11 18 l11 -13 l4 24 z" fill="#fcc419" stroke="#e67700" strokeWidth="2" strokeLinejoin="round" />
+          <circle cx="60" cy="30" r="3.5" fill="#1098ad" />
+          <path d="M14 30 l3 -6 l3 6 l-3 6z M102 24 l3 -6 l3 6 l-3 6z" fill="#fcc419" />
+        </g>
+      )}
       {variant === 'headphones' && (
         <g>
           <path d="M22 58 q0 -46 38 -46 q38 0 38 46" fill="none" stroke="#343a40" strokeWidth="6" strokeLinecap="round" />

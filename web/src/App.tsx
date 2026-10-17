@@ -8,6 +8,8 @@ import { Week } from './pages/Week.tsx';
 import { Chores } from './pages/Chores.tsx';
 import { Kids } from './pages/Kids.tsx';
 import { Settings } from './pages/Settings.tsx';
+import { Rewards } from './pages/Rewards.tsx';
+import { Stats } from './pages/Stats.tsx';
 import { KidPicker } from './pages/KidPicker.tsx';
 import { KidBoard, ParentKidBoard } from './pages/KidBoard.tsx';
 
@@ -16,6 +18,8 @@ const NAV = [
   { to: '/week', ico: '📅', label: 'Week' },
   { to: '/chores', ico: '🧹', label: 'Chores' },
   { to: '/kids', ico: '🦝', label: 'Kids' },
+  { to: '/rewards', ico: '🎁', label: 'Rewards' },
+  { to: '/stats', ico: '📊', label: 'Stats' },
   { to: '/settings', ico: '⚙️', label: 'Settings' },
 ];
 
@@ -64,6 +68,8 @@ export function App() {
           <Route path="/chores" element={<Chores />} />
           <Route path="/kids" element={<Kids />} />
           <Route path="/kids/:memberId" element={<ParentKidBoard />} />
+          <Route path="/rewards" element={<Rewards />} />
+          <Route path="/stats" element={<Stats />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/home/new" element={<HomeSetup inline />} />
           <Route path="*" element={<div className="card">That page wandered off. <NavLink to="/">Go home</NavLink></div>} />

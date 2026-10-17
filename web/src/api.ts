@@ -1,4 +1,7 @@
 import type { ScheduleKind } from '../../shared/schedule.ts';
+import type { Achievement, LevelInfo } from '../../shared/progress.ts';
+
+export type { Achievement, LevelInfo };
 
 export class ApiError extends Error {
   status: number;
@@ -41,7 +44,7 @@ export interface Whoami {
 export interface Kid { id: string; name: string; avatar: string; color: string; theme: string | null; hasPin: boolean; balance: number }
 
 export interface HomeDetail {
-  id: string; name: string; pointsName: string; pointsIcon: string; theme: string; timezone: string; weekStart: 0 | 1;
+  id: string; name: string; pointsName: string; pointsIcon: string; theme: string; timezone: string; weekStart: 0 | 1; allowNegative?: boolean;
   viewer: 'parent' | 'kid' | 'device' | 'token';
   kids: Kid[];
   joinCode?: string;
@@ -50,14 +53,14 @@ export interface HomeDetail {
 
 export interface Chore {
   id: string; title: string; icon: string; points: number; schedule: ScheduleKind; weekdays: number[]; dueDate: string | null;
-  startDate: string; describe: string; memberIds: string[];
+  startDate: string; describe: string; memberIds: string[]; bonus: boolean; claimLimit: 'each' | 'one';
 }
 
 export type ItemStatus = 'pending' | 'submitted' | 'approved' | 'rejected' | 'planned';
 
 export interface AgendaItem {
   id: string | null; choreId: string | null; memberId: string; date: string; title: string; icon: string; points: number;
-  status: ItemStatus; note: string | null;
+  status: ItemStatus; note: string | null; started: boolean;
 }
 
 export interface Day { date: string; items: AgendaItem[] }
@@ -69,10 +72,33 @@ export interface Goal {
 
 export interface KidWeek { balance: number; pointsThisWeek: number; choresDone: number; choresWaiting: number; choresDue: number; leftToday: number }
 
-export interface Board { today: string; weekStart: string; kid: Kid; stats: KidWeek; todayItems: AgendaItem[]; week: Day[]; goals: Goal[] }
+export interface Streak { current: number; best: number }
+
+export interface BonusOffer { choreId: string; title: string; icon: string; points: number; claimLimit: 'each' | 'one'; instanceId: string | null; takenBy: string | null }
+
+export interface Board {
+  today: string; weekStart: string; kid: Kid; stats: KidWeek; todayItems: AgendaItem[]; week: Day[]; goals: Goal[];
+  bonus: BonusOffer[]; level: LevelInfo; streak: Streak; achievements: Achievement[]; recent: LedgerEntry[];
+}
+
+export interface QuickReward { id: string; title: string; icon: string; amount: number }
+
+export interface Poll {
+  id: string; title: string; status: 'open' | 'closed'; winnerOptionId: string | null; createdAt: string; closedAt: string | null;
+  myVote: string | null; totalVotes: number;
+  /** votes is null for kids while the vote is open. voters only for parents. */
+  options: { id: string; title: string; icon: string; votes: number | null; voters?: string[] }[];
+}
+
+export interface DayStat { date: string; points: number; done: number; due: number }
+export interface WeekStat { weekStart: string; points: number; done: number; due: number }
+export interface KidStats {
+  from: string; daily: DayStat[]; weekly: WeekStat[]; streak: Streak; level: LevelInfo; lifetime: number;
+  byChore: { title: string; icon: string; due: number; done: number; points: number }[];
+}
 
 export interface ReviewItem extends AgendaItem { submittedAt: string; kid: { name: string; avatar: string; color: string } }
 
-export interface Summary { today: string; weekStart: string; weekEnd: string; waiting: number; kids: (Kid & KidWeek & { goals: Goal[] })[] }
+export interface Summary { today: string; weekStart: string; weekEnd: string; waiting: number; kids: (Kid & KidWeek & { goals: Goal[]; streak: Streak; level: LevelInfo })[] }
 
 export interface LedgerEntry { id: number; amount: number; kind: string; reason: string; date: string; by: string | null; createdAt: string }

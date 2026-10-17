@@ -215,3 +215,67 @@ td, th { text-align: left; padding: 8px; border-bottom: 1px solid var(--border);
 .theme-name { font-weight: 800; font-size: 0.9rem; }
 .theme-vibe { font-size: 0.75rem; color: var(--muted); font-weight: 500; }
 .themed { background: var(--bg); color: var(--text); border-radius: 22px; padding: 12px; }
+
+/* charts */
+.chart-frame { position: relative; }
+.chart-frame svg { display: block; overflow: visible; }
+.chart-grid { stroke: var(--border); stroke-width: 1; }
+.chart-crosshair { stroke: var(--muted); stroke-width: 1; }
+.chart-axis { fill: var(--muted); font-size: 11px; }
+.chart-label { fill: var(--text); font-size: 12px; font-weight: 700; }
+.chart-tip {
+  position: absolute; pointer-events: none; background: var(--surface); color: var(--text); border: 1px solid var(--border);
+  border-radius: 12px; padding: 8px 10px; font-size: 0.85rem; box-shadow: 0 4px 14px rgba(0,0,0,.12); min-width: 150px; z-index: 5;
+}
+.tip-row { display: flex; align-items: center; gap: 6px; }
+.tip-row b { margin-left: auto; padding-left: 10px; }
+.tip-row i, .chart-legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; flex-shrink: 0; }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85rem; color: var(--muted); margin-top: 6px; }
+.chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.chart-table summary { cursor: pointer; color: var(--muted); font-size: 0.85rem; padding: 6px 0; }
+.bar-list { display: flex; flex-direction: column; gap: 8px; }
+.bar-row { display: grid; grid-template-columns: minmax(110px, 1.2fr) 2fr auto; gap: 10px; align-items: center; font-size: 0.9rem; }
+.bar-track { height: 12px; background: var(--surface-2); border-radius: 99px; overflow: hidden; }
+.bar-fill { display: block; height: 100%; border-radius: 99px; }
+.bar-note { color: var(--muted); font-size: 0.8rem; white-space: nowrap; }
+.tiles-row { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.stat-tile { display: flex; flex-direction: column; gap: 2px; }
+.stat-tile .big { font-size: 2rem; font-weight: 800; line-height: 1.1; }
+.trend-up { color: var(--ok); font-weight: 700; }
+.trend-down { color: var(--danger); font-weight: 700; }
+
+/* kid board: level, kanban, bonus, votes, badges */
+.avatar-button { position: relative; padding: 0; border: none; background: transparent; min-height: 0; border-radius: 50%; }
+.level-badge {
+  position: absolute; right: -4px; bottom: -2px; font-size: 1.4rem; background: var(--surface); border: 3px solid var(--kid, var(--primary));
+  width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center;
+}
+.level-line { display: grid; grid-template-columns: auto minmax(100px, 260px) auto; gap: 10px; align-items: center; }
+.kanban { display: grid; gap: 12px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 900px) { .kanban { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .kanban { grid-template-columns: 1fr; } }
+.kanban-col { background: var(--surface-2); border-radius: 20px; padding: 10px; display: flex; flex-direction: column; gap: 10px; min-height: 140px; }
+.kanban-head { font-weight: 800; display: flex; justify-content: space-between; align-items: center; }
+.kanban-card {
+  display: flex; align-items: center; gap: 10px; background: var(--surface); border-radius: 16px; padding: 10px;
+  border: 3px solid var(--kid, var(--primary)); box-shadow: 0 2px 6px rgba(0,0,0,.06);
+}
+.kanban-card.submitted { border-style: dashed; border-color: var(--warn); }
+.kanban-card.approved { border-color: var(--ok); }
+.kanban-card.rejected { border-color: var(--danger); }
+.kanban-col.doing .kanban-card { box-shadow: 0 0 0 4px color-mix(in srgb, var(--kid, var(--primary)) 25%, transparent); }
+.kanban-icon { font-size: 2.2rem; line-height: 1; }
+.kanban-title { font-weight: 800; }
+.kanban-actions { display: flex; flex-direction: column; gap: 6px; }
+.kanban-actions button { min-height: 44px; min-width: 52px; padding: 0 10px; font-size: 1.1rem; }
+.chore-note { font-size: 0.85rem; color: var(--danger); font-weight: 600; }
+.bonus-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.bonus-card { display: flex; align-items: center; gap: 10px; border: 2px dashed var(--kid, var(--primary)); border-radius: 16px; padding: 10px; }
+.vote-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+.vote-option { flex-direction: column; min-height: 130px; border-radius: 20px; border: 3px solid var(--border); gap: 4px; }
+.vote-option.on { border-color: var(--kid, var(--primary)); background: color-mix(in srgb, var(--kid, var(--primary)) 12%, var(--surface)); }
+.badge-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+.badge { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 2px; padding: 10px; border-radius: 16px; background: var(--surface-2); opacity: 0.7; }
+.badge.earned { opacity: 1; background: color-mix(in srgb, var(--kid, var(--primary)) 14%, var(--surface)); }
+.badge-icon { font-size: 2rem; }
+.badge-title { font-weight: 800; font-size: 0.9rem; }

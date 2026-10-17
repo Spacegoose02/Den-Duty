@@ -23,9 +23,23 @@ export const avatarUnlocked = (avatar: Avatar, level: number): boolean => level 
 export const isAvatar = (v: unknown): v is Avatar => typeof v === 'string' && (AVATARS as readonly string[]).includes(v);
 
 /** Card colors for kids, picked to stay readable with white text. */
-export const KID_COLORS = ['#2f9e6e', '#1f6fb2', '#8e2c7a', '#d9480f', '#5f3dc4', '#c2255c', '#0b7285', '#e67700'] as const;
+// They double as chart series colors, so the set is checked for color-blind separation and contrast on both light and
+// dark surfaces. Dark themes draw charts with the matching KID_COLORS_DARK step.
+export const KID_COLORS = ['#2f9e6e', '#1f6fb2', '#8e2c7a', '#d9480f', '#5f3dc4', '#c2255c', '#1098ad', '#b86e00'] as const;
+export const KID_COLORS_DARK = ['#30a874', '#4d94d9', '#d0589f', '#e0652f', '#9a7cf2', '#e8558a', '#22a0b8', '#b88010'] as const;
+/** Colors from earlier versions, still accepted and mapped to their replacement's slot. */
+const LEGACY_KID_COLORS: Record<string, number> = { '#0b7285': 6, '#e67700': 7 };
 
-export const isKidColor = (v: unknown): v is string => typeof v === 'string' && (KID_COLORS as readonly string[]).includes(v);
+export const isKidColor = (v: unknown): v is string =>
+  typeof v === 'string' && ((KID_COLORS as readonly string[]).includes(v) || v in LEGACY_KID_COLORS);
+
+/** The color to draw a kid's chart series with on a light or dark theme. */
+export function seriesColor(color: string, dark: boolean): string {
+  const i = (KID_COLORS as readonly string[]).indexOf(color);
+  const slot = i >= 0 ? i : LEGACY_KID_COLORS[color];
+  if (slot == null) return color;
+  return dark ? KID_COLORS_DARK[slot] : KID_COLORS[slot];
+}
 
 /** Suggested chore icons. Any single emoji is accepted. */
 export const CHORE_ICONS = [

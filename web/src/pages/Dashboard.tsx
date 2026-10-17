@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, type ReviewItem, type Summary } from '../api.ts';
+import { api, type QuickReward, type ReviewItem, type Summary } from '../api.ts';
 import { useApp, useLoad } from '../state.tsx';
 import { RaccoonAvatar } from '../components/Raccoon.tsx';
-import { ProgressBar, dayName, shortDate } from '../components/Bits.tsx';
+import { Modal, ProgressBar, dayName, shortDate } from '../components/Bits.tsx';
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -16,6 +16,8 @@ export function Dashboard() {
   const { who, home, base, toast } = useApp();
   const [queue, reloadQueue] = useLoad<ReviewItem[]>(`${base}/review`);
   const [summary, reloadSummary] = useLoad<Summary>(`${base}/summary`);
+  const [quick] = useLoad<QuickReward[]>(`${base}/quick-rewards`);
+  const [penalty, setPenalty] = useState<{ id: string; name: string; points: number; reason: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const icon = home?.pointsIcon ?? '✨';
 
@@ -81,14 +83,14 @@ export function Dashboard() {
         {summary?.kids.map((k) => {
           const goal = k.goals[0];
           return (
-            <Link key={k.id} to={`/kids/${k.id}`} className="card kid-summary" style={{ borderTop: `6px solid ${k.color}` }}>
-              <div className="row">
+            <div key={k.id} className="card kid-summary" style={{ borderTop: `6px solid ${k.color}` }}>
+              <Link to={`/kids/${k.id}`} className="row" style={{ textDecoration: 'none', color: 'inherit' }}>
                 <RaccoonAvatar variant={k.avatar} size={56} />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 800, fontSize: '1.2rem' }}>{k.name}</div>
-                  <div className="small muted">{k.balance} {icon} to spend</div>
+                  <div className="small muted">{k.balance} {icon} to spend · {k.level.badge} {k.level.name}{k.streak.current > 1 && ` · 🔥 ${k.streak.current}`}</div>
                 </div>
-              </div>
+              </Link>
               <div className="stats">
                 <div><span className="num">{k.pointsThisWeek}</span><span className="small muted">{icon} this week</span></div>
                 <div><span className="num">{k.choresDone}<span className="small muted">/{k.choresDue}</span></span><span className="small muted">chores done</span></div>
@@ -104,11 +106,47 @@ export function Dashboard() {
                 </div>
               )}
               {!!k.choresWaiting && <span className="pill warn">{k.choresWaiting} waiting for review</span>}
-            </Link>
+              <div className="chips">
+                {quick?.map((q) => (
+                  <button key={q.id} className="chip" title={`${q.title}: +${q.amount}`} onClick={() => void act(async () => {
+                    await api(`${base}/quick-rewards/${q.id}/give`, { body: { memberId: k.id } });
+                    toast(`${q.icon} ${q.title}: +${q.amount} ${icon} for ${k.name}`);
+                  })}>{q.icon} +{q.amount}</button>
+                ))}
+                <button className="chip" onClick={() => setPenalty({ id: k.id, name: k.name, points: 1, reason: '' })}>🌱 Take away</button>
+              </div>
+            </div>
           );
         })}
       </div>
       {summary && <p className="small muted">Week of {shortDate(summary.weekStart)} to {shortDate(summary.weekEnd)}</p>}
+      {penalty && (
+        <Modal onClose={() => setPenalty(null)}>
+          <form className="stack" onSubmit={(e) => {
+            e.preventDefault();
+            void act(async () => {
+              const r = await api<{ taken: number }>(`${base}/kids/${penalty.id}/penalty`, { body: { points: penalty.points, reason: penalty.reason } });
+              toast(r.taken < penalty.points ? `Took ${r.taken} (that's all ${penalty.name} had)` : `Took ${r.taken} ${icon}`);
+              setPenalty(null);
+            });
+          }}>
+            <h2 style={{ margin: 0 }}>Take away {home?.pointsName} from {penalty.name}</h2>
+            <p className="small muted" style={{ margin: 0 }}>
+              {penalty.name} will see the reason, worded kindly. {home?.allowNegative ? 'Balances can go below zero (change in Settings).' : "Balances don't go below zero (change in Settings)."}
+            </p>
+            <input placeholder="Reason, e.g. Left toys on the stairs" value={penalty.reason} onChange={(e) => setPenalty({ ...penalty, reason: e.target.value })} autoFocus />
+            <div className="row">
+              <button type="button" className="icon" onClick={() => setPenalty({ ...penalty, points: Math.max(1, penalty.points - 1) })}>−</button>
+              <strong style={{ fontSize: '1.4rem', minWidth: 40, textAlign: 'center' }}>{penalty.points}</strong>
+              <button type="button" className="icon" onClick={() => setPenalty({ ...penalty, points: penalty.points + 1 })}>＋</button>
+              <span style={{ fontSize: '1.3rem' }}>{icon}</span>
+              <span className="spacer" />
+              <button type="button" className="ghost" onClick={() => setPenalty(null)}>Cancel</button>
+              <button className="primary" disabled={!penalty.reason.trim()}>Take away</button>
+            </div>
+          </form>
+        </Modal>
+      )}
     </div>
   );
 }

@@ -57,22 +57,6 @@ export const STATUS_LABEL: Record<AgendaItem['status'], string> = {
   planned: 'Coming up',
 };
 
-/** A big tappable chore card. */
-export function ChoreTile({ item, onTap, pointsIcon, busy }: { item: AgendaItem; onTap?: () => void; pointsIcon: string; busy?: boolean }) {
-  return (
-    <button className={`chore-tile ${item.status}`} onClick={onTap} disabled={!onTap || busy} aria-label={`${item.title}, ${STATUS_LABEL[item.status]}`}>
-      <span className="chore-icon" aria-hidden>{item.icon}</span>
-      <span className="chore-title">{item.title}</span>
-      <span className="chore-points">+{item.points} {pointsIcon}</span>
-      <span className="chore-status">
-        {item.status === 'approved' ? '✅ ' : item.status === 'submitted' ? '⏳ ' : item.status === 'rejected' ? '🔁 ' : ''}
-        {STATUS_LABEL[item.status]}
-      </span>
-      {item.status === 'rejected' && item.note && <span className="chore-note">“{item.note}”</span>}
-    </button>
-  );
-}
-
 const DAY_FMT = new Intl.DateTimeFormat(undefined, { weekday: 'short', timeZone: 'UTC' });
 const DATE_FMT = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
 
