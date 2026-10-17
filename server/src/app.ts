@@ -17,6 +17,7 @@ import { rewardRoutes } from './routes/rewards.ts';
 import { therapyRoutes } from './routes/therapy.ts';
 import { honeydoRoutes } from './routes/honeydo.ts';
 import { haRoutes } from './routes/ha.ts';
+import { calendarRoutes } from './routes/calendars.ts';
 
 export async function buildApp(db: DatabaseSync, opts: { logger?: boolean; serveWeb?: boolean } = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 1024 * 1024, trustProxy: config.trustProxy });
@@ -43,6 +44,7 @@ export async function buildApp(db: DatabaseSync, opts: { logger?: boolean; serve
   therapyRoutes(app, db);
   honeydoRoutes(app, db);
   haRoutes(app, db);
+  calendarRoutes(app, db);
 
   const hasWeb = opts.serveWeb !== false && fs.existsSync(path.join(config.webDist, 'index.html'));
   if (hasWeb) {

@@ -6,6 +6,7 @@ import { RaccoonAvatar } from '../components/Raccoon.tsx';
 import { AdminSignIn, AdminUserActions, SecurityCard } from './Security.tsx';
 import { AVATARS, AVATAR_LABELS, POINT_ICONS } from '../../../shared/catalog.ts';
 import { ThemePicker } from '../components/ThemePicker.tsx';
+import { CalendarsCard } from './Calendars.tsx';
 
 function Profile() {
   const { who, home, refresh, toast } = useApp();
@@ -273,6 +274,7 @@ export function Settings() {
       <div className="topbar"><h1>Settings</h1></div>
       <FamilyTablets />
       <HomeSettings />
+      <CalendarsCard />
       <Profile />
       <SecurityCard />
       {who?.user?.isAdmin && <Admin />}

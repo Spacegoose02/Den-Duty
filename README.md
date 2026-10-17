@@ -22,6 +22,7 @@ Daytime Ninja is the sibling of [Nighttime Ninja](https://github.com/Spacegoose0
 - **Badges and streaks**: 16 achievements for firsts, totals and streaks (days in a row with every chore done).
 - **Stats with charts**: points per week compared across kids, points per day, chores done vs due by week, which chores get done, and level / streak / trend tiles. Every chart has a table view.
 - **Therapy section per kid** (parents only): appointments (doctor, speech, feeding, OT, PT and more), development / speech / feeding / doctor goals with progress notes and a progress chart. You can choose to show a kid their own goals and next appointments; notes always stay private.
+- **Calendars**: a private ICS link per home and per kid with chores (and appointments) for Google Calendar, plus subscribed ICS feeds such as school lunch menus or Nighttime Ninja's meal plan, shown right on the weekly agenda.
 - **Honey-do board**: a kanban for the parents' own to-dos and goals, with assignees and due dates.
 - **21 themes**, from Sunny and Dino to Space and Volcano, plus two high-contrast ones. Pick one for the home, and each kid can have their own on their board.
 - **Strong sign-in** carried over from Nighttime Ninja: passwords (scrypt), **two-factor codes** with recovery codes, **passkeys**, **Google** (OIDC), any **OpenID Connect** provider, **forward-auth** from TinyAuth-style proxies, invite-only sign-up, rate limiting, signed-in device list, **pairing codes**, and name-only quick sign-in that only works on your home network.

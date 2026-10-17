@@ -64,7 +64,9 @@ export interface AgendaItem {
   status: ItemStatus; note: string | null; started: boolean;
 }
 
-export interface Day { date: string; items: AgendaItem[] }
+export interface ExternalItem { date: string; time: string | null; title: string; feed: string; kind: string }
+
+export interface Day { date: string; items: AgendaItem[]; external?: ExternalItem[] }
 
 export interface Goal {
   id: string; memberId: string; title: string; targetPoints: number; reward: string | null; status: 'active' | 'redeemed';

@@ -3,6 +3,7 @@ import { api, type AgendaItem, type Day } from '../api.ts';
 import { useApp, useLoad } from '../state.tsx';
 import { RaccoonAvatar } from '../components/Raccoon.tsx';
 import { dayName, shortDate, STATUS_LABEL } from '../components/Bits.tsx';
+import { FEED_ICONS } from './Calendars.tsx';
 import { addDays } from '../../../shared/schedule.ts';
 
 /** Everyone's chores for the week. Parents can tick things off (or undo) right here. */
@@ -47,7 +48,13 @@ export function Week() {
                 </button>
               );
             })}
-            {!d.items.length && <span className="small muted">Nothing planned</span>}
+            {d.external?.map((x, n) => (
+              <div key={`x-${n}`} className="agenda-ext" title={x.feed}>
+                <span aria-hidden>{FEED_ICONS[x.kind] ?? '📅'}</span>
+                <span>{x.time && <strong>{x.time} </strong>}{x.title}</span>
+              </div>
+            ))}
+            {!d.items.length && !d.external?.length && <span className="small muted">Nothing planned</span>}
           </div>
         ))}
       </div>

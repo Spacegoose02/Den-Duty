@@ -9,6 +9,7 @@ import {
 } from '../chores.ts';
 import { achievements, kidStats, levelOf, streaks } from '../progress.ts';
 import { kidTherapyView } from './therapy.ts';
+import { externalBetween, refreshStale } from '../calendar.ts';
 import { cleanIcon, getKid, kidView, listKids } from './homes.ts';
 import { addDays, cleanWeekdays, describeSchedule, isIsoDate, startOfWeek, type ScheduleKind } from '../../../shared/schedule.ts';
 
@@ -95,6 +96,14 @@ function startParam(v: unknown, fallback: string): string {
   return v;
 }
 
+/** Adds school lunch, meal plan and other subscribed calendar events to each day. */
+async function withFeeds<T extends { date: string }>(db: DatabaseSync, ctx: HomeCtx, days: T[]) {
+  if (!days.length) return [];
+  await refreshStale(db, ctx.homeId);
+  const ext = externalBetween(db, ctx.homeId, days[0].date, days[days.length - 1].date, ctx.actor.kind !== 'parent');
+  return days.map((d) => ({ ...d, external: ext.get(d.date) ?? [] }));
+}
+
 export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
   // ---------- managing chores (parents) ----------
   app.get('/api/homes/:homeId/chores', async (req) => {
@@ -150,7 +159,7 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const q = req.query as { start?: string; days?: string; kid?: string };
     const start = startParam(q.start, startOfWeek(today, home.weekStart));
     const days = Math.min(Math.max(Number(q.days) || 7, 1), 31);
-    return { today, start, days: agenda(db, ctx.homeId, agendaKids(db, ctx, q.kid), start, days, today) };
+    return { today, start, days: await withFeeds(db, ctx, agenda(db, ctx.homeId, agendaKids(db, ctx, q.kid), start, days, today)) };
   });
 
   // Everything a kid's screen needs in one go.
@@ -169,7 +178,7 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
       kid: kidView(db, kid),
       stats: kidWeek(db, home, memberId, today),
       todayItems: todayList(db, ctx.homeId, memberId, today),
-      week: agenda(db, ctx.homeId, [memberId], start, 7, today),
+      week: await withFeeds(db, ctx, agenda(db, ctx.homeId, [memberId], start, 7, today)),
       goals: goalsFor(db, memberId),
       bonus: bonusOffers(db, ctx.homeId, memberId, today),
       level: levelOf(db, memberId),

@@ -356,6 +356,25 @@ const MIGRATIONS: string[] = [
   CREATE UNIQUE INDEX users_oidc_sub ON users(oidc_sub);
   CREATE UNIQUE INDEX users_forward_user ON users(forward_user);
   `,
+  // Calendars: secret ICS links out (per home and per kid), and ICS feeds in (school lunch, meal plans...).
+  `
+  ALTER TABLE homes ADD COLUMN calendar_token TEXT;
+  ALTER TABLE members ADD COLUMN calendar_token TEXT;
+  CREATE UNIQUE INDEX homes_calendar_token ON homes(calendar_token);
+  CREATE UNIQUE INDEX members_calendar_token ON members(calendar_token);
+  CREATE TABLE calendar_feeds (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    url TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'other' CHECK (kind IN ('lunch', 'meals', 'school', 'other')),
+    show_kids INTEGER NOT NULL DEFAULT 1,
+    events TEXT NOT NULL DEFAULT '[]',
+    fetched_at TEXT,
+    error TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

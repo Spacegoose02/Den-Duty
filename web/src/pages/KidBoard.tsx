@@ -7,6 +7,7 @@ import { Modal, ProgressBar, dayName, shortDate, STATUS_LABEL } from '../compone
 import { addDays } from '../../../shared/schedule.ts';
 import { AVATARS, AVATAR_LABELS, AVATAR_UNLOCK_LEVEL, avatarUnlocked } from '../../../shared/catalog.ts';
 import { AREA_ICONS, KIND_ICONS, whenText } from './Therapy.tsx';
+import { FEED_ICONS } from './Calendars.tsx';
 
 const IDLE_MS = 3 * 60e3;
 
@@ -303,7 +304,13 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
                   </span>
                 </div>
               ))}
-              {!d.items.length && <span className="small muted">Free day</span>}
+              {d.external?.map((x, n) => (
+                <div key={`x-${n}`} className="agenda-ext" title={x.feed}>
+                  <span aria-hidden>{FEED_ICONS[x.kind] ?? '📅'}</span>
+                  <span>{x.time && <strong>{x.time} </strong>}{x.title}</span>
+                </div>
+              ))}
+              {!d.items.length && !d.external?.length && <span className="small muted">Free day</span>}
             </div>
           ))}
         </div>

@@ -287,3 +287,6 @@ td, th { text-align: left; padding: 8px; border-bottom: 1px solid var(--border);
 .kanban-col.drop { outline: 3px dashed var(--primary); outline-offset: -3px; }
 .kanban-card.honey { border-width: 2px; border-color: var(--border); cursor: grab; }
 .kanban-card.honey.approved { border-color: var(--ok); }
+
+/* subscribed calendar events on the agenda */
+.agenda-ext { display: flex; gap: 6px; align-items: flex-start; font-size: 0.82rem; color: var(--muted); padding: 4px 6px; border-left: 3px solid var(--border); }
