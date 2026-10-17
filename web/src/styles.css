@@ -1,95 +1,4 @@
-/* Themes are just CSS variables. Add one by copying a block and registering it in Settings + shared/catalog.ts. */
-:root,
-[data-theme='sunny'] {
-  color-scheme: light;
-  --bg: #fff9ec;
-  --surface: #ffffff;
-  --surface-2: #fff0cc;
-  --text: #2b2108;
-  --muted: #7a6a45;
-  --border: #f1e1b8;
-  --primary: #e8590c;
-  --primary-strong: #c2410c;
-  --on-primary: #ffffff;
-  --danger: #c0392b;
-  --warn: #c98a00;
-  --ok: #2b8a3e;
-  --scene-sky: #d0ebff;
-  --scene-grass: #8ce99a;
-  --scene-dust: rgba(140, 110, 70, 0.45);
-}
-[data-theme='meadow'] {
-  color-scheme: light;
-  --bg: #f1f9f3;
-  --surface: #ffffff;
-  --surface-2: #dff2e5;
-  --text: #13261a;
-  --muted: #557060;
-  --border: #cfe6d6;
-  --primary: #2f9e6e;
-  --primary-strong: #237c56;
-  --on-primary: #ffffff;
-  --danger: #c0392b;
-  --warn: #c98a00;
-  --ok: #237c56;
-  --scene-sky: #e3f6ff;
-  --scene-grass: #69db7c;
-  --scene-dust: rgba(110, 120, 90, 0.45);
-}
-[data-theme='sky'] {
-  color-scheme: light;
-  --bg: #f2f7fc;
-  --surface: #ffffff;
-  --surface-2: #e0edf8;
-  --text: #0f2233;
-  --muted: #536b80;
-  --border: #cfe0ee;
-  --primary: #1f6fb2;
-  --primary-strong: #175890;
-  --on-primary: #ffffff;
-  --danger: #c0392b;
-  --warn: #b7791f;
-  --ok: #237c58;
-  --scene-sky: #a5d8ff;
-  --scene-grass: #8ce99a;
-  --scene-dust: rgba(100, 110, 130, 0.4);
-}
-[data-theme='berry'] {
-  color-scheme: light;
-  --bg: #fbf5fa;
-  --surface: #ffffff;
-  --surface-2: #f3e3f0;
-  --text: #2a1427;
-  --muted: #76566f;
-  --border: #ead2e5;
-  --primary: #8e2c7a;
-  --primary-strong: #6f1f5f;
-  --on-primary: #ffffff;
-  --danger: #c0392b;
-  --warn: #b7791f;
-  --ok: #3d8155;
-  --scene-sky: #fde2f3;
-  --scene-grass: #b2f2bb;
-  --scene-dust: rgba(130, 100, 125, 0.4);
-}
-[data-theme='raccoon'] {
-  color-scheme: dark;
-  --bg: #1c1f22;
-  --surface: #262a2e;
-  --surface-2: #30353a;
-  --text: #eceff1;
-  --muted: #a3aab1;
-  --border: #3a4046;
-  --primary: #ffa94d;
-  --primary-strong: #ffc078;
-  --on-primary: #1c1f22;
-  --danger: #ff7b6b;
-  --warn: #f2c14e;
-  --ok: #7ccf98;
-  --scene-sky: #2b3a4a;
-  --scene-grass: #2f5d3a;
-  --scene-dust: rgba(230, 235, 240, 0.3);
-}
+/* Theme colors are generated from shared/themes.ts (see main.tsx). */
 
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; }
@@ -294,3 +203,15 @@ button.agenda-item:disabled { opacity: 1; cursor: default; }
 
 table { border-collapse: collapse; width: 100%; }
 td, th { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); }
+
+/* theme picker: every card renders in its own theme */
+.theme-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+.theme-card {
+  flex-direction: column; align-items: stretch; gap: 4px; padding: 8px; min-height: 0; border-radius: 16px;
+  background: var(--bg); color: var(--text); border: 2px solid var(--border); text-align: left;
+}
+.theme-card.on { outline: 4px solid var(--primary); outline-offset: 1px; }
+.theme-swatch { display: grid; grid-template-columns: 1fr 1fr 1fr; height: 34px; border-radius: 10px; overflow: hidden; border: 1px solid var(--border); }
+.theme-name { font-weight: 800; font-size: 0.9rem; }
+.theme-vibe { font-size: 0.75rem; color: var(--muted); font-weight: 500; }
+.themed { background: var(--bg); color: var(--text); border-radius: 22px; padding: 12px; }

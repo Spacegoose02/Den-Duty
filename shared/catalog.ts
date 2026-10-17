@@ -23,6 +23,3 @@ export const CHORE_ICONS = [
 
 /** Icons for the home's points currency. */
 export const POINT_ICONS = ['✨', '⭐', '🪙', '💎', '🍪', '🌰', '🐚', '🏅'] as const;
-
-export const THEMES = ['sunny', 'meadow', 'sky', 'berry', 'raccoon'] as const;
-export type Theme = (typeof THEMES)[number];

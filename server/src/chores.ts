@@ -11,14 +11,14 @@ export type LedgerKind = 'chore' | 'bonus' | 'adjust' | 'redeem' | 'reversal';
 /** Who did something, for the ledger and review history. */
 export interface By { userId: string | null; name: string }
 
-export interface HomeInfo { id: string; name: string; timezone: string; weekStart: number; pointsName: string; pointsIcon: string }
+export interface HomeInfo { id: string; name: string; timezone: string; weekStart: number; pointsName: string; pointsIcon: string; theme: string }
 
 export function homeInfo(db: DatabaseSync, homeId: string): HomeInfo {
-  const h = db.prepare('SELECT id, name, timezone, week_start, points_name, points_icon FROM homes WHERE id = ?').get(homeId) as Row | undefined;
+  const h = db.prepare('SELECT id, name, timezone, week_start, points_name, points_icon, theme FROM homes WHERE id = ?').get(homeId) as Row | undefined;
   if (!h) throw new HttpError(404, 'Home not found');
   return {
     id: h.id as string, name: h.name as string, timezone: h.timezone as string, weekStart: h.week_start as number,
-    pointsName: h.points_name as string, pointsIcon: h.points_icon as string,
+    pointsName: h.points_name as string, pointsIcon: h.points_icon as string, theme: h.theme as string,
   };
 }
 

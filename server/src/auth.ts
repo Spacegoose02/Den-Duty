@@ -5,7 +5,8 @@ import { config } from './config.ts';
 import { HttpError, newId, randomToken, readableCode, requireStr, sha256, str } from './util.ts';
 import type { Row } from './db.ts';
 import { isPrivateAddress, limitAuth } from './security.ts';
-import { isAvatar, THEMES } from '../../shared/catalog.ts';
+import { isAvatar } from '../../shared/catalog.ts';
+import { isThemeId } from '../../shared/themes.ts';
 
 export const SESSION_COOKIE = 'dn_session';
 /** A family tablet's sign-in. It belongs to a home, not a person. */
@@ -130,7 +131,7 @@ export function getUser(db: DatabaseSync, id: string): User | undefined {
 /** Creates a user. The very first account on a server becomes its admin. */
 export function createUser(db: DatabaseSync, u: { name: string; username?: string | null; email?: string | null; googleSub?: string | null; passwordHash?: string | null }): User {
   const id = newId();
-  db.prepare('INSERT INTO users (id, name, username, email, google_sub, password_hash, is_admin) VALUES (?, ?, ?, ?, ?, ?, ?)')
+  db.prepare("INSERT INTO users (id, name, username, email, google_sub, password_hash, is_admin, theme) VALUES (?, ?, ?, ?, ?, ?, ?, 'home')")
     .run(id, u.name, u.username ?? null, u.email ?? null, u.googleSub ?? null, u.passwordHash ?? null, hasUsers(db) ? 0 : 1);
   return getUser(db, id)!;
 }
@@ -438,7 +439,7 @@ export function registerAuthRoutes(app: FastifyInstance, db: DatabaseSync): void
 
   // Everything the app needs to pick a screen: the parent (if any), and the family tablet and kid (if any).
   app.get('/api/whoami', async (req) => {
-    const kid = req.kid ? db.prepare('SELECT id, name, avatar, color FROM members WHERE id = ?').get(req.kid.memberId) as Row : null;
+    const kid = req.kid ? db.prepare('SELECT id, name, avatar, color, theme FROM members WHERE id = ?').get(req.kid.memberId) as Row : null;
     return {
       user: req.user ? publicUser(req.user) : null,
       homes: req.user ? userHomes(db, req.user.id) : [],
@@ -455,7 +456,7 @@ export function registerAuthRoutes(app: FastifyInstance, db: DatabaseSync): void
       db.prepare('UPDATE users SET name = ? WHERE id = ?').run(name, user.id);
       db.prepare('UPDATE members SET name = ? WHERE user_id = ?').run(name, user.id);
     }
-    if (typeof b.theme === 'string' && (THEMES as readonly string[]).includes(b.theme)) db.prepare('UPDATE users SET theme = ? WHERE id = ?').run(b.theme, user.id);
+    if (b.theme === 'home' || isThemeId(b.theme)) db.prepare('UPDATE users SET theme = ? WHERE id = ?').run(b.theme, user.id);
     if (isAvatar(b.avatar)) {
       db.prepare('UPDATE users SET avatar = ? WHERE id = ?').run(b.avatar, user.id);
       db.prepare('UPDATE members SET avatar = ? WHERE user_id = ?').run(b.avatar, user.id);

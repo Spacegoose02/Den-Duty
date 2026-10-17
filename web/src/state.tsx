@@ -48,9 +48,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => { void refreshHome(); }, [refreshHome, who]);
 
+  // Parents see their own theme (or the home's); the family tablet shows the kid's theme, else the home's.
+  const homeTheme = home?.theme ?? 'sunny';
+  const theme = who?.user
+    ? (who.user.theme === 'home' ? homeTheme : who.user.theme)
+    : (who?.kid?.theme ?? homeTheme);
   useEffect(() => {
-    document.documentElement.dataset.theme = who?.user?.theme ?? 'sunny';
-  }, [who?.user?.theme]);
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
 
   const setHome = useCallback((id: string) => {
     setHomeId(id);

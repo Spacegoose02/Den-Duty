@@ -5,17 +5,10 @@ import { useApp, useLoad } from '../state.tsx';
 import { RaccoonAvatar } from '../components/Raccoon.tsx';
 import { AdminSignIn, AdminUserActions, SecurityCard } from './Security.tsx';
 import { AVATARS, AVATAR_LABELS, POINT_ICONS } from '../../../shared/catalog.ts';
-
-const THEMES = [
-  { id: 'sunny', name: 'Sunny', swatch: '#f59f00' },
-  { id: 'meadow', name: 'Meadow', swatch: '#2f9e6e' },
-  { id: 'sky', name: 'Sky', swatch: '#1f6fb2' },
-  { id: 'berry', name: 'Berry', swatch: '#8e2c7a' },
-  { id: 'raccoon', name: 'Raccoon (dark)', swatch: '#3a4046' },
-];
+import { ThemePicker } from '../components/ThemePicker.tsx';
 
 function Profile() {
-  const { who, refresh, toast } = useApp();
+  const { who, home, refresh, toast } = useApp();
   const user = who!.user!;
   const [name, setName] = useState(user.name);
   const [pair, setPair] = useState<string | null>(null);
@@ -38,14 +31,9 @@ function Profile() {
           </button>
         ))}
       </div>
-      <h3>Theme</h3>
-      <div className="chips">
-        {THEMES.map((t) => (
-          <button key={t.id} className={`chip${user.theme === t.id ? ' on' : ''}`} onClick={() => update({ theme: t.id })}>
-            <span style={{ width: 18, height: 18, borderRadius: 99, background: t.swatch, display: 'inline-block', border: '2px solid #fff' }} /> {t.name}
-          </button>
-        ))}
-      </div>
+      <h3>Your theme</h3>
+      <ThemePicker value={user.theme === 'home' ? null : user.theme} onPick={(t) => void update({ theme: t ?? 'home' })}
+        inherit={{ label: 'Same as the home', theme: home?.theme ?? 'sunny' }} />
       <h3>Your phone or tablet</h3>
       <p className="small muted" style={{ margin: 0 }}>Sign yourself in on another device without typing your password: get a code here, then choose “I have a pairing code” there.</p>
       <div className="row">
@@ -138,6 +126,10 @@ function HomeSettings() {
       <div className="chips">
         {POINT_ICONS.map((i) => <button key={i} className={`chip icon-chip${home.pointsIcon === i ? ' on' : ''}`} onClick={() => void patch({ pointsIcon: i })}>{i}</button>)}
       </div>
+
+      <h3>Home theme</h3>
+      <p className="small muted" style={{ margin: 0 }}>Used on the family tablet and by anyone who hasn't picked their own. Each kid can have their own in Kids → Edit.</p>
+      <ThemePicker value={home.theme} onPick={(t) => t && void patch({ theme: t }, 'Theme changed')} />
 
       <h3>Calendar</h3>
       <div className="row">

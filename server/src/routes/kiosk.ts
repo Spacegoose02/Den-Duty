@@ -17,7 +17,7 @@ export function kioskRoutes(app: FastifyInstance, db: DatabaseSync): void {
   app.get('/api/kiosk', async (req) => {
     const device = requireDevice(req);
     const home = homeInfo(db, device.homeId);
-    return { device, home: { id: home.id, name: home.name, pointsName: home.pointsName, pointsIcon: home.pointsIcon }, kids: listKids(db, home.id) };
+    return { device, home: { id: home.id, name: home.name, pointsName: home.pointsName, pointsIcon: home.pointsIcon, theme: home.theme }, kids: listKids(db, home.id) };
   });
 
   app.post('/api/kiosk/kid', async (req, reply) => {

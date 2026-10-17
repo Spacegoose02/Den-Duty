@@ -71,6 +71,14 @@ test('homes, parents and joining', async () => {
   const after = (await call(alice, 'GET', `/api/homes/${home.id}`)).body;
   assert.deepEqual([after.pointsName, after.pointsIcon, after.weekStart], ['Acorns', '🌰', 1]);
   assert.equal((await call(alice, 'PATCH', `/api/homes/${home.id}`, { timezone: 'Mars/Olympus' })).status, 400);
+  // Themes: one for the home, an optional one per kid, and parents follow the home by default.
+  assert.equal(me.body.user.theme, 'home');
+  await call(alice, 'PATCH', `/api/homes/${home.id}`, { theme: 'space' });
+  assert.equal((await call(alice, 'GET', `/api/homes/${home.id}`)).body.theme, 'space');
+  assert.equal((await call(alice, 'PATCH', `/api/homes/${home.id}`, { theme: 'plaid' })).status, 400);
+  const kid = (await call(alice, 'POST', `/api/homes/${home.id}/kids`, { name: 'Zoe', theme: 'dino' })).body;
+  assert.equal(kid.theme, 'dino');
+  assert.equal((await call(alice, 'PATCH', `/api/homes/${home.id}/kids/${kid.id}`, { theme: null })).body.theme, null, 'back to the home theme');
 });
 
 test('kids sign in on the family tablet by tapping their avatar', async () => {

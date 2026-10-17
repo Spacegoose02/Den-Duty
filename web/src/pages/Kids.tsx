@@ -5,13 +5,16 @@ import { useApp, useLoad } from '../state.tsx';
 import { RaccoonAvatar } from '../components/Raccoon.tsx';
 import { Modal, ProgressBar, shortDate } from '../components/Bits.tsx';
 import { AVATARS, AVATAR_LABELS, KID_COLORS } from '../../../shared/catalog.ts';
+import { ThemePicker } from '../components/ThemePicker.tsx';
 
-interface KidDraft { name: string; avatar: string; color: string; pin: string }
+interface KidDraft { name: string; avatar: string; color: string; pin: string; theme: string | null }
 
 /** Name, raccoon, color and PIN. Used to add a kid and to edit one. */
 function KidForm({ initial, onSubmit, submitLabel, hasPin, onClearPin }: {
   initial: KidDraft; onSubmit: (d: KidDraft) => Promise<void>; submitLabel: string; hasPin?: boolean; onClearPin?: () => void;
 }) {
+  const { home } = useApp();
+  const homeTheme = home?.theme ?? 'sunny';
   const [d, setD] = useState(initial);
   const [error, setError] = useState<string | null>(null);
   return (
@@ -34,6 +37,9 @@ function KidForm({ initial, onSubmit, submitLabel, hasPin, onClearPin }: {
           <button key={c} type="button" className={`swatch${d.color === c ? ' on' : ''}`} style={{ background: c }} onClick={() => setD({ ...d, color: c })} aria-label={`Color ${c}`} />
         ))}
       </div>
+      <label className="field">Their theme on the tablet
+        <ThemePicker value={d.theme} onPick={(theme) => setD({ ...d, theme })} inherit={{ label: 'Same as the home', theme: homeTheme }} />
+      </label>
       <label className="field">{hasPin ? 'New 4-digit PIN (leave empty to keep it)' : '4-digit PIN (optional, keeps siblings out)'}
         <div className="row">
           <input value={d.pin} onChange={(e) => setD({ ...d, pin: e.target.value.replace(/\D/g, '').slice(0, 4) })} inputMode="numeric" placeholder="••••" style={{ maxWidth: 140, letterSpacing: '0.3em' }} />
@@ -128,10 +134,10 @@ function KidCard({ kid, onChange }: { kid: Kid; onChange: () => Promise<void> })
         <Modal onClose={() => setEditing(false)}>
           <div className="stack">
             <h2 style={{ margin: 0 }}>Edit {kid.name}</h2>
-            <KidForm initial={{ name: kid.name, avatar: kid.avatar, color: kid.color, pin: '' }} hasPin={kid.hasPin} submitLabel="Save"
+            <KidForm initial={{ name: kid.name, avatar: kid.avatar, color: kid.color, pin: '', theme: kid.theme }} hasPin={kid.hasPin} submitLabel="Save"
               onClearPin={() => void run(() => api(`${base}/kids/${kid.id}`, { method: 'PATCH', body: { pin: null } }), 'PIN removed').then(() => setEditing(false))}
               onSubmit={async (d) => {
-                await api(`${base}/kids/${kid.id}`, { method: 'PATCH', body: { name: d.name, avatar: d.avatar, color: d.color, ...(d.pin ? { pin: d.pin } : {}) } });
+                await api(`${base}/kids/${kid.id}`, { method: 'PATCH', body: { name: d.name, avatar: d.avatar, color: d.color, theme: d.theme, ...(d.pin ? { pin: d.pin } : {}) } });
                 setEditing(false);
                 toast('Saved');
                 await refreshAll();
@@ -171,7 +177,7 @@ export function Kids() {
         <Modal onClose={() => setAdding(false)}>
           <div className="stack">
             <h2 style={{ margin: 0 }}>Add a kid</h2>
-            <KidForm initial={{ name: '', avatar: AVATARS[count % AVATARS.length], color: KID_COLORS[count % KID_COLORS.length], pin: '' }} submitLabel="Add"
+            <KidForm initial={{ name: '', avatar: AVATARS[count % AVATARS.length], color: KID_COLORS[count % KID_COLORS.length], pin: '', theme: null }} submitLabel="Add"
               onSubmit={async (d) => {
                 await api(`${base}/kids`, { body: { ...d, pin: d.pin || null } });
                 setAdding(false);

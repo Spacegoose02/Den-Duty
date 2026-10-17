@@ -5,6 +5,7 @@ import {
   type Schedule,
 } from './schedule.ts';
 import { isAvatar, isKidColor, KID_COLORS } from './catalog.ts';
+import { THEME_DEFS, THEME_IDS, themeCss } from './themes.ts';
 
 test('date helpers', () => {
   assert.equal(addDays('2026-10-31', 1), '2026-11-01');
@@ -43,4 +44,12 @@ test('chore schedules', () => {
 test('catalog validation', () => {
   assert.ok(isAvatar('ninja') && !isAvatar('dragon'));
   assert.ok(isKidColor(KID_COLORS[0]) && !isKidColor('red'));
+});
+
+test('themes', () => {
+  assert.ok(THEME_DEFS.length >= 15);
+  assert.equal(new Set(THEME_IDS).size, THEME_IDS.length, 'theme ids are unique');
+  assert.ok(THEME_DEFS.some((t) => t.dark) && THEME_IDS.includes('contrast'));
+  const css = themeCss();
+  for (const id of THEME_IDS) assert.ok(css.includes(`[data-theme='${id}']`), id);
 });

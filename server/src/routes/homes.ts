@@ -8,6 +8,7 @@ import { hashPassword } from '../security.ts';
 import { balance } from '../chores.ts';
 import { AVATARS, isAvatar, isKidColor, KID_COLORS, POINT_ICONS } from '../../../shared/catalog.ts';
 import { isTimeZone } from '../../../shared/schedule.ts';
+import { isThemeId } from '../../../shared/themes.ts';
 
 export function createHome(db: DatabaseSync, user: { id: string; name: string; avatar: string }, name: string, timezone?: string | null): string {
   const id = newId();
@@ -36,7 +37,7 @@ function cleanPin(v: unknown): string {
 export function kidView(db: DatabaseSync, r: Row) {
   return {
     id: r.id as string, name: r.name as string, avatar: r.avatar as string, color: r.color as string,
-    hasPin: !!r.pin_hash, balance: balance(db, r.id as string),
+    theme: (r.theme as string | null) ?? null, hasPin: !!r.pin_hash, balance: balance(db, r.id as string),
   };
 }
 
@@ -75,6 +76,7 @@ export function homeRoutes(app: FastifyInstance, db: DatabaseSync): void {
       name: home.name as string,
       pointsName: home.points_name as string,
       pointsIcon: home.points_icon as string,
+      theme: home.theme as string,
       timezone: home.timezone as string,
       weekStart: home.week_start as number,
       viewer: ctx.actor.kind,
@@ -98,6 +100,10 @@ export function homeRoutes(app: FastifyInstance, db: DatabaseSync): void {
     if ('timezone' in b) {
       if (!isTimeZone(b.timezone)) throw new HttpError(400, 'Unknown time zone');
       db.prepare('UPDATE homes SET timezone = ? WHERE id = ?').run(b.timezone, ctx.homeId);
+    }
+    if ('theme' in b) {
+      if (!isThemeId(b.theme)) throw new HttpError(400, 'Unknown theme');
+      db.prepare('UPDATE homes SET theme = ? WHERE id = ?').run(b.theme, ctx.homeId);
     }
     if (b.weekStart === 0 || b.weekStart === 1) db.prepare('UPDATE homes SET week_start = ? WHERE id = ?').run(b.weekStart, ctx.homeId);
     return { ok: true };
@@ -141,9 +147,9 @@ export function homeRoutes(app: FastifyInstance, db: DatabaseSync): void {
     if (count >= 20) throw new HttpError(400, "That's a lot of kids! 20 is the limit.");
     const id = newId();
     const pin = b.pin == null || b.pin === '' ? null : await hashPassword(cleanPin(b.pin));
-    db.prepare("INSERT INTO members (id, home_id, role, name, avatar, color, pin_hash, position) VALUES (?, ?, 'kid', ?, ?, ?, ?, ?)")
+    db.prepare("INSERT INTO members (id, home_id, role, name, avatar, color, pin_hash, position, theme) VALUES (?, ?, 'kid', ?, ?, ?, ?, ?, ?)")
       .run(id, ctx.homeId, name, isAvatar(b.avatar) ? b.avatar : AVATARS[count % AVATARS.length],
-        isKidColor(b.color) ? b.color : KID_COLORS[count % KID_COLORS.length], pin, count);
+        isKidColor(b.color) ? b.color : KID_COLORS[count % KID_COLORS.length], pin, count, isThemeId(b.theme) ? b.theme : null);
     return kidView(db, getKid(db, ctx, id));
   });
 
@@ -155,6 +161,11 @@ export function homeRoutes(app: FastifyInstance, db: DatabaseSync): void {
     if (name) db.prepare('UPDATE members SET name = ? WHERE id = ?').run(name, kid.id as string);
     if (isAvatar(b.avatar)) db.prepare('UPDATE members SET avatar = ? WHERE id = ?').run(b.avatar, kid.id as string);
     if (isKidColor(b.color)) db.prepare('UPDATE members SET color = ? WHERE id = ?').run(b.color, kid.id as string);
+    // A kid's own theme for their board; empty means follow the home.
+    if ('theme' in b) {
+      if (b.theme != null && b.theme !== '' && !isThemeId(b.theme)) throw new HttpError(400, 'Unknown theme');
+      db.prepare('UPDATE members SET theme = ? WHERE id = ?').run(b.theme || null, kid.id as string);
+    }
     if ('pin' in b) {
       const hash = b.pin == null || b.pin === '' ? null : await hashPassword(cleanPin(b.pin));
       db.prepare('UPDATE members SET pin_hash = ? WHERE id = ?').run(hash, kid.id as string);

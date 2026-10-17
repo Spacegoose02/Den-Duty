@@ -35,13 +35,13 @@ export interface Whoami {
   /** Set when this browser is a family tablet. */
   device: { id: string; homeId: string; name: string } | null;
   /** The kid who's signed in on this family tablet. */
-  kid: { id: string; name: string; avatar: string; color: string } | null;
+  kid: { id: string; name: string; avatar: string; color: string; theme: string | null } | null;
 }
 
-export interface Kid { id: string; name: string; avatar: string; color: string; hasPin: boolean; balance: number }
+export interface Kid { id: string; name: string; avatar: string; color: string; theme: string | null; hasPin: boolean; balance: number }
 
 export interface HomeDetail {
-  id: string; name: string; pointsName: string; pointsIcon: string; timezone: string; weekStart: 0 | 1;
+  id: string; name: string; pointsName: string; pointsIcon: string; theme: string; timezone: string; weekStart: 0 | 1;
   viewer: 'parent' | 'kid' | 'device' | 'token';
   kids: Kid[];
   joinCode?: string;

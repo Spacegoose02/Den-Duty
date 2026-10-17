@@ -214,6 +214,12 @@ const MIGRATIONS: string[] = [
   WHEN EXISTS (SELECT 1 FROM members WHERE id = OLD.member_id) AND EXISTS (SELECT 1 FROM homes WHERE id = OLD.home_id)
   BEGIN SELECT RAISE(ABORT, 'points_ledger is append-only'); END;
   `,
+  // Themes: one per home, an optional one per kid, and parents can follow the home's ('home').
+  `
+  ALTER TABLE homes ADD COLUMN theme TEXT NOT NULL DEFAULT 'sunny';
+  ALTER TABLE members ADD COLUMN theme TEXT;
+  UPDATE users SET theme = 'home' WHERE theme = 'sunny';
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

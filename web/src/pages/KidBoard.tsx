@@ -80,7 +80,7 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
   const thisWeek = board.week.some((d) => d.date === board.today);
 
   return (
-    <div className="stack board" style={{ ['--kid' as string]: kid.color }}>
+    <div className={`stack board${asParent && kid.theme ? ' themed' : ''}`} data-theme={asParent ? kid.theme ?? undefined : undefined} style={{ ['--kid' as string]: kid.color }}>
       <header className="board-head">
         <RaccoonAvatar variant={kid.avatar} size={92} />
         <div style={{ flex: 1 }}>
