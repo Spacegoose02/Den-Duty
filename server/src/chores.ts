@@ -104,7 +104,7 @@ export function agenda(db: DatabaseSync, homeId: string, memberIds: string[], fr
   const to = addDays(from, days - 1);
   materialize(db, homeId, from, to, today);
   const wanted = new Set(memberIds);
-  const stored = (db.prepare(`SELECT * FROM chore_instances WHERE home_id = ? AND date BETWEEN ? AND ? ORDER BY date, created_at`)
+  const stored = (db.prepare(`SELECT * FROM chore_instances WHERE home_id = ? AND date BETWEEN ? AND ? ORDER BY date, title`)
     .all(homeId, from, to) as Row[]).filter((r) => wanted.has(r.member_id as string)).map(instanceItem);
   const out = dateRange(from, to).map((date) => ({ date, items: stored.filter((i) => i.date === date) }));
   if (to > today) {
@@ -129,7 +129,7 @@ export function todayList(db: DatabaseSync, homeId: string, memberId: string, to
   const rows = db.prepare(`
     SELECT i.* FROM chore_instances i LEFT JOIN chores c ON c.id = i.chore_id
     WHERE i.member_id = ? AND (i.date = ? OR (i.date < ? AND i.status IN ('pending', 'rejected') AND c.schedule = 'once' AND c.active = 1))
-    ORDER BY i.date, i.created_at`).all(memberId, today, today) as Row[];
+    ORDER BY i.date, i.title`).all(memberId, today, today) as Row[];
   return rows.map(instanceItem);
 }
 
