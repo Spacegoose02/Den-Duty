@@ -6,6 +6,7 @@ import { RaccoonAvatar } from '../components/Raccoon.tsx';
 import { Modal, ProgressBar, dayName, shortDate, STATUS_LABEL } from '../components/Bits.tsx';
 import { addDays } from '../../../shared/schedule.ts';
 import { AVATARS, AVATAR_LABELS, AVATAR_UNLOCK_LEVEL, avatarUnlocked } from '../../../shared/catalog.ts';
+import { AREA_ICONS, KIND_ICONS, whenText } from './Therapy.tsx';
 
 const IDLE_MS = 3 * 60e3;
 
@@ -224,6 +225,24 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
           )}
         </section>
       </div>
+
+      {board.therapy && (board.therapy.goals.length > 0 || board.therapy.upcoming.length > 0) && (
+        <section className="card stack">
+          <h2 style={{ margin: 0 }}>🌈 My big goals</h2>
+          {board.therapy.goals.map((g) => (
+            <div key={g.id} className="goal">
+              <div className="row" style={{ justifyContent: 'space-between' }}>
+                <strong>{AREA_ICONS[g.area] ?? '🌱'} {g.title}</strong>
+                <span className="small">{g.progress}%</span>
+              </div>
+              <ProgressBar percent={g.progress} color={kid.color} />
+            </div>
+          ))}
+          {board.therapy.upcoming.map((a) => (
+            <p key={a.id} className="small" style={{ margin: 0 }}>{KIND_ICONS[a.kind] ?? '📌'} Coming up: <strong>{a.title}</strong>{a.provider && ` with ${a.provider}`} · {whenText(a.startsAt)}</p>
+          ))}
+        </section>
+      )}
 
       {(openPolls.length > 0 || decided.length > 0) && (
         <section className="card stack">

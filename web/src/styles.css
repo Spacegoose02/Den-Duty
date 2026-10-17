@@ -279,3 +279,10 @@ td, th { text-align: left; padding: 8px; border-bottom: 1px solid var(--border);
 .badge.earned { opacity: 1; background: color-mix(in srgb, var(--kid, var(--primary)) 14%, var(--surface)); }
 .badge-icon { font-size: 2rem; }
 .badge-title { font-weight: 800; font-size: 0.9rem; }
+
+/* honey-do */
+.kanban.honeydo { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 800px) { .kanban.honeydo { grid-template-columns: 1fr; } }
+.kanban-col.drop { outline: 3px dashed var(--primary); outline-offset: -3px; }
+.kanban-card.honey { border-width: 2px; border-color: var(--border); cursor: grab; }
+.kanban-card.honey.approved { border-color: var(--ok); }

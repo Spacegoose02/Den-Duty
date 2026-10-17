@@ -4,6 +4,7 @@ import { api, type QuickReward, type ReviewItem, type Summary } from '../api.ts'
 import { useApp, useLoad } from '../state.tsx';
 import { RaccoonAvatar } from '../components/Raccoon.tsx';
 import { Modal, ProgressBar, dayName, shortDate } from '../components/Bits.tsx';
+import { KIND_ICONS, whenText } from './Therapy.tsx';
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -17,6 +18,7 @@ export function Dashboard() {
   const [queue, reloadQueue] = useLoad<ReviewItem[]>(`${base}/review`);
   const [summary, reloadSummary] = useLoad<Summary>(`${base}/summary`);
   const [quick] = useLoad<QuickReward[]>(`${base}/quick-rewards`);
+  const [appointments] = useLoad<{ id: string; kind: string; title: string; provider: string | null; startsAt: string; kidName: string; kidAvatar: string }[]>(`${base}/therapy/upcoming`);
   const [penalty, setPenalty] = useState<{ id: string; name: string; points: number; reason: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const icon = home?.pointsIcon ?? '✨';
@@ -78,6 +80,20 @@ export function Dashboard() {
         ))}
         {queue && !queue.length && <p className="muted" style={{ margin: 0 }}>Nothing waiting. 🦝 The raccoons are on it.</p>}
       </section>
+
+      {!!appointments?.length && (
+        <section className="card stack">
+          <div className="row"><h2 style={{ margin: 0, flex: 1 }}>Coming up</h2><Link to="/therapy" className="btn ghost">Therapy →</Link></div>
+          {appointments.slice(0, 4).map((a) => (
+            <div key={a.id} className="row">
+              <RaccoonAvatar variant={a.kidAvatar} size={32} />
+              <span>{KIND_ICONS[a.kind] ?? '📌'}</span>
+              <span style={{ flex: 1 }}><strong>{a.kidName}</strong>: {a.title}{a.provider && ` with ${a.provider}`}</span>
+              <span className="small muted">{whenText(a.startsAt)}</span>
+            </div>
+          ))}
+        </section>
+      )}
 
       <div className="kid-summaries">
         {summary?.kids.map((k) => {

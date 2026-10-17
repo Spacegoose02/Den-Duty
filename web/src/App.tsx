@@ -10,6 +10,8 @@ import { Kids } from './pages/Kids.tsx';
 import { Settings } from './pages/Settings.tsx';
 import { Rewards } from './pages/Rewards.tsx';
 import { Stats } from './pages/Stats.tsx';
+import { Therapy } from './pages/Therapy.tsx';
+import { HoneyDo } from './pages/HoneyDo.tsx';
 import { KidPicker } from './pages/KidPicker.tsx';
 import { KidBoard, ParentKidBoard } from './pages/KidBoard.tsx';
 
@@ -20,6 +22,8 @@ const NAV = [
   { to: '/kids', ico: '🦝', label: 'Kids' },
   { to: '/rewards', ico: '🎁', label: 'Rewards' },
   { to: '/stats', ico: '📊', label: 'Stats' },
+  { to: '/therapy', ico: '🩺', label: 'Therapy' },
+  { to: '/honeydo', ico: '📝', label: 'Honey-do' },
   { to: '/settings', ico: '⚙️', label: 'Settings' },
 ];
 
@@ -70,6 +74,8 @@ export function App() {
           <Route path="/kids/:memberId" element={<ParentKidBoard />} />
           <Route path="/rewards" element={<Rewards />} />
           <Route path="/stats" element={<Stats />} />
+          <Route path="/therapy" element={<Therapy />} />
+          <Route path="/honeydo" element={<HoneyDo />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/home/new" element={<HomeSetup inline />} />
           <Route path="*" element={<div className="card">That page wandered off. <NavLink to="/">Go home</NavLink></div>} />
