@@ -6,6 +6,7 @@ import { RaccoonAvatar } from '../components/Raccoon.tsx';
 import { Modal } from '../components/Bits.tsx';
 import { CHORE_ICONS } from '../../../shared/catalog.ts';
 import { WEEKDAY_SHORT, type ScheduleKind } from '../../../shared/schedule.ts';
+import { IdeasButton } from '../components/Ideas.tsx';
 
 interface Draft { id?: string; title: string; icon: string; points: number; schedule: ScheduleKind; weekdays: number[]; dueDate: string; memberIds: string[]; bonus: boolean; claimLimit: 'each' | 'one' }
 
@@ -42,6 +43,7 @@ function ChoreEditor({ draft, onClose, onSaved }: { draft: Draft; onClose: () =>
           <span className="big-icon" aria-hidden>{d.icon}</span>
           <input value={d.title} onChange={(e) => set({ title: e.target.value })} placeholder="What needs doing? e.g. Make your bed" style={{ flex: 1 }} autoFocus />
         </div>
+        <IdeasButton kind="chore" onPick={(i) => set({ title: i.title, points: i.points })} />
         <div className="chips">
           {CHORE_ICONS.map((i) => (
             <button key={i} type="button" className={`chip icon-chip${d.icon === i ? ' on' : ''}`} onClick={() => set({ icon: i })}>{i}</button>

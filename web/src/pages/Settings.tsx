@@ -7,6 +7,7 @@ import { AdminSignIn, AdminUserActions, SecurityCard } from './Security.tsx';
 import { AVATARS, AVATAR_LABELS, POINT_ICONS } from '../../../shared/catalog.ts';
 import { ThemePicker } from '../components/ThemePicker.tsx';
 import { CalendarsCard } from './Calendars.tsx';
+import { AiCard } from '../components/Ideas.tsx';
 
 function Profile() {
   const { who, home, refresh, toast } = useApp();
@@ -275,6 +276,7 @@ export function Settings() {
       <FamilyTablets />
       <HomeSettings />
       <CalendarsCard />
+      <AiCard />
       <Profile />
       <SecurityCard />
       {who?.user?.isAdmin && <Admin />}

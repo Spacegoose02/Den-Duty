@@ -6,6 +6,7 @@ import { RaccoonAvatar } from '../components/Raccoon.tsx';
 import { Modal, ProgressBar, shortDate } from '../components/Bits.tsx';
 import { AVATARS, AVATAR_LABELS, KID_COLORS } from '../../../shared/catalog.ts';
 import { ThemePicker } from '../components/ThemePicker.tsx';
+import { IdeasButton } from '../components/Ideas.tsx';
 
 interface KidDraft { name: string; avatar: string; color: string; pin: string; theme: string | null }
 
@@ -101,6 +102,7 @@ function KidCard({ kid, onChange }: { kid: Kid; onChange: () => Promise<void> })
         <input placeholder="Reward (optional)" value={goal.reward} onChange={(e) => setGoal({ ...goal, reward: e.target.value })} style={{ flex: 1, minWidth: 140 }} />
         <button disabled={!goal.title.trim() || goal.targetPoints < 1}>Add goal</button>
       </form>
+      <IdeasButton kind="goal" kidId={kid.id} onPick={(i) => setGoal({ title: i.title, targetPoints: i.points, reward: i.detail.slice(0, 200) })} />
 
       <h3 style={{ margin: 0 }}>Bonus or take-back</h3>
       <form className="row" onSubmit={(e) => {

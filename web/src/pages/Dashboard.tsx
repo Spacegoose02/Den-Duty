@@ -5,6 +5,7 @@ import { useApp, useLoad } from '../state.tsx';
 import { RaccoonAvatar } from '../components/Raccoon.tsx';
 import { Modal, ProgressBar, dayName, shortDate } from '../components/Bits.tsx';
 import { KIND_ICONS, whenText } from './Therapy.tsx';
+import { IdeasButton } from '../components/Ideas.tsx';
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -151,6 +152,7 @@ export function Dashboard() {
               {penalty.name} will see the reason, worded kindly. {home?.allowNegative ? 'Balances can go below zero (change in Settings).' : "Balances don't go below zero (change in Settings)."}
             </p>
             <input placeholder="Reason, e.g. Left toys on the stairs" value={penalty.reason} onChange={(e) => setPenalty({ ...penalty, reason: e.target.value })} autoFocus />
+            <IdeasButton kind="penalty" kidId={penalty.id} onPick={(i) => setPenalty({ ...penalty, reason: i.title, points: Math.max(1, i.points) })} />
             <div className="row">
               <button type="button" className="icon" onClick={() => setPenalty({ ...penalty, points: Math.max(1, penalty.points - 1) })}>−</button>
               <strong style={{ fontSize: '1.4rem', minWidth: 40, textAlign: 'center' }}>{penalty.points}</strong>

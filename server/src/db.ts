@@ -375,6 +375,12 @@ const MIGRATIONS: string[] = [
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
   `,
+  // AI suggestions: off until a parent turns them on and pastes their own API key (stored encrypted).
+  `
+  ALTER TABLE homes ADD COLUMN ai_enabled INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE homes ADD COLUMN ai_key TEXT;
+  ALTER TABLE homes ADD COLUMN ai_model TEXT;
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {
