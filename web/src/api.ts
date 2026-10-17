@@ -49,6 +49,7 @@ export interface HomeDetail {
   kids: Kid[];
   joinCode?: string;
   parents?: { id: string; userId: string; name: string; avatar: string; joinedAt: string }[];
+  haWebhookUrl?: string | null;
 }
 
 export interface Chore {

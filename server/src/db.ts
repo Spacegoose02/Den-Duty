@@ -335,6 +335,20 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX honeydo_home ON honeydo(home_id, status, position);
   `,
+  // Home Assistant: tokens that can only read, or also act; events HA can poll or receive by webhook.
+  `
+  ALTER TABLE api_tokens ADD COLUMN scope TEXT NOT NULL DEFAULT 'read' CHECK (scope IN ('read', 'control'));
+  ALTER TABLE homes ADD COLUMN ha_webhook_url TEXT;
+  CREATE TABLE events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    type TEXT NOT NULL,
+    member_id TEXT,
+    data TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX events_home ON events(home_id, id);
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

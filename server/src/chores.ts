@@ -3,6 +3,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { tx, type Row } from './db.ts';
 import { HttpError, newId } from './util.ts';
+import { emit } from './events.ts';
 import { addDays, dateRange, isScheduledOn, startOfWeek, todayIn, type Schedule, type ScheduleKind } from '../../shared/schedule.ts';
 
 export type InstanceStatus = 'pending' | 'submitted' | 'approved' | 'rejected';
@@ -209,6 +210,7 @@ export function submitInstance(db: DatabaseSync, homeId: string, id: string, tod
   if (inst.date > today) throw new HttpError(400, "That chore isn't due yet");
   if (inst.status === 'submitted' || inst.status === 'approved') return inst;
   db.prepare("UPDATE chore_instances SET status = 'submitted', submitted_at = datetime('now'), note = NULL WHERE id = ?").run(id);
+  emit(db, homeId, 'chore_submitted', inst.memberId, { chore: inst.title, icon: inst.icon, points: inst.points, instance_id: id });
   return getInstance(db, homeId, id);
 }
 
@@ -240,6 +242,9 @@ export function approveInstance(db: DatabaseSync, homeId: string, id: string, by
     db.prepare(`UPDATE chore_instances SET status = 'approved', reviewed_at = datetime('now'), reviewed_by = ?, note = NULL,
       submitted_at = COALESCE(submitted_at, datetime('now')) WHERE id = ?`).run(by.userId, id);
     writeLedger(db, { homeId, memberId: inst.memberId, amount: inst.points, kind: 'chore', reason: inst.title, date: inst.date, instanceId: id, by });
+    emit(db, homeId, 'chore_approved', inst.memberId, {
+      chore: inst.title, icon: inst.icon, points: inst.points, instance_id: id, balance: balance(db, inst.memberId), by: by.name,
+    });
     return { item: getInstance(db, homeId, id), awarded: inst.points };
   });
 }
@@ -281,6 +286,16 @@ export function writeLedger(db: DatabaseSync, e: {
   db.prepare(`INSERT INTO points_ledger (home_id, member_id, amount, kind, reason, date, instance_id, goal_id, by_user_id, by_name)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(e.homeId, e.memberId, e.amount, e.kind, e.reason, e.date, e.instanceId ?? null, e.goalId ?? null, e.by.userId, e.by.name);
+  // Goals this entry just pushed over the line.
+  const after = balance(db, e.memberId);
+  const before = after - e.amount;
+  // Chore approvals and redemptions have their own, richer events.
+  if (e.kind !== 'chore' && e.kind !== 'redeem') emit(db, e.homeId, 'points_changed', e.memberId, { amount: e.amount, kind: e.kind, reason: e.reason, balance: after, by: e.by.name });
+  if (e.amount > 0) {
+    const hit = db.prepare("SELECT id, title, target_points, reward FROM goals WHERE member_id = ? AND status = 'active' AND target_points > ? AND target_points <= ?")
+      .all(e.memberId, before, after) as Row[];
+    for (const g of hit) emit(db, e.homeId, 'goal_reached', e.memberId, { goal: g.title, goal_id: g.id, target: g.target_points, reward: g.reward, balance: after });
+  }
 }
 
 /**
@@ -354,6 +369,7 @@ export function redeemGoal(db: DatabaseSync, homeId: string, goalId: string, by:
     if (balance(db, memberId) < target) throw new HttpError(400, 'Not enough points for this goal yet');
     writeLedger(db, { homeId, memberId, amount: -target, kind: 'redeem', reason: `Redeemed: ${g.title}`, date: today, goalId, by });
     db.prepare("UPDATE goals SET status = 'redeemed', redeemed_at = datetime('now') WHERE id = ?").run(goalId);
+    emit(db, homeId, 'goal_redeemed', memberId, { goal: g.title, goal_id: goalId, target, reward: g.reward, by: by.name });
     return goalsFor(db, memberId, true).find((x) => x.id === goalId)!;
   });
 }

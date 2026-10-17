@@ -100,7 +100,7 @@ export function homeRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const parents = db.prepare(`
       SELECT m.id, m.user_id AS userId, m.name, m.avatar, m.created_at AS joinedAt FROM members m
       WHERE m.home_id = ? AND m.role = 'parent' ORDER BY m.created_at`).all(ctx.homeId);
-    return { ...base, joinCode: home.join_code as string, parents };
+    return { ...base, joinCode: home.join_code as string, parents, haWebhookUrl: home.ha_webhook_url as string | null };
   });
 
   app.patch('/api/homes/:homeId', async (req) => {
@@ -118,6 +118,11 @@ export function homeRoutes(app: FastifyInstance, db: DatabaseSync): void {
     if ('theme' in b) {
       if (!isThemeId(b.theme)) throw new HttpError(400, 'Unknown theme');
       db.prepare('UPDATE homes SET theme = ? WHERE id = ?').run(b.theme, ctx.homeId);
+    }
+    if ('haWebhookUrl' in b) {
+      const url = str(b.haWebhookUrl, 500);
+      if (url && !/^https?:\/\//i.test(url)) throw new HttpError(400, 'The webhook URL should start with http:// or https://');
+      db.prepare('UPDATE homes SET ha_webhook_url = ? WHERE id = ?').run(url, ctx.homeId);
     }
     if (typeof b.allowNegative === 'boolean') db.prepare('UPDATE homes SET allow_negative = ? WHERE id = ?').run(b.allowNegative ? 1 : 0, ctx.homeId);
     if (b.weekStart === 0 || b.weekStart === 1) db.prepare('UPDATE homes SET week_start = ? WHERE id = ?').run(b.weekStart, ctx.homeId);
@@ -225,15 +230,16 @@ export function homeRoutes(app: FastifyInstance, db: DatabaseSync): void {
   // ---------- API tokens for Home Assistant and other automations ----------
   app.get('/api/homes/:homeId/tokens', async (req) => {
     const ctx = homeCtx(db, req, 'parent');
-    return db.prepare('SELECT id, name, last_used_at, created_at FROM api_tokens WHERE home_id = ? ORDER BY created_at DESC').all(ctx.homeId);
+    return db.prepare('SELECT id, name, scope, last_used_at, created_at FROM api_tokens WHERE home_id = ? ORDER BY created_at DESC').all(ctx.homeId);
   });
 
   app.post('/api/homes/:homeId/tokens', async (req) => {
     const ctx = homeCtx(db, req, 'parent');
     const name = requireStr((req.body as Row)?.name, 'Token name', 60);
+    const scope = (req.body as Row)?.scope === 'control' ? 'control' : 'read';
     const token = `dnk_${randomToken(30)}`;
-    db.prepare('INSERT INTO api_tokens (id, home_id, name, token_hash, created_by) VALUES (?, ?, ?, ?, ?)')
-      .run(newId(), ctx.homeId, name, sha256(token), ctx.user?.id ?? null);
+    db.prepare('INSERT INTO api_tokens (id, home_id, name, token_hash, created_by, scope) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(newId(), ctx.homeId, name, sha256(token), ctx.user?.id ?? null, scope);
     // The plain token is shown exactly once.
     return { token };
   });

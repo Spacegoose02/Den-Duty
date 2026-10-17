@@ -92,7 +92,7 @@ function FamilyTablets() {
 
 function HomeSettings() {
   const { who, home, base, homeId, setHome, refresh, refreshHome, toast } = useApp();
-  const [tokens, reloadTokens] = useLoad<{ id: string; name: string; last_used_at: string | null }[]>(`${base}/tokens`);
+  const [tokens, reloadTokens] = useLoad<{ id: string; name: string; scope: string; last_used_at: string | null }[]>(`${base}/tokens`);
   const [newToken, setNewToken] = useState<string | null>(null);
   if (!home) return null;
   const patch = async (body: object, msg = 'Saved') => {
@@ -176,21 +176,37 @@ function HomeSettings() {
       </div>
 
       <h3>Home Assistant and automations</h3>
-      <p className="small muted" style={{ margin: 0 }}>A token can read <code>{base}/ha/summary</code> (each kid's {home.pointsName}, chores left today, and how many are waiting for review). It can't change anything.</p>
+      <p className="small muted" style={{ margin: 0 }}>
+        Home Assistant reads <code>{base}/ha/summary</code> for per-kid sensors ({home.pointsName}, chores left, waiting for review, streak, level).
+        A <strong>read</strong> token can only look. A <strong>control</strong> token can also mark chores done, approve them, and give or take points.
+        See <code>docs/home-assistant.md</code> for ready-to-paste YAML.
+      </p>
+      <p className="small" style={{ margin: 0 }}>Home ID: <code>{home.id}</code></p>
       <form className="row" onSubmit={async (e) => {
         e.preventDefault();
-        const el = e.currentTarget.elements.namedItem('tn') as HTMLInputElement;
-        setNewToken((await api<{ token: string }>(`${base}/tokens`, { body: { name: el.value } })).token);
+        const form = e.currentTarget;
+        const el = form.elements.namedItem('tn') as HTMLInputElement;
+        const scope = (form.elements.namedItem('ts') as HTMLSelectElement).value;
+        setNewToken((await api<{ token: string }>(`${base}/tokens`, { body: { name: el.value, scope } })).token);
         el.value = '';
         await reloadTokens();
       }}>
-        <input name="tn" placeholder="Token name, e.g. Home Assistant" style={{ flex: 1 }} required />
+        <input name="tn" placeholder="Token name, e.g. Home Assistant" style={{ flex: 1, minWidth: 200 }} required />
+        <select name="ts" defaultValue="read" style={{ width: 'auto' }} aria-label="What the token may do">
+          <option value="read">Read only</option>
+          <option value="control">Read and control</option>
+        </select>
         <button>Create token</button>
       </form>
       {newToken && <div className="card" style={{ background: 'var(--surface-2)' }}><strong>Copy this now, it won't be shown again:</strong><br /><code style={{ wordBreak: 'break-all' }}>{newToken}</code></div>}
+      <form className="row" onSubmit={(e) => { e.preventDefault(); void patch({ haWebhookUrl: (e.currentTarget.elements.namedItem('wh') as HTMLInputElement).value }, 'Webhook saved'); }}>
+        <input name="wh" defaultValue={home.haWebhookUrl ?? ''} key={home.haWebhookUrl ?? ''} placeholder="Webhook for events, e.g. http://homeassistant.local:8123/api/webhook/daytime-ninja" style={{ flex: 1, minWidth: 260 }} />
+        <button>Save webhook</button>
+      </form>
+      <p className="small muted" style={{ margin: 0 }}>Optional. Daytime Ninja POSTs an event there when a chore is marked done or approved, points change, or a goal is reached or redeemed.</p>
       {tokens?.map((t) => (
         <div key={t.id} className="row">
-          <span style={{ flex: 1 }}>{t.name} <span className="small muted">{t.last_used_at ? `last used ${t.last_used_at}` : 'never used'}</span></span>
+          <span style={{ flex: 1 }}>{t.name} <span className="pill">{t.scope === 'control' ? 'read + control' : 'read only'}</span> <span className="small muted">{t.last_used_at ? `last used ${t.last_used_at}` : 'never used'}</span></span>
           <button className="ghost danger" onClick={async () => { await api(`${base}/tokens/${t.id}`, { method: 'DELETE' }); await reloadTokens(); }}>Revoke</button>
         </div>
       ))}

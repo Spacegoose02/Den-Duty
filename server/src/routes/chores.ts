@@ -293,19 +293,4 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
       })),
     };
   });
-
-  // For Home Assistant sensors and other automations (works with an API token).
-  app.get('/api/homes/:homeId/ha/summary', async (req) => {
-    const ctx = homeCtx(db, req);
-    const home = homeInfo(db, ctx.homeId);
-    const today = homeToday(home);
-    return {
-      points_name: home.pointsName,
-      waiting_for_review: reviewQueue(db, ctx.homeId).length,
-      kids: listKids(db, ctx.homeId).map((k) => {
-        const w = kidWeek(db, home, k.id, today);
-        return { name: k.name, balance: w.balance, points_this_week: w.pointsThisWeek, left_today: w.leftToday, done_this_week: w.choresDone };
-      }),
-    };
-  });
 }

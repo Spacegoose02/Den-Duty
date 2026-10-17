@@ -41,7 +41,7 @@ export type Actor =
   | { kind: 'parent'; user: User; memberId: string | null } // memberId is null for a server admin who isn't in the home
   | { kind: 'kid'; memberId: string }
   | { kind: 'device'; deviceId: string } // a family tablet with nobody picked yet
-  | { kind: 'token' }; // Home Assistant or another automation
+  | { kind: 'token'; scope: 'read' | 'control' }; // Home Assistant or another automation
 
 export interface HomeCtx {
   homeId: string;
@@ -57,6 +57,7 @@ declare module 'fastify' {
   interface FastifyRequest {
     user: User | null;
     tokenHomeId: string | null;
+    tokenScope: 'read' | 'control' | null;
     /** Hash of the current session id, for "this device" in the sessions list. */
     sessionHash: string | null;
     device: DeviceAuth | null;
@@ -177,12 +178,14 @@ function isQuickAccount(db: DatabaseSync, u: User): boolean {
 export function installAuth(app: FastifyInstance, db: DatabaseSync): void {
   app.decorateRequest('user', null);
   app.decorateRequest('tokenHomeId', null);
+  app.decorateRequest('tokenScope', null);
   app.decorateRequest('sessionHash', null);
   app.decorateRequest('device', null);
   app.decorateRequest('kid', null);
   app.addHook('onRequest', async (req) => {
     req.user = null;
     req.tokenHomeId = null;
+    req.tokenScope = null;
     req.sessionHash = null;
     req.device = null;
     req.kid = null;
@@ -192,9 +195,10 @@ export function installAuth(app: FastifyInstance, db: DatabaseSync): void {
     if (!sessionId && authz?.startsWith('Bearer ')) {
       const token = authz.slice(7).trim();
       if (token.startsWith('dnk_')) {
-        const t = db.prepare('SELECT id, home_id FROM api_tokens WHERE token_hash = ?').get(sha256(token)) as Row | undefined;
+        const t = db.prepare('SELECT id, home_id, scope FROM api_tokens WHERE token_hash = ?').get(sha256(token)) as Row | undefined;
         if (t) {
           req.tokenHomeId = t.home_id as string;
+          req.tokenScope = t.scope === 'control' ? 'control' : 'read';
           db.prepare("UPDATE api_tokens SET last_used_at = datetime('now') WHERE id = ?").run(t.id as string);
         }
         return;
@@ -267,7 +271,7 @@ export function homeCtxFor(db: DatabaseSync, req: FastifyRequest, homeId: string
   else if (req.device?.homeId === homeId) actor = { kind: 'device', deviceId: req.device.id };
   else if (req.tokenHomeId) {
     if (req.tokenHomeId !== homeId) throw new HttpError(403, 'Token is for a different home');
-    actor = { kind: 'token' };
+    actor = { kind: 'token', scope: req.tokenScope ?? 'read' };
   }
   if (!actor) {
     if (!req.user && !req.device) throw new HttpError(401, 'Please sign in');
