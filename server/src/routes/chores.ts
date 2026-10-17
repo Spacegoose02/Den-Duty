@@ -4,9 +4,10 @@ import { assertCanActFor, homeCtx, type HomeCtx } from '../auth.ts';
 import { tx, type Row } from '../db.ts';
 import { HttpError, newId, num, requireStr, str } from '../util.ts';
 import {
-  agenda, approveInstance, getInstance, goalsFor, homeInfo, homeToday, kidWeek, rejectInstance, reviewQueue, submitInstance,
-  syncChore, todayList, unapproveInstance, unsubmitInstance, type By,
+  agenda, approveInstance, bonusOffers, claimBonus, getInstance, goalsFor, homeInfo, homeToday, kidWeek, ledger, rejectInstance,
+  reviewQueue, setStarted, submitInstance, syncChore, todayList, unapproveInstance, unclaimBonus, unsubmitInstance, type By,
 } from '../chores.ts';
+import { achievements, kidStats, levelOf, streaks } from '../progress.ts';
 import { cleanIcon, getKid, kidView, listKids } from './homes.ts';
 import { addDays, cleanWeekdays, describeSchedule, isIsoDate, startOfWeek, type ScheduleKind } from '../../../shared/schedule.ts';
 
@@ -22,6 +23,7 @@ function choreView(db: DatabaseSync, r: Row) {
     id: r.id as string, title: r.title as string, icon: r.icon as string, points: r.points as number,
     schedule, weekdays, dueDate: r.due_date as string | null, startDate: r.start_date as string,
     describe: describeSchedule({ schedule, weekdays, dueDate: r.due_date as string | null }),
+    bonus: !!r.bonus, claimLimit: r.claim_limit as 'each' | 'one',
     memberIds: (db.prepare('SELECT member_id FROM chore_assignments WHERE chore_id = ?').all(r.id as string) as Row[]).map((a) => a.member_id as string),
   };
 }
@@ -51,14 +53,26 @@ function choreInput(db: DatabaseSync, homeId: string, b: Row, today: string, cur
     dueDate ??= today;
     if (!isIsoDate(dueDate)) throw new HttpError(400, 'Pick a date for a one-time chore');
   } else dueDate = null;
+  const bonus = 'bonus' in b ? !!b.bonus : !!cur?.bonus;
+  const claimLimit = (b.claimLimit ?? cur?.claim_limit ?? 'each') as 'each' | 'one';
+  if (claimLimit !== 'each' && claimLimit !== 'one') throw new HttpError(400, 'claimLimit must be each or one');
   let memberIds: string[] | null = null;
   if ('memberIds' in b || !cur) {
-    if (!Array.isArray(b.memberIds)) throw new HttpError(400, 'Pick which kids do this chore');
+    // Bonus chores may leave this empty, meaning any kid can opt in.
+    if (!Array.isArray(b.memberIds) && !bonus) throw new HttpError(400, 'Pick which kids do this chore');
     const kids = new Set(listKids(db, homeId).map((k) => k.id));
-    memberIds = [...new Set(b.memberIds.map(String))];
+    memberIds = [...new Set(((b.memberIds as unknown[]) ?? []).map(String))];
     if (memberIds.some((m) => !kids.has(m))) throw new HttpError(400, 'Chores can only be assigned to kids in this home');
+    if (!bonus && !memberIds.length) throw new HttpError(400, 'Pick which kids do this chore');
   }
-  return { title, icon, points, schedule, weekdays, dueDate, memberIds };
+  return { title, icon, points, schedule, weekdays, dueDate, memberIds, bonus, claimLimit };
+}
+
+/** Only a kid's own things for kids; parents can act for any kid in the home. */
+function actingKid(db: DatabaseSync, ctx: HomeCtx, requested: unknown): string {
+  if (ctx.actor.kind === 'kid') return ctx.actor.memberId;
+  if (ctx.actor.kind !== 'parent') throw new HttpError(403, 'Tap your avatar first');
+  return getKid(db, ctx, requireStr(requested, 'Kid', 60)).id as string;
 }
 
 function setAssignments(db: DatabaseSync, choreId: string, memberIds: string[]): void {
@@ -93,10 +107,10 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const c = choreInput(db, ctx.homeId, (req.body ?? {}) as Row, today);
     const id = newId();
     tx(db, () => {
-      db.prepare(`INSERT INTO chores (id, home_id, title, icon, points, schedule, weekdays, due_date, start_date, created_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      db.prepare(`INSERT INTO chores (id, home_id, title, icon, points, schedule, weekdays, due_date, start_date, created_by, bonus, claim_limit)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(id, ctx.homeId, c.title, c.icon, c.points, c.schedule, JSON.stringify(c.weekdays), c.dueDate,
-          c.dueDate && c.dueDate < today ? c.dueDate : today, ctx.user?.id ?? null);
+          c.dueDate && c.dueDate < today ? c.dueDate : today, ctx.user?.id ?? null, c.bonus ? 1 : 0, c.claimLimit);
       setAssignments(db, id, c.memberIds!);
     });
     syncChore(db, ctx.homeId, id, today);
@@ -109,9 +123,9 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const cur = getChore(db, ctx.homeId, (req.params as { choreId: string }).choreId);
     const c = choreInput(db, ctx.homeId, (req.body ?? {}) as Row, today, cur);
     tx(db, () => {
-      db.prepare(`UPDATE chores SET title = ?, icon = ?, points = ?, schedule = ?, weekdays = ?, due_date = ?,
+      db.prepare(`UPDATE chores SET title = ?, icon = ?, points = ?, schedule = ?, weekdays = ?, due_date = ?, bonus = ?, claim_limit = ?,
         start_date = MIN(start_date, COALESCE(?, start_date)), updated_at = datetime('now') WHERE id = ?`)
-        .run(c.title, c.icon, c.points, c.schedule, JSON.stringify(c.weekdays), c.dueDate, c.dueDate, cur.id as string);
+        .run(c.title, c.icon, c.points, c.schedule, JSON.stringify(c.weekdays), c.dueDate, c.bonus ? 1 : 0, c.claimLimit, c.dueDate, cur.id as string);
       if (c.memberIds) setAssignments(db, cur.id as string, c.memberIds);
     });
     syncChore(db, ctx.homeId, cur.id as string, today);
@@ -156,7 +170,59 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
       todayItems: todayList(db, ctx.homeId, memberId, today),
       week: agenda(db, ctx.homeId, [memberId], start, 7, today),
       goals: goalsFor(db, memberId),
+      bonus: bonusOffers(db, ctx.homeId, memberId, today),
+      level: levelOf(db, memberId),
+      streak: streaks(db, memberId, today),
+      achievements: achievements(db, memberId, today),
+      recent: ledger(db, memberId, 8),
     };
+  });
+
+  // ---------- kanban and bonus chores ----------
+  app.post('/api/homes/:homeId/instances/:id/start', async (req) => {
+    const ctx = homeCtx(db, req);
+    const { id } = req.params as { id: string };
+    const { memberId } = getInstance(db, ctx.homeId, id);
+    actingKid(db, ctx, memberId);
+    assertCanActFor(ctx, memberId);
+    const started = (req.body as Row)?.started !== false;
+    return { item: setStarted(db, ctx.homeId, id, started, homeToday(homeInfo(db, ctx.homeId))) };
+  });
+
+  app.post('/api/homes/:homeId/chores/:choreId/claim', async (req) => {
+    const ctx = homeCtx(db, req);
+    const memberId = actingKid(db, ctx, (req.body as Row)?.memberId);
+    return { item: claimBonus(db, ctx.homeId, (req.params as { choreId: string }).choreId, memberId, homeToday(homeInfo(db, ctx.homeId))) };
+  });
+
+  app.post('/api/homes/:homeId/instances/:id/unclaim', async (req) => {
+    const ctx = homeCtx(db, req);
+    const { id } = req.params as { id: string };
+    const { memberId } = getInstance(db, ctx.homeId, id);
+    actingKid(db, ctx, memberId);
+    assertCanActFor(ctx, memberId);
+    unclaimBonus(db, ctx.homeId, id);
+    return { ok: true };
+  });
+
+  // ---------- stats and charts ----------
+  app.get('/api/homes/:homeId/stats', async (req) => {
+    const ctx = homeCtx(db, req, 'parent');
+    const home = homeInfo(db, ctx.homeId);
+    const today = homeToday(home);
+    const weeks = Math.min(Math.max(Number((req.query as { weeks?: string }).weeks) || 12, 2), 52);
+    return { today, weeks, kids: listKids(db, ctx.homeId).map((k) => ({ ...k, ...kidStats(db, home, k.id, today, weeks) })) };
+  });
+
+  app.get('/api/homes/:homeId/kids/:memberId/stats', async (req) => {
+    const ctx = homeCtx(db, req);
+    const { memberId } = req.params as { memberId: string };
+    assertCanActFor(ctx, memberId);
+    const kid = kidView(db, getKid(db, ctx, memberId));
+    const home = homeInfo(db, ctx.homeId);
+    const today = homeToday(home);
+    const weeks = Math.min(Math.max(Number((req.query as { weeks?: string }).weeks) || 12, 2), 52);
+    return { today, weeks, kid: { ...kid, ...kidStats(db, home, memberId, today, weeks) }, achievements: achievements(db, memberId, today) };
   });
 
   // ---------- doing chores ----------
@@ -219,7 +285,9 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
       weekStart,
       weekEnd: addDays(weekStart, 6),
       waiting: reviewQueue(db, ctx.homeId).length,
-      kids: listKids(db, ctx.homeId).map((k) => ({ ...k, ...kidWeek(db, home, k.id, today), goals: goalsFor(db, k.id) })),
+      kids: listKids(db, ctx.homeId).map((k) => ({
+        ...k, ...kidWeek(db, home, k.id, today), goals: goalsFor(db, k.id), streak: streaks(db, k.id, today), level: levelOf(db, k.id),
+      })),
     };
   });
 

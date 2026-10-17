@@ -13,6 +13,7 @@ import { homeRoutes } from './routes/homes.ts';
 import { kioskRoutes } from './routes/kiosk.ts';
 import { choreRoutes } from './routes/chores.ts';
 import { goalRoutes } from './routes/goals.ts';
+import { rewardRoutes } from './routes/rewards.ts';
 
 export async function buildApp(db: DatabaseSync, opts: { logger?: boolean; serveWeb?: boolean } = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 1024 * 1024, trustProxy: config.trustProxy });
@@ -35,6 +36,7 @@ export async function buildApp(db: DatabaseSync, opts: { logger?: boolean; serve
   kioskRoutes(app, db);
   choreRoutes(app, db);
   goalRoutes(app, db);
+  rewardRoutes(app, db);
 
   const hasWeb = opts.serveWeb !== false && fs.existsSync(path.join(config.webDist, 'index.html'));
   if (hasWeb) {

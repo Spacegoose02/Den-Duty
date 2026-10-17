@@ -220,6 +220,55 @@ const MIGRATIONS: string[] = [
   ALTER TABLE members ADD COLUMN theme TEXT;
   UPDATE users SET theme = 'home' WHERE theme = 'sunny';
   `,
+  // Phase 2: kanban "doing", bonus chores, penalties setting, quick rewards and reward votes.
+  `
+  ALTER TABLE chore_instances ADD COLUMN started_at TEXT;
+  -- Bonus chores aren't handed out; kids opt in. 'each' lets every eligible kid do it, 'one' only the first to claim it.
+  ALTER TABLE chores ADD COLUMN bonus INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE chores ADD COLUMN claim_limit TEXT NOT NULL DEFAULT 'each' CHECK (claim_limit IN ('each', 'one'));
+  -- Penalties stop at zero unless a parent allows going below.
+  ALTER TABLE homes ADD COLUMN allow_negative INTEGER NOT NULL DEFAULT 0;
+  CREATE TABLE quick_rewards (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    icon TEXT NOT NULL DEFAULT '🌟',
+    amount INTEGER NOT NULL CHECK (amount > 0),
+    position INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  INSERT INTO quick_rewards (id, home_id, title, icon, amount, position)
+    SELECT lower(hex(randomblob(16))), h.id, d.title, d.icon, d.amount, d.position FROM homes h,
+    (SELECT 'Great attitude' AS title, '🌟' AS icon, 2 AS amount, 0 AS position
+      UNION ALL SELECT 'Helped someone', '🤝', 3, 1
+      UNION ALL SELECT 'Tried something hard', '🧠', 2, 2
+      UNION ALL SELECT 'Ready on time', '🎒', 1, 3) d;
+  -- Parents propose rewards, kids vote, parents pick.
+  CREATE TABLE polls (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed')),
+    winner_option_id TEXT,
+    created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    closed_at TEXT
+  );
+  CREATE TABLE poll_options (
+    id TEXT PRIMARY KEY,
+    poll_id TEXT NOT NULL REFERENCES polls(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    icon TEXT NOT NULL DEFAULT '🎁',
+    position INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE TABLE poll_votes (
+    poll_id TEXT NOT NULL REFERENCES polls(id) ON DELETE CASCADE,
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    option_id TEXT NOT NULL REFERENCES poll_options(id) ON DELETE CASCADE,
+    voted_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (poll_id, member_id)
+  );
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

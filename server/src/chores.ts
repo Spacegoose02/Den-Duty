@@ -24,14 +24,19 @@ export function homeInfo(db: DatabaseSync, homeId: string): HomeInfo {
 
 export const homeToday = (home: Pick<HomeInfo, 'timezone'>, now = new Date()): string => todayIn(home.timezone, now);
 
-interface ChoreRow { id: string; title: string; icon: string; points: number; schedule: ScheduleKind; weekdays: string; due_date: string | null; start_date: string }
+interface ChoreRow {
+  id: string; title: string; icon: string; points: number; schedule: ScheduleKind; weekdays: string; due_date: string | null; start_date: string;
+  /** Bonus chores are opt-in: nothing is created until a kid claims one. */
+  bonus: number;
+  claim_limit: 'each' | 'one';
+}
 
 const scheduleOf = (c: ChoreRow): Schedule => ({
   schedule: c.schedule, weekdays: JSON.parse(c.weekdays) as number[], dueDate: c.due_date, startDate: c.start_date,
 });
 
 function activeChores(db: DatabaseSync, homeId: string, choreId?: string): (ChoreRow & { memberIds: string[] })[] {
-  const rows = db.prepare(`SELECT id, title, icon, points, schedule, weekdays, due_date, start_date FROM chores
+  const rows = db.prepare(`SELECT id, title, icon, points, schedule, weekdays, due_date, start_date, bonus, claim_limit FROM chores
     WHERE home_id = ? AND active = 1 ${choreId ? 'AND id = ?' : ''}`).all(...(choreId ? [homeId, choreId] : [homeId])) as unknown as ChoreRow[];
   const assigned = db.prepare('SELECT member_id FROM chore_assignments WHERE chore_id = ?');
   return rows.map((c) => ({ ...c, memberIds: (assigned.all(c.id) as Row[]).map((r) => r.member_id as string) }));
@@ -49,7 +54,7 @@ export function materialize(db: DatabaseSync, homeId: string, from: string, to: 
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
   tx(db, () => {
     for (const c of activeChores(db, homeId)) {
-      if (!c.memberIds.length) continue;
+      if (!c.memberIds.length || c.bonus) continue;
       const s = scheduleOf(c);
       const start = from > c.start_date ? from : c.start_date;
       for (const date of dateRange(start, last)) {
@@ -70,12 +75,67 @@ export function syncChore(db: DatabaseSync, homeId: string, choreId: string, tod
     .all(choreId, today) as Row[];
   tx(db, () => {
     for (const i of open) {
-      const keep = chore && chore.memberIds.includes(i.member_id as string) && isScheduledOn(scheduleOf(chore), i.date as string);
+      const keep = chore && bonusEligible(chore, i.member_id as string) && isScheduledOn(scheduleOf(chore), i.date as string);
       if (!keep) db.prepare('DELETE FROM chore_instances WHERE id = ?').run(i.id as string);
       else db.prepare('UPDATE chore_instances SET title = ?, icon = ?, points = ? WHERE id = ?').run(chore.title, chore.icon, chore.points, i.id as string);
     }
   });
   materialize(db, homeId, today, today, today);
+}
+
+/** Regular chores go to their assigned kids. A bonus chore with nobody picked is open to every kid. */
+function bonusEligible(c: ChoreRow & { memberIds: string[] }, memberId: string): boolean {
+  return c.memberIds.includes(memberId) || (!!c.bonus && !c.memberIds.length);
+}
+
+// ---------- bonus chores ----------
+
+export interface BonusOffer {
+  choreId: string; title: string; icon: string; points: number; claimLimit: 'each' | 'one';
+  /** This kid's instance, once claimed. */
+  instanceId: string | null;
+  /** Someone else got the only spot today. */
+  takenBy: string | null;
+}
+
+/** Bonus chores a kid could do today. */
+export function bonusOffers(db: DatabaseSync, homeId: string, memberId: string, today: string): BonusOffer[] {
+  const claims = db.prepare(`SELECT i.id, i.member_id, m.name FROM chore_instances i JOIN members m ON m.id = i.member_id
+    WHERE i.chore_id = ? AND i.date = ?`);
+  return activeChores(db, homeId)
+    .filter((c) => c.bonus && bonusEligible(c, memberId) && isScheduledOn(scheduleOf(c), today))
+    .map((c) => {
+      const rows = claims.all(c.id, today) as Row[];
+      const mine = rows.find((r) => r.member_id === memberId);
+      const other = c.claim_limit === 'one' && !mine ? rows[0] : undefined;
+      return {
+        choreId: c.id, title: c.title, icon: c.icon, points: c.points, claimLimit: c.claim_limit,
+        instanceId: (mine?.id as string) ?? null, takenBy: (other?.name as string) ?? null,
+      };
+    });
+}
+
+/** A kid signs up for a bonus chore today. It then works like any other chore: done, review, points. */
+export function claimBonus(db: DatabaseSync, homeId: string, choreId: string, memberId: string, today: string): AgendaItem {
+  return tx(db, () => {
+    const offer = bonusOffers(db, homeId, memberId, today).find((o) => o.choreId === choreId);
+    if (!offer) throw new HttpError(404, "That bonus chore isn't available today");
+    if (offer.instanceId) return getInstance(db, homeId, offer.instanceId);
+    if (offer.takenBy) throw new HttpError(409, `${offer.takenBy} already took that one today`);
+    const id = newId();
+    db.prepare(`INSERT INTO chore_instances (id, home_id, chore_id, member_id, date, title, icon, points) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(id, homeId, choreId, memberId, today, offer.title, offer.icon, offer.points);
+    return getInstance(db, homeId, id);
+  });
+}
+
+/** Changed your mind? Only before it's been marked done. */
+export function unclaimBonus(db: DatabaseSync, homeId: string, instanceId: string): void {
+  const r = db.prepare(`SELECT i.status, c.bonus FROM chore_instances i JOIN chores c ON c.id = i.chore_id WHERE i.id = ? AND i.home_id = ?`)
+    .get(instanceId, homeId) as Row | undefined;
+  if (!r || !r.bonus) throw new HttpError(404, "That isn't a bonus chore");
+  if (r.status !== 'pending' && r.status !== 'rejected') throw new HttpError(400, "It's already marked done");
+  db.prepare('DELETE FROM chore_instances WHERE id = ?').run(instanceId);
 }
 
 // ---------- agenda ----------
@@ -91,12 +151,14 @@ export interface AgendaItem {
   points: number;
   status: InstanceStatus | 'planned';
   note: string | null;
+  /** Kanban "Doing": the kid has started but not finished. */
+  started: boolean;
 }
 
 const instanceItem = (r: Row): AgendaItem => ({
   id: r.id as string, choreId: r.chore_id as string | null, memberId: r.member_id as string, date: r.date as string,
   title: r.title as string, icon: r.icon as string, points: r.points as number, status: r.status as InstanceStatus,
-  note: (r.note as string | null) ?? null,
+  note: (r.note as string | null) ?? null, started: !!r.started_at,
 });
 
 /** Every chore for these kids from `from` for `days` days, with stored instances up to today and planned ones after. */
@@ -112,10 +174,10 @@ export function agenda(db: DatabaseSync, homeId: string, memberIds: string[], fr
     for (const day of out) {
       if (day.date <= today) continue;
       for (const c of chores) {
-        if (!isScheduledOn(scheduleOf(c), day.date)) continue;
+        if (c.bonus || !isScheduledOn(scheduleOf(c), day.date)) continue;
         for (const m of c.memberIds) {
           if (!wanted.has(m)) continue;
-          day.items.push({ id: null, choreId: c.id, memberId: m, date: day.date, title: c.title, icon: c.icon, points: c.points, status: 'planned', note: null });
+          day.items.push({ id: null, choreId: c.id, memberId: m, date: day.date, title: c.title, icon: c.icon, points: c.points, status: 'planned', note: null, started: false });
         }
       }
     }
@@ -147,6 +209,15 @@ export function submitInstance(db: DatabaseSync, homeId: string, id: string, tod
   if (inst.date > today) throw new HttpError(400, "That chore isn't due yet");
   if (inst.status === 'submitted' || inst.status === 'approved') return inst;
   db.prepare("UPDATE chore_instances SET status = 'submitted', submitted_at = datetime('now'), note = NULL WHERE id = ?").run(id);
+  return getInstance(db, homeId, id);
+}
+
+/** Kanban: move a chore to "Doing" (or back to "To do" with started = false). */
+export function setStarted(db: DatabaseSync, homeId: string, id: string, started: boolean, today: string): AgendaItem {
+  const inst = getInstance(db, homeId, id);
+  if (inst.date > today) throw new HttpError(400, "That chore isn't due yet");
+  if (inst.status !== 'pending' && inst.status !== 'rejected') throw new HttpError(400, 'That chore is already marked done');
+  db.prepare(`UPDATE chore_instances SET started_at = ${started ? "datetime('now')" : 'NULL'} WHERE id = ?`).run(id);
   return getInstance(db, homeId, id);
 }
 
@@ -210,6 +281,21 @@ export function writeLedger(db: DatabaseSync, e: {
   db.prepare(`INSERT INTO points_ledger (home_id, member_id, amount, kind, reason, date, instance_id, goal_id, by_user_id, by_name)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(e.homeId, e.memberId, e.amount, e.kind, e.reason, e.date, e.instanceId ?? null, e.goalId ?? null, e.by.userId, e.by.name);
+}
+
+/**
+ * Takes points away with a reason the kid will see. Unless the home allows it, a penalty stops at zero:
+ * it takes what's there and says so, and refuses when there's nothing to take.
+ */
+export function penalize(db: DatabaseSync, home: Pick<HomeInfo, 'id'> & { allowNegative: boolean }, memberId: string, points: number, reason: string, by: By, today: string): { taken: number; balance: number } {
+  if (!Number.isInteger(points) || points <= 0) throw new HttpError(400, 'Take away a whole number of points, at least 1');
+  return tx(db, () => {
+    const bal = balance(db, memberId);
+    const taken = home.allowNegative ? points : Math.min(points, Math.max(bal, 0));
+    if (!taken) throw new HttpError(400, "There are no points to take away (balances don't go below zero)");
+    writeLedger(db, { homeId: home.id, memberId, amount: -taken, kind: 'adjust', reason, date: today, by });
+    return { taken, balance: bal - taken };
+  });
 }
 
 export function balance(db: DatabaseSync, memberId: string): number {

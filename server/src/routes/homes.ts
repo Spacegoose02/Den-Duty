@@ -10,12 +10,25 @@ import { AVATARS, isAvatar, isKidColor, KID_COLORS, POINT_ICONS } from '../../..
 import { isTimeZone } from '../../../shared/schedule.ts';
 import { isThemeId } from '../../../shared/themes.ts';
 
+export const STARTER_QUICK_REWARDS = [
+  { title: 'Great attitude', icon: '🌟', amount: 2 },
+  { title: 'Helped someone', icon: '🤝', amount: 3 },
+  { title: 'Tried something hard', icon: '🧠', amount: 2 },
+  { title: 'Ready on time', icon: '🎒', amount: 1 },
+];
+
+export function seedQuickRewards(db: DatabaseSync, homeId: string): void {
+  const ins = db.prepare('INSERT INTO quick_rewards (id, home_id, title, icon, amount, position) VALUES (?, ?, ?, ?, ?, ?)');
+  STARTER_QUICK_REWARDS.forEach((r, i) => ins.run(newId(), homeId, r.title, r.icon, r.amount, i));
+}
+
 export function createHome(db: DatabaseSync, user: { id: string; name: string; avatar: string }, name: string, timezone?: string | null): string {
   const id = newId();
   tx(db, () => {
     db.prepare('INSERT INTO homes (id, name, join_code, timezone) VALUES (?, ?, ?, ?)')
       .run(id, name, readableCode(8), isTimeZone(timezone) ? timezone : config.defaultTimezone);
     addParent(db, id, user);
+    seedQuickRewards(db, id);
   });
   return id;
 }
@@ -79,6 +92,7 @@ export function homeRoutes(app: FastifyInstance, db: DatabaseSync): void {
       theme: home.theme as string,
       timezone: home.timezone as string,
       weekStart: home.week_start as number,
+      allowNegative: !!home.allow_negative,
       viewer: ctx.actor.kind,
       kids: listKids(db, ctx.homeId),
     };
@@ -105,6 +119,7 @@ export function homeRoutes(app: FastifyInstance, db: DatabaseSync): void {
       if (!isThemeId(b.theme)) throw new HttpError(400, 'Unknown theme');
       db.prepare('UPDATE homes SET theme = ? WHERE id = ?').run(b.theme, ctx.homeId);
     }
+    if (typeof b.allowNegative === 'boolean') db.prepare('UPDATE homes SET allow_negative = ? WHERE id = ?').run(b.allowNegative ? 1 : 0, ctx.homeId);
     if (b.weekStart === 0 || b.weekStart === 1) db.prepare('UPDATE homes SET week_start = ? WHERE id = ?').run(b.weekStart, ctx.homeId);
     return { ok: true };
   });
@@ -148,7 +163,7 @@ export function homeRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const id = newId();
     const pin = b.pin == null || b.pin === '' ? null : await hashPassword(cleanPin(b.pin));
     db.prepare("INSERT INTO members (id, home_id, role, name, avatar, color, pin_hash, position, theme) VALUES (?, ?, 'kid', ?, ?, ?, ?, ?, ?)")
-      .run(id, ctx.homeId, name, isAvatar(b.avatar) ? b.avatar : AVATARS[count % AVATARS.length],
+      .run(id, ctx.homeId, name, isAvatar(b.avatar) ? b.avatar : AVATARS[count % 8],
         isKidColor(b.color) ? b.color : KID_COLORS[count % KID_COLORS.length], pin, count, isThemeId(b.theme) ? b.theme : null);
     return kidView(db, getKid(db, ctx, id));
   });

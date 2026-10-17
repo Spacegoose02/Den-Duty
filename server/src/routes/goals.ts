@@ -3,7 +3,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { assertCanActFor, homeCtx } from '../auth.ts';
 import type { Row } from '../db.ts';
 import { HttpError, newId, num, requireStr, str } from '../util.ts';
-import { balance, goalsFor, homeInfo, homeToday, ledger, redeemGoal, writeLedger } from '../chores.ts';
+import { balance, goalsFor, homeInfo, homeToday, ledger, penalize, redeemGoal, writeLedger } from '../chores.ts';
 import { getKid } from './homes.ts';
 import { byOf } from './chores.ts';
 
@@ -73,10 +73,12 @@ export function goalRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const b = (req.body ?? {}) as Row;
     const amount = num(b.amount);
     if (amount == null || !Number.isInteger(amount) || amount === 0 || Math.abs(amount) > 100_000) throw new HttpError(400, 'Points must be a whole number other than zero');
-    writeLedger(db, {
-      homeId: ctx.homeId, memberId: kid.id as string, amount, kind: amount > 0 ? 'bonus' : 'adjust',
-      reason: str(b.reason, 120) ?? (amount > 0 ? 'Bonus' : 'Adjustment'), date: homeToday(homeInfo(db, ctx.homeId)), by: byOf(ctx),
-    });
+    const today = homeToday(homeInfo(db, ctx.homeId));
+    if (amount < 0) {
+      const allowNegative = !!(db.prepare('SELECT allow_negative FROM homes WHERE id = ?').get(ctx.homeId) as Row).allow_negative;
+      return penalize(db, { id: ctx.homeId, allowNegative }, kid.id as string, -amount, str(b.reason, 120) ?? 'Points taken away', byOf(ctx), today);
+    }
+    writeLedger(db, { homeId: ctx.homeId, memberId: kid.id as string, amount, kind: 'bonus', reason: str(b.reason, 120) ?? 'Bonus', date: today, by: byOf(ctx) });
     return { balance: balance(db, kid.id as string) };
   });
 }
