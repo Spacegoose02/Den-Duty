@@ -108,7 +108,7 @@ export function LineChart({ labels, series, height = 240, unit = '' }: { labels:
               {(hover != null ? [hover] : [s.values.length - 1]).map((i) => (
                 <circle key={i} cx={x(i)} cy={y(s.values[i] ?? 0)} r={4.5} fill={s.color} stroke="var(--surface)" strokeWidth={2} />
               ))}
-              {series.length <= 4 && (
+              {series.length > 1 && series.length <= 4 && (
                 <text x={x(s.values.length - 1) + 9} y={y(s.values.at(-1) ?? 0) + 4} className="chart-label">{s.name}</text>
               )}
             </g>

@@ -14,7 +14,16 @@ Daytime Ninja is the sibling of [Nighttime Ninja](https://github.com/Spacegoose0
 - **Done → review → points.** Kids tap a chore when it's done; it waits for a parent. Parents **approve** (or send it back with a note) from the review queue. Every approval writes one row to an **append-only points ledger**, so balances are always explainable. Mistakes are undone with a reversing entry, never by editing history.
 - **Goals and rewards** per kid (“Ice cream trip, 20 points”). Kids watch the progress bar fill; parents tap **Redeem** to hand over the reward and spend the points.
 - **Your own currency.** Points are called **Shinies ✨** by default; rename them and pick an icon per home (Acorns 🌰, Stars ⭐, Bucks 🪙…).
-- **Kid view**: a big-button today list, goal progress, and a weekly agenda. **Parent view**: review queue, per-kid summary (points this week, chores done), a week grid, bonus points and a points history.
+- **Kid kanban board**: To do → Doing → Waiting for a grown-up → Done, with big buttons, plus goal progress, recent points and a weekly agenda. **Parent view**: review queue, per-kid summary (points this week, chores done, level, streak), a week grid and a points history.
+- **Bonus chores** kids can opt into for extra points: open to everyone or to chosen kids, for every kid or first-come (one per day).
+- **Quick rewards** a parent hands out in one tap (“🤝 Helped someone +3”), and **penalties** with a reason, which kids see worded gently. Balances stop at zero unless you allow negatives in Settings.
+- **Reward votes**: parents suggest rewards, kids vote on the tablet (counts stay hidden until a parent picks), parents choose the winner.
+- **Raccoon levels** (Kit → Scout → Sneak → Shadow → Ninja → Master Ninja → Legend) from lifetime points and redeemed goals. Levels unlock 6 extra raccoon avatars kids can pick themselves.
+- **Badges and streaks**: 16 achievements for firsts, totals and streaks (days in a row with every chore done).
+- **Stats with charts**: points per week compared across kids, points per day, chores done vs due by week, which chores get done, and level / streak / trend tiles. Every chart has a table view.
+- **Therapy section per kid** (parents only): appointments (doctor, speech, feeding, OT, PT and more), development / speech / feeding / doctor goals with progress notes and a progress chart. You can choose to show a kid their own goals and next appointments; notes always stay private.
+- **Honey-do board**: a kanban for the parents' own to-dos and goals, with assignees and due dates.
+- **21 themes**, from Sunny and Dino to Space and Volcano, plus two high-contrast ones. Pick one for the home, and each kid can have their own on their board.
 - **Strong sign-in** carried over from Nighttime Ninja: passwords (scrypt), **two-factor codes** with recovery codes, **passkeys**, **Google** (OIDC), invite-only sign-up, rate limiting, signed-in device list, **pairing codes**, and name-only quick sign-in that only works on your home network.
 - **Home Assistant**: a token-based summary endpoint with each kid's points and chores left today.
 - **Runs everywhere**: Docker (with an Unraid template) and any browser. Android and Windows apps are planned (same approach as Nighttime Ninja).
@@ -62,6 +71,9 @@ All settings are environment variables. See [.env.example](.env.example).
 - Status goes **to do → waiting → done** (or **try again** with a parent's note). A parent ticking a chore off directly counts straight away.
 - `points_ledger` is append-only: SQLite triggers refuse updates and deletes. A kid's balance is the sum of their rows; “points this week” counts everything earned in the week (spending on rewards doesn't reduce it).
 - Goals measure against the balance. Redeeming writes a negative `redeem` row for the goal's points.
+- Penalties are `adjust` rows with a negative amount and a reason. By default they stop at zero: a penalty takes what's there and refuses when the balance is empty. Undoing an approval can still dip below zero, because it corrects a mistake rather than punishing.
+- Levels use lifetime earnings (chores and bonuses, minus undone approvals) plus 20 per redeemed goal, so spending and penalties never lower a kid's level.
+- A streak day is one where every regular chore due was approved (today, “waiting for a grown-up” counts too). Days with nothing due don't break a streak, and bonus chores never count against it.
 
 ## Putting it on the internet
 
