@@ -1,4 +1,4 @@
-<p align="center"><img src="web/public/icon.svg" width="120" alt="Daytime Ninja raccoon"></p>
+<p align="center"><img src="web/public/icon.png" width="120" alt="Daytime Ninja raccoon with the sun"></p>
 
 <h1 align="center">Daytime Ninja</h1>
 

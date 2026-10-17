@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#e8590c"/>
+  
+  <circle cx="132" cy="222" r="50" fill="#8d949b"/>
+  <circle cx="380" cy="222" r="50" fill="#8d949b"/>
+  <ellipse cx="256" cy="304" rx="162" ry="134" fill="#a3aab1"/>
+  <ellipse cx="256" cy="352" rx="116" ry="82" fill="#f4f4f2"/>
+  <path d="M100 280 Q256 186 412 280 Q392 338 330 328 Q256 306 182 328 Q120 338 100 280Z" fill="#262a2e"/>
+  
+  <circle cx="196" cy="290" r="21" fill="#fff"/><circle cx="316" cy="290" r="21" fill="#fff"/>
+  <circle cx="199" cy="291" r="11" fill="#1c1f22"/><circle cx="319" cy="291" r="11" fill="#1c1f22"/>
+  <ellipse cx="256" cy="360" rx="26" ry="18" fill="#1c1f22"/>
+  <path d="M220 396 Q256 420 292 396" stroke="#1c1f22" stroke-width="10" fill="none" stroke-linecap="round"/>
+  <path d="M110 214 Q256 70 402 214 Q256 150 110 214Z" fill="#ffd43b"/>
+  <path d="M236 122 L210 70 L256 96 L302 70 L276 122Z" fill="#fab005"/>
+  <path d="M420 62 Q428.28 99.72 466 108 Q428.28 116.28 420 154 Q411.72 116.28 374 108 Q411.72 99.72 420 62Z" fill="#fff"/><path d="M462 156 Q465.6 172.4 482 176 Q465.6 179.6 462 196 Q458.4 179.6 442 176 Q458.4 172.4 462 156Z" fill="#fff"/></svg>

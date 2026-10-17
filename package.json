@@ -16,13 +16,16 @@
     "build": "npm run build --workspace web",
     "start": "npm start --workspace server",
     "test": "node --test \"shared/**/*.test.ts\" \"server/src/**/*.test.ts\"",
-    "typecheck": "tsc -p server && tsc -p web --noEmit"
+    "typecheck": "tsc -p server && tsc -p web --noEmit",
+    "icons": "node scripts/brand.mjs"
   },
   "engines": {
     "node": ">=24"
   },
   "devDependencies": {
-    "typescript": "^5.9.3",
-    "@types/node": "^24.10.1"
+    "@types/node": "^24.10.1",
+    "png-to-ico": "^3.0.2",
+    "sharp": "^0.35.5",
+    "typescript": "^5.9.3"
   }
 }
