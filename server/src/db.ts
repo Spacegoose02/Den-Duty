@@ -441,6 +441,39 @@ export const MIGRATIONS: string[] = [
   INSERT INTO chore_assignments (chore_id, member_id) SELECT id, kid_id FROM honeydo WHERE kid_id IS NOT NULL;
   DELETE FROM honeydo WHERE kid_id IS NOT NULL;
   `,
+  // Time-outs: what's paused ("No Roblox"), why, and from when until when. Parents can let a kid buy time back with
+  // points (a price per hour or per day, up to a cap); the kid asks and a parent approves before any points move.
+  `
+  CREATE TABLE timeouts (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    what TEXT NOT NULL,
+    reason TEXT,
+    starts_at TEXT NOT NULL,
+    ends_at TEXT NOT NULL,
+    ended_at TEXT,
+    buy_unit TEXT CHECK (buy_unit IN ('hour', 'day')),
+    buy_price INTEGER,
+    buy_max_minutes INTEGER,
+    bought_minutes INTEGER NOT NULL DEFAULT 0,
+    created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX timeouts_member ON timeouts(member_id, ends_at);
+  CREATE TABLE timeout_requests (
+    id TEXT PRIMARY KEY,
+    timeout_id TEXT NOT NULL REFERENCES timeouts(id) ON DELETE CASCADE,
+    units INTEGER NOT NULL,
+    minutes INTEGER NOT NULL,
+    points INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'denied', 'cancelled')),
+    decided_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    decided_at TEXT
+  );
+  CREATE INDEX timeout_requests_timeout ON timeout_requests(timeout_id, status);
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

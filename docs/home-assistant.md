@@ -130,7 +130,7 @@ automation:
 
 ## 5. Events
 
-Den Duty records an event when a chore is marked done (`chore_submitted`) or approved (`chore_approved`), when points are given or taken outside chores (`points_changed`), and when a goal is reached (`goal_reached`) or redeemed (`goal_redeemed`).
+Den Duty records an event when a chore is marked done (`chore_submitted`) or approved (`chore_approved`), when points are given or taken outside chores (`points_changed`), and when a goal is reached (`goal_reached`) or redeemed (`goal_redeemed`), and for time-outs: started (`timeout_started`), ended early (`timeout_ended`), a kid asking to buy time back (`timeout_buy_requested`) and a parent approving it (`timeout_time_bought`). The summary also has `active_timeouts`, `timeout_requests_waiting`, and per kid `in_timeout` and `timeouts` (what, reason, `ends_at`, `minutes_left`).
 
 **Webhook (instant).** Create an automation with a webhook trigger, then paste its URL into **Settings → Home Assistant → Webhook for events**:
 

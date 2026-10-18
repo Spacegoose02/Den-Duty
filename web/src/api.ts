@@ -89,7 +89,7 @@ export interface BonusOffer { choreId: string; title: string; icon: string; poin
 
 export interface Board {
   today: string; weekStart: string; kid: Kid; stats: KidWeek; todayItems: AgendaItem[]; week: Day[]; goals: Goal[];
-  bonus: BonusOffer[]; level: LevelInfo; streak: Streak; achievements: Achievement[]; recent: LedgerEntry[];
+  bonus: BonusOffer[]; level: LevelInfo; streak: Streak; achievements: Achievement[]; recent: LedgerEntry[]; timeouts: Timeout[];
   /** Present only when a parent shares the kid's therapy goals with them. */
   therapy: { goals: { id: string; area: string; title: string; progress: number; rewardStep: number; rewardMet: number }[]; upcoming: { id: string; kind: string; title: string; provider: string | null; startsAt: string }[] } | null;
 }
@@ -112,6 +112,15 @@ export interface KidStats {
 
 export interface ReviewItem extends AgendaItem { submittedAt: string; kid: { name: string; avatar: string; color: string } }
 
-export interface Summary { today: string; weekStart: string; weekEnd: string; waiting: number; kids: (Kid & KidWeek & { goals: Goal[]; streak: Streak; level: LevelInfo })[] }
+export interface TimeoutRequest { id: string; timeoutId: string; units: number; minutes: number; points: number; status: string; createdAt: string }
+export interface Timeout {
+  id: string; memberId: string; what: string; reason: string | null; startsAt: string; endsAt: string; endedAt: string | null;
+  state: 'upcoming' | 'active' | 'over'; minutesLeft: number;
+  buy: { unit: 'hour' | 'day'; price: number; maxMinutes: number; boughtMinutes: number; unitsLeft: number } | null;
+  pending: TimeoutRequest | null;
+}
+export type HomeTimeout = Timeout & { kid: { name: string; avatar: string; color: string } };
+
+export interface Summary { today: string; weekStart: string; weekEnd: string; waiting: number; timeouts: HomeTimeout[]; kids: (Kid & KidWeek & { goals: Goal[]; streak: Streak; level: LevelInfo })[] }
 
 export interface LedgerEntry { id: number; amount: number; kind: string; reason: string; date: string; by: string | null; createdAt: string }

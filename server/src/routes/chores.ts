@@ -10,6 +10,7 @@ import {
 import { achievements, kidStats, levelOf, streaks } from '../progress.ts';
 import { kidTherapyView } from './therapy.ts';
 import { dutyDue } from './parentduty.ts';
+import { homeTimeouts, kidTimeouts } from './timeouts.ts';
 import { externalBetween, refreshStale } from '../calendar.ts';
 import { cleanIcon, getKid, kidView, listKids, pageOn } from './homes.ts';
 import type { KidPage } from '../../../shared/pages.ts';
@@ -197,6 +198,7 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
       recent: ledger(db, memberId, 8),
       // Only when a parent chose to share it; parents see the full therapy section on its own page.
       therapy: on('doctors') ? kidTherapyView(db, memberId, today) : null,
+      timeouts: on('timeout') ? kidTimeouts(db, memberId) : [],
     };
   });
 
@@ -309,6 +311,7 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
       weekStart,
       weekEnd: addDays(weekStart, 6),
       waiting: reviewQueue(db, ctx.homeId).length,
+      timeouts: homeTimeouts(db, ctx.homeId),
       kids: listKids(db, ctx.homeId).map((k) => ({
         ...k, ...kidWeek(db, home, k.id, today), goals: goalsFor(db, k.id), streak: streaks(db, k.id, today), level: levelOf(db, k.id),
       })),

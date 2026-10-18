@@ -8,6 +8,7 @@ import { addDays } from '../../../shared/schedule.ts';
 import { AVATARS, AVATAR_LABELS, AVATAR_UNLOCK_LEVEL, avatarUnlocked } from '../../../shared/catalog.ts';
 import { AREA_ICONS, KIND_ICONS, whenText } from './Doctors.tsx';
 import { FEED_ICONS } from './Calendars.tsx';
+import { TimeoutCard, TimeoutForm } from '../components/Timeouts.tsx';
 
 const IDLE_MS = 3 * 60e3;
 
@@ -79,6 +80,7 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
   const [busy, setBusy] = useState<string | null>(null);
   const [cheer, setCheer] = useState<{ icon: string; text: string } | null>(null);
   const [picking, setPicking] = useState(false);
+  const [newTimeout, setNewTimeout] = useState(false);
 
   if (!board) return <div className="center-screen"><RaccoonAvatar variant="ninja" size={96} title="Loading" /></div>;
   const { kid, stats, level, streak } = board;
@@ -128,6 +130,18 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
         </div>
         {onExit && <button className="kid-exit" onClick={onExit}>👋 I'm done</button>}
       </header>
+
+      {(board.timeouts.length > 0 || (asParent && !kid.pagesOff.includes('timeout'))) && (
+        <section className="card stack pg-timeout">
+          <div className="row">
+            <h2 style={{ margin: 0, flex: 1 }}>{asParent ? '⏳ Time-outs' : '⏳ Taking a break'}</h2>
+            {asParent && <button onClick={() => setNewTimeout(true)}>＋ Time-out</button>}
+          </div>
+          {board.timeouts.map((t) => <TimeoutCard key={t.id} t={t} asParent={asParent} balance={kid.balance} onChange={() => void reload()} />)}
+          {!board.timeouts.length && <p className="small muted" style={{ margin: 0 }}>None right now.</p>}
+        </section>
+      )}
+      {newTimeout && <TimeoutForm kidId={memberId} kidName={kid.name} onClose={() => setNewTimeout(false)} onDone={() => { setNewTimeout(false); void reload(); }} />}
 
       <section className="pg-chores">
         <h2>Today</h2>

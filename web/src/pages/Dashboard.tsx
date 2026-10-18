@@ -7,6 +7,7 @@ import { Modal, ProgressBar, dayName, shortDate } from '../components/Bits.tsx';
 import { KIND_ICONS, whenText } from './Doctors.tsx';
 import { IdeasButton } from '../components/Ideas.tsx';
 import { TodaysTipsCard } from '../components/TherapyHelper.tsx';
+import { TimeoutCard, TimeoutForm } from '../components/Timeouts.tsx';
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -23,6 +24,7 @@ export function Dashboard() {
   const [appointments] = useLoad<{ id: string; kind: string; title: string; provider: string | null; startsAt: string; kidName: string; kidAvatar: string }[]>(`${base}/therapy/upcoming`);
   const [penalty, setPenalty] = useState<{ id: string; name: string; points: number; reason: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [timeoutFor, setTimeoutFor] = useState<{ id: string; name: string } | null>(null);
   const icon = home?.pointsIcon ?? '✨';
 
   async function act(fn: () => Promise<unknown>) {
@@ -83,6 +85,15 @@ export function Dashboard() {
         {queue && !queue.length && <p className="muted" style={{ margin: 0 }}>Nothing waiting. 🦝 The raccoons are on it.</p>}
       </section>
 
+      {!!summary?.timeouts.length && (
+        <section className="card stack">
+          <h2 style={{ margin: 0 }}>⏳ Time-outs {summary.timeouts.some((t) => t.pending) && <span className="pill warn">{summary.timeouts.filter((t) => t.pending).length} asking</span>}</h2>
+          {summary.timeouts.map((t) => (
+            <TimeoutCard key={t.id} t={t} asParent kidName={t.kid.name} balance={summary.kids.find((k) => k.id === t.memberId)?.balance ?? 0} onChange={() => void reloadSummary()} />
+          ))}
+        </section>
+      )}
+
       {!!appointments?.length && (
         <section className="card stack">
           <div className="row"><h2 style={{ margin: 0, flex: 1 }}>Coming up</h2><Link to="/doctors" className="btn ghost">Doctors →</Link></div>
@@ -134,12 +145,14 @@ export function Dashboard() {
                   })}>{q.icon} +{q.amount}</button>
                 ))}
                 <button className="chip" onClick={() => setPenalty({ id: k.id, name: k.name, points: 1, reason: '' })}>🌱 Take away</button>
+                {!k.pagesOff.includes('timeout') && <button className="chip" onClick={() => setTimeoutFor({ id: k.id, name: k.name })}>⏳ Time-out</button>}
               </div>
             </div>
           );
         })}
       </div>
       {summary && <p className="small muted">Week of {shortDate(summary.weekStart)} to {shortDate(summary.weekEnd)}</p>}
+      {timeoutFor && <TimeoutForm kidId={timeoutFor.id} kidName={timeoutFor.name} onClose={() => setTimeoutFor(null)} onDone={() => { setTimeoutFor(null); void reloadSummary(); }} />}
       {penalty && (
         <Modal onClose={() => setPenalty(null)}>
           <form className="stack" onSubmit={(e) => {

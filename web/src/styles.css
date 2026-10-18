@@ -334,3 +334,10 @@ td, th { text-align: left; padding: 8px; border-bottom: 1px solid var(--border);
 .qa .a { display: flex; gap: 8px; background: var(--surface-2); border-radius: 14px; padding: 10px; }
 .qa .a.urgent { border: 2px solid var(--danger); }
 .urgent-note { color: var(--danger); font-weight: 600; margin: 0; }
+
+/* Time-outs */
+.timeout-card { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 14px; background: color-mix(in srgb, var(--kid, var(--primary)) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--kid, var(--primary)) 30%, transparent); }
+.timeout-icon { font-size: 2rem; line-height: 1; }
+.timeout-what { font-size: 1.1rem; }
+.timeout-left { font-weight: 800; font-size: 1.25rem; color: var(--kid, var(--primary)); }
+.timeout-ask { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; background: var(--surface); }

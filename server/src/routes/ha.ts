@@ -11,6 +11,7 @@ import {
 import { levelOf, streaks } from '../progress.ts';
 import { eventView } from '../events.ts';
 import { listKids } from './homes.ts';
+import { homeTimeouts } from './timeouts.ts';
 
 const slug = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'kid';
 
@@ -52,6 +53,7 @@ export function haRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const home = homeInfo(db, ctx.homeId);
     const today = homeToday(home);
     const waiting = reviewQueue(db, ctx.homeId);
+    const timeouts = homeTimeouts(db, ctx.homeId);
     const kids = listKids(db, ctx.homeId).map((k) => {
       const off = new Set(k.pagesOff);
       const w = kidWeek(db, home, k.id, today);
@@ -72,11 +74,22 @@ export function haRoutes(app: FastifyInstance, db: DatabaseSync): void {
         ...(off.has('stats')
           ? { streak: null, best_streak: null, level: null, level_name: null, level_badge: null }
           : { streak: s.current, best_streak: s.best, level: level.level, level_name: level.name, level_badge: level.badge }),
+        ...(off.has('timeout')
+          ? { in_timeout: null, timeouts: [] }
+          : {
+            in_timeout: timeouts.some((t) => t.memberId === k.id && t.state === 'active'),
+            timeouts: timeouts.filter((t) => t.memberId === k.id).map((t) => ({
+              what: t.what, reason: t.reason, state: t.state, starts_at: t.startsAt, ends_at: t.endsAt, minutes_left: t.minutesLeft,
+              buy_back_waiting: !!t.pending,
+            })),
+          }),
         next_goal: off.has('goals') ? null : goal?.title ?? null, next_goal_percent: off.has('goals') ? null : goal?.percent ?? null,
       };
     });
     return {
       home: home.name, points_name: home.pointsName, points_icon: home.pointsIcon, today,
+      active_timeouts: timeouts.filter((t) => t.state === 'active').length,
+      timeout_requests_waiting: timeouts.filter((t) => t.pending).length,
       waiting_for_review: waiting.filter((i) => !kids.find((k) => k.id === i.memberId)?.pages_off.includes('chores')).length, kids, kids_by_name: Object.fromEntries(kids.map((k) => [k.slug, k])),
     };
   });
