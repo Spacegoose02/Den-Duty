@@ -371,7 +371,7 @@ a.agenda-ext.duty { text-decoration: none; color: var(--text); border-left-color
 .month-day.today { border: 2px solid var(--kid, var(--primary)); }
 .month-day.picked { outline: 3px solid color-mix(in srgb, var(--primary) 55%, transparent); }
 .month-num { font-weight: 800; font-size: 0.9rem; }
-.month-line { font-size: 0.72rem; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-left: 4px; border-left: 3px solid var(--border); }
+.month-line { font-size: 0.72rem; line-height: 1.25; overflow-wrap: anywhere; padding-left: 4px; border-left: 3px solid var(--border); }
 .month-line.appt { border-left-color: var(--primary); }
 .picked-day { min-height: 0; }
 .agenda-ext.appt { color: var(--text); }

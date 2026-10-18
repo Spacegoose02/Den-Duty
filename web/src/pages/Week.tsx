@@ -217,12 +217,14 @@ export function Calendar({ kidId, title = 'Calendar' }: { kidId?: string; title?
                   <span className="month-num">{Number(d.date.slice(8))}</span>
                   {kids.map((k) => {
                     const items = d.items.filter((i) => i.memberId === k.id);
-                    const pr = d.practices?.filter((p) => p.memberId === k.id).length ?? 0;
+                    const prs = d.practices?.filter((p) => p.memberId === k.id) ?? [];
+                    const pr = prs.length;
+                    const prDone = prs.filter((p) => p.done).length;
                     if (!items.length && !pr) return null;
                     const done = items.filter((i) => i.status === 'approved').length;
                     return (
                       <span key={k.id} className="month-line" style={{ borderLeftColor: k.color }}>
-                        {kidId ? '' : `${k.name} `}{items.length > 0 && `${items.length}🧹`}{done > 0 && ` ${done}✅`}{pr > 0 && ` ${pr}🌈`}
+                        {kidId ? '' : `${k.name} `}{items.length > 0 && `${items.length}🧹`}{done > 0 && ` ${done}✅`}{pr > 0 && ` ${prDone ? `${prDone}/` : ''}${pr}🌈`}
                       </span>
                     );
                   })}

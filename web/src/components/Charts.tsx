@@ -18,6 +18,8 @@ function useWidth<T extends HTMLElement>(): [React.RefObject<T | null>, number] 
 /** Clean tick values from 0 to a round number at or above max. */
 function ticks(max: number, count = 4): number[] {
   if (max <= 0) return [0, 1];
+  // Small counts (practices, goals) step by whole numbers instead of 0.25s.
+  if (max <= count) return Array.from({ length: Math.ceil(max) + 1 }, (_, i) => i);
   const raw = max / count;
   const mag = 10 ** Math.floor(Math.log10(raw));
   const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= raw)!;
