@@ -567,6 +567,19 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX reminders_home ON reminders(home_id, done_at, due_date);
   `,
+  // One day of a practice schedule changed on its own: skipped, or moved to another date/time. "date" is the day it
+  // was originally scheduled (the occurrence); the rest of the schedule is untouched.
+  `
+  CREATE TABLE practice_exceptions (
+    goal_id TEXT NOT NULL REFERENCES therapy_goals(id) ON DELETE CASCADE,
+    date TEXT NOT NULL,
+    action TEXT NOT NULL CHECK (action IN ('skip', 'move')),
+    new_date TEXT,
+    new_time TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (goal_id, date)
+  );
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

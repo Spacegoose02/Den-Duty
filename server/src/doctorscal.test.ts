@@ -188,3 +188,54 @@ test('editing from the calendar: appointments (kids see no notes), practice date
   ics = String((await call({}, 'GET', cals.home)).body);
   assert.ok(ics.includes('Sign permission slip'));
 });
+
+test('just this day: skip or move one practice; calendar, ticking, feeds and the practice streak follow', async () => {
+  const { db, call, mom, base, ava, tablet, asKid, today } = await family();
+  const t = `${base}/kids/${ava.id}/therapy`;
+  const { body: g } = await call(mom, 'POST', `${t}/goals`, { area: 'speech', title: 'S sounds', rewardStep: 1, practiceSchedule: 'weekly', practiceWeekdays: [0, 1, 2, 3, 4, 5, 6], practiceTime: '16:00' });
+  // Pretend the goal started a week ago so past days were scheduled.
+  db.prepare("UPDATE therapy_goals SET created_at = datetime('now', '-7 days') WHERE id = ?").run(g.id);
+  const ex = `${base}/therapy/goals/${g.id}/practice-exception`;
+  const d1 = addDays(today, 1);
+  const d2 = addDays(today, 2);
+  const d5 = addDays(today, 5);
+
+  // Move tomorrow's to the day after at 10:00; skip the day after that... (d2 now has the moved one plus its own)
+  assert.equal((await call(mom, 'POST', ex, { date: d1, action: 'move', newDate: d5, newTime: '10:00' })).status, 200);
+  await call(mom, 'POST', ex, { date: d2, action: 'skip' });
+  assert.equal((await call(mom, 'POST', ex, { date: d1, action: 'bogus' })).status, 400);
+  const days = (await call(mom, 'GET', `${base}/agenda?start=${today}&days=7`)).body.days as { date: string; practices: { occurrence: string; moved: boolean; skipped: boolean; time: string }[] }[];
+  const on = (d: string) => days.find((x) => x.date === d)!.practices;
+  assert.equal(on(d1).length, 0, 'moved away');
+  assert.deepEqual(on(d2).map((p) => p.skipped), [true], 'parents see the skip (to undo it)');
+  assert.deepEqual(on(d5).map((p) => [p.occurrence, p.moved, p.time]).sort(), [[d1, true, '10:00'], [d5, false, '16:00']].sort());
+
+  // Kids don't see skipped ones; the feed has the move and not the skip.
+  await call(mom, 'PATCH', t, { kidVisible: true });
+  await asKid(ava);
+  const kidDays = (await call(tablet, 'GET', `${base}/agenda?start=${today}&days=7`)).body.days as { date: string; practices: unknown[] }[];
+  assert.equal(kidDays.find((x) => x.date === d2)!.practices.length, 0);
+  const cals = (await call(mom, 'GET', `${base}/calendars`)).body;
+  const ics = String((await call({}, 'GET', cals.home)).body);
+  assert.ok(ics.includes(`practice-${g.id}-${d1}@den-duty`) && ics.includes(`${d5.replace(/-/g, '')}T100000`), 'moved practice in the feed at its new time');
+  assert.ok(!ics.includes(`practice-${g.id}-${d2}@den-duty`), 'skipped practice not in the feed');
+
+  // Undo the skip.
+  await call(mom, 'DELETE', `${ex}?date=${d2}`);
+  assert.equal((await call(mom, 'GET', `${base}/agenda?start=${d2}&days=1`)).body.days[0].practices[0].skipped, false);
+
+  // Streak: practiced today and 3 days ago, skipped the two days between: still a 2-day streak; a missed day breaks it.
+  const y1 = addDays(today, -1);
+  const y2 = addDays(today, -2);
+  const y3 = addDays(today, -3);
+  await call(mom, 'POST', ex, { date: y1, action: 'skip' });
+  await call(mom, 'POST', ex, { date: y2, action: 'skip' });
+  await call(mom, 'POST', `${base}/therapy/goals/${g.id}/practice`, { date: today });
+  await call(mom, 'POST', `${base}/therapy/goals/${g.id}/practice`, { date: y3 });
+  assert.equal((await call(mom, 'POST', `${base}/therapy/goals/${g.id}/practice`, { date: y1 })).status, 400, "can't tick a skipped day");
+  let s = (await call(mom, 'GET', `${base}/stats?weeks=4`)).body.kids[0].doctors;
+  assert.equal(s.streak, 2);
+  await call(mom, 'DELETE', `${ex}?date=${y2}`);
+  s = (await call(mom, 'GET', `${base}/stats?weeks=4`)).body.kids[0].doctors;
+  assert.equal(s.streak, 1, 'an un-skipped, missed day breaks it');
+});

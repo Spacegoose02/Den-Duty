@@ -6,6 +6,7 @@ import type { Row } from './db.ts';
 import { randomToken } from './util.ts';
 import { agenda, homeInfo, homeToday, kidsWithPageOff, type HomeInfo } from './chores.ts';
 import { dutyDue } from './routes/parentduty.ts';
+import { doctorsCalendar } from './routes/therapy.ts';
 import { remindersDue } from './routes/reminders.ts';
 import { appointmentOn, DOCTOR_AREA_IDS, offList } from '../../shared/pages.ts';
 
@@ -56,6 +57,15 @@ export function calendarFor(db: DatabaseSync, token: string): string | null {
         description: items.map((i) => `${i.status === 'approved' ? '✅' : i.status === 'submitted' ? '⏳' : '▫️'} ${i.icon} ${i.title} (+${i.points} ${info.pointsName})`).join('\n'),
         date: day.date,
       });
+    }
+  }
+  // Scheduled practices (with single-day skips and moves applied), next 30 days: parents always, kids when shared.
+  const practiceCal = doctorsCalendar(db, kids.map((k) => k.id as string).filter((id) => !kid || id === kid.id), today, addDays(today, 30), !!kid);
+  for (const [date, d] of practiceCal) {
+    for (const p of d.practices) {
+      if (p.skipped) continue;
+      const name = kids.find((k) => k.id === p.memberId)?.name;
+      events.push({ uid: `practice-${p.goalId}-${p.occurrence}@den-duty`, date, time: p.time, durationMinutes: 15, summary: `🌈 ${kid ? '' : `${name}: `}${p.title}` });
     }
   }
   // Appointments: always in the parents' home calendar; in a kid's only when a parent shares therapy with them.

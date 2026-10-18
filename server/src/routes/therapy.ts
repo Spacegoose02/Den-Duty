@@ -294,7 +294,7 @@ export function therapyRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const date = (req.body as Row | undefined)?.date;
     if (!isIsoDate(date)) throw new HttpError(400, 'Which day?');
     if (date > today) throw new HttpError(400, "That day hasn't happened yet");
-    if (g.status !== 'active' || !practiceOn(g, date)) throw new HttpError(400, "There's no practice scheduled that day");
+    if (g.status !== 'active' || !practiceSlots(db, g, date, date).some((s) => s.date === date && !s.skipped)) throw new HttpError(400, "There's no practice scheduled that day");
     if (db.prepare('SELECT 1 FROM therapy_notes WHERE goal_id = ? AND date = ? AND practice = 1').get(g.id as string, date)) throw new HttpError(400, 'Already ticked off');
     const id = newId();
     let awarded = 0;
@@ -312,6 +312,34 @@ export function therapyRoutes(app: FastifyInstance, db: DatabaseSync): void {
       }
     });
     return { id, awarded };
+  });
+
+  // Just this day: skip one scheduled practice, or move it to another date/time. The schedule itself stays.
+  app.post('/api/homes/:homeId/therapy/goals/:id/practice-exception', async (req) => {
+    const ctx = homeCtx(db, req, 'parent');
+    const g = ownRow(db, 'therapy_goals', ctx, (req.params as { id: string }).id);
+    const b = (req.body ?? {}) as Row;
+    if (!isIsoDate(b.date) || !practiceOn(g, b.date)) throw new HttpError(400, "There's no practice scheduled that day");
+    if (b.action !== 'skip' && b.action !== 'move') throw new HttpError(400, 'Skip it or move it');
+    let newDate: string | null = null;
+    let newTime: string | null = null;
+    if (b.action === 'move') {
+      if (!isIsoDate(b.newDate)) throw new HttpError(400, 'Pick the new day');
+      newDate = b.newDate;
+      newTime = b.newTime ? String(b.newTime) : null;
+      if (newTime && !/^([01]\d|2[0-3]):[0-5]\d$/.test(newTime)) throw new HttpError(400, 'Times look like 16:30');
+      if (newDate === b.date && newTime === (g.practice_time ?? null)) throw new HttpError(400, "That's the same day and time");
+    }
+    db.prepare('INSERT OR REPLACE INTO practice_exceptions (goal_id, date, action, new_date, new_time) VALUES (?, ?, ?, ?, ?)').run(g.id as string, b.date, b.action, newDate, newTime);
+    return { ok: true };
+  });
+
+  // Undo a skip or move: the day goes back to the regular schedule.
+  app.delete('/api/homes/:homeId/therapy/goals/:id/practice-exception', async (req) => {
+    const ctx = homeCtx(db, req, 'parent');
+    const g = ownRow(db, 'therapy_goals', ctx, (req.params as { id: string }).id);
+    db.prepare('DELETE FROM practice_exceptions WHERE goal_id = ? AND date = ?').run(g.id as string, (req.query as { date?: string }).date ?? '');
+    return { ok: true };
   });
 
   app.delete('/api/homes/:homeId/therapy/goals/:id/practice', async (req) => {
@@ -341,7 +369,35 @@ export function therapyRoutes(app: FastifyInstance, db: DatabaseSync): void {
 
 // ---------- practices and appointments on the calendars ----------
 
-export interface PracticeItem { goalId: string; memberId: string; title: string; area: string; time: string | null; done: boolean; points: number }
+export interface PracticeItem {
+  goalId: string; memberId: string; title: string; area: string; time: string | null; done: boolean; points: number;
+  /** The day it was scheduled for (differs from the calendar day when it was moved). */
+  occurrence: string; moved: boolean;
+  /** Skipped days only reach parents (so they can undo the skip). */
+  skipped: boolean;
+}
+
+export interface PracticeSlot { date: string; time: string | null; occurrence: string; moved: boolean; skipped: boolean }
+
+/** A goal's practices between two dates, with single-day skips and moves applied. */
+export function practiceSlots(db: DatabaseSync, g: Row, from: string, to: string): PracticeSlot[] {
+  const ex = db.prepare('SELECT * FROM practice_exceptions WHERE goal_id = ?').all(g.id as string) as Row[];
+  const byDay = new Map(ex.map((e) => [e.date as string, e]));
+  const time = (g.practice_time as string | null) ?? null;
+  const out: PracticeSlot[] = [];
+  for (const d of dateRange(from, to)) {
+    if (!practiceOn(g, d)) continue;
+    const e = byDay.get(d);
+    if (!e) out.push({ date: d, time, occurrence: d, moved: false, skipped: false });
+    else if (e.action === 'skip') out.push({ date: d, time, occurrence: d, moved: false, skipped: true });
+  }
+  for (const e of ex) {
+    if (e.action !== 'move' || !practiceOn(g, e.date as string)) continue;
+    const nd = e.new_date as string;
+    if (nd >= from && nd <= to) out.push({ date: nd, time: (e.new_time as string | null) ?? time, occurrence: e.date as string, moved: true, skipped: false });
+  }
+  return out.sort((a, b) => a.date.localeCompare(b.date));
+}
 export interface AppointmentItem {
   id: string; memberId: string; kind: string; title: string; provider: string | null; time: string; status: string;
   /** Parents only (for editing from the calendar). */
@@ -373,12 +429,12 @@ export function doctorsCalendar(db: DatabaseSync, memberIds: string[], from: str
     if (goals.length) {
       const done = new Set((db.prepare(`SELECT goal_id, date FROM therapy_notes WHERE member_id = ? AND practice = 1 AND date BETWEEN ? AND ?`).all(id, from, to) as Row[])
         .map((n) => `${n.goal_id}|${n.date}`));
-      for (const d of dateRange(from, to)) {
-        for (const g of goals) {
-          if (!practiceOn(g, d)) continue;
-          day(d).practices.push({
-            goalId: g.id as string, memberId: id, title: g.title as string, area: g.area as string, time: (g.practice_time as string | null) ?? null,
-            done: done.has(`${g.id}|${d}`), points: g.reward_step as number,
+      for (const g of goals) {
+        for (const s of practiceSlots(db, g, from, to)) {
+          if (s.skipped && forKid) continue;
+          day(s.date).practices.push({
+            goalId: g.id as string, memberId: id, title: g.title as string, area: g.area as string, time: s.time,
+            done: done.has(`${g.id}|${s.date}`), points: g.reward_step as number, occurrence: s.occurrence, moved: s.moved, skipped: s.skipped,
           });
         }
       }

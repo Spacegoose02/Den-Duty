@@ -55,30 +55,31 @@ function PracticeGroup({ kid, practices, label, canTick, onTick, onEdit }: {
 }) {
   const [open, setOpen] = useState(false);
   const done = practices.filter((p) => p.done).length;
+  const live = practices.filter((p) => !p.skipped).length;
   return (
     <div className="chore-group practice" style={{ borderLeft: `4px solid ${kid?.color ?? 'var(--border)'}` }}>
       <button className="chore-group-head" onClick={() => setOpen(!open)} aria-expanded={open}>
         <span aria-hidden>🌈</span>
         <span className="agenda-title">{label}</span>
-        {done > 0 && <span className="small">{done === practices.length ? '✅' : `${done} done`}</span>}
+        {done > 0 && <span className="small">{done === live ? '✅' : `${done} done`}</span>}
         <span className="small muted" aria-hidden>{open ? '▾' : '▸'}</span>
       </button>
       {open && practices.map((p) => {
         const inner = (
           <>
             <span aria-hidden>{AREA_ICONS[p.area] ?? '🌱'}</span>
-            <span className="agenda-title">{p.time && <strong>{timeText(p.time)} </strong>}{p.title}</span>
-            <span className="agenda-mark">{p.done ? '✅' : p.points ? <span className="small muted">+{p.points}</span> : ''}</span>
+            <span className="agenda-title">{p.time && <strong>{timeText(p.time)} </strong>}{p.title}{p.moved && <span className="small muted"> (moved)</span>}{p.skipped && <span className="small muted"> (skipped)</span>}</span>
+            <span className="agenda-mark">{p.done ? '✅' : p.skipped ? '⏭️' : p.points ? <span className="small muted">+{p.points}</span> : ''}</span>
           </>
         );
         const row = onTick
-          ? <button className={`agenda-item ${p.done ? 'approved' : ''}`} disabled={!canTick} onClick={() => onTick(p)}
+          ? <button className={`agenda-item ${p.done ? 'approved' : ''}${p.skipped ? ' skipped' : ''}`} disabled={!canTick || p.skipped} onClick={() => onTick(p)}
             title={canTick ? (p.done ? 'Tap to untick' : 'Tap when practiced') : 'Coming up'} style={{ flex: 1 }}>{inner}</button>
           : <div className={`agenda-item ${p.done ? 'approved' : ''}`} style={{ flex: 1 }}>{inner}</div>;
         return (
           <div key={p.goalId} className="row" style={{ gap: 4, flexWrap: 'nowrap' }}>
             {row}
-            {onEdit && <button className="icon edit-btn" onClick={() => onEdit(p)} aria-label={`Change practice days for ${p.title}`} title="Change practice days">✏️</button>}
+            {onEdit && <button className="icon edit-btn" onClick={() => onEdit(p)} aria-label={`Change this practice: ${p.title}`} title="Move, skip or change the days">✏️</button>}
           </div>
         );
       })}
@@ -118,7 +119,7 @@ function DayDetail({ d, kids, today, parent, solo, onTap, onTick, edit }: {
         return (
           <div key={k.id} className="stack" style={{ gap: 4 }}>
             {items.length > 0 && <ChoreGroup name={k.name} avatar={k.avatar} color={k.color} items={items} past={past} label={`${who} ${plural(items.length, 'chore')}`} onTap={onTap} />}
-            {practices.length > 0 && <PracticeGroup kid={k} practices={practices} label={`${solo && !parent ? 'You have' : `${k.name}:`} ${plural(practices.length, 'practice')}`} canTick={past} onTick={onTick} onEdit={edit?.practice} />}
+            {practices.length > 0 && <PracticeGroup kid={k} practices={practices} label={`${solo && !parent ? 'You have' : `${k.name}:`} ${practices.some((p) => !p.skipped) ? plural(practices.filter((p) => !p.skipped).length, 'practice') : 'practice skipped'}`} canTick={past} onTick={onTick} onEdit={edit?.practice} />}
             {appts.map((a) => <AppointmentLine key={a.id} a={a} kid={k} withName={!solo} onEdit={edit?.appt} />)}
           </div>
         );
@@ -245,7 +246,7 @@ export function Calendar({ kidId, title = 'Calendar' }: { kidId?: string; title?
                   <span className="month-num">{Number(d.date.slice(8))}</span>
                   {kids.map((k) => {
                     const items = d.items.filter((i) => i.memberId === k.id);
-                    const prs = d.practices?.filter((p) => p.memberId === k.id) ?? [];
+                    const prs = d.practices?.filter((p) => p.memberId === k.id && !p.skipped) ?? [];
                     const pr = prs.length;
                     const prDone = prs.filter((p) => p.done).length;
                     if (!items.length && !pr) return null;
@@ -294,15 +295,59 @@ export function Calendar({ kidId, title = 'Calendar' }: { kidId?: string; title?
           }}
         />
       )}
-      {editing?.practice && <PracticeEdit goalId={editing.practice.goalId} title={editing.practice.title} onClose={() => setEditing(null)} onDone={() => void done()} />}
+      {editing?.practice && <PracticeEdit p={editing.practice} onClose={() => setEditing(null)} onDone={() => void done()} />}
       {editing?.reminder && <ReminderForm initial={editing.reminder} onClose={() => setEditing(null)} onDone={() => void done()} />}
       {editing?.duty && <DutyDueEdit item={editing.duty} onClose={() => setEditing(null)} onDone={() => void done()} />}
     </div>
   );
 }
 
-/** Change a goal's practice days (or its one practice date) from the calendar. */
-function PracticeEdit({ goalId, title, onClose, onDone }: { goalId: string; title: string; onClose: () => void; onDone: () => void }) {
+/**
+ * Change a practice from the calendar: just this day (skip it, or move it to another day/time) or all upcoming (the
+ * goal's schedule). A day that was already moved or skipped can be put back.
+ */
+function PracticeEdit({ p, onClose, onDone }: { p: PracticeItem; onClose: () => void; onDone: () => void }) {
+  const { base, toast } = useApp();
+  const [scope, setScope] = useState<'day' | 'all' | null>(null);
+  const [move, setMove] = useState({ date: p.occurrence, time: p.time ?? '' });
+  const ex = `${base}/therapy/goals/${p.goalId}/practice-exception`;
+  const run = async (fn: () => Promise<unknown>, msg: string) => { try { await fn(); toast(msg); onDone(); } catch (e) { toast((e as Error).message); } };
+  if (scope !== 'all') {
+    return (
+      <Modal onClose={onClose}>
+        <div className="stack">
+          <h2 style={{ margin: 0 }}>🌈 {p.title}</h2>
+          <p className="small muted" style={{ margin: 0 }}>Scheduled for {dayName(p.occurrence)} {shortDate(p.occurrence)}{p.time ? ` at ${timeText(p.time)}` : ''}{p.moved ? ' (moved)' : ''}{p.skipped ? ' (skipped)' : ''}.</p>
+          {(p.moved || p.skipped) && (
+            <button className="primary" onClick={() => void run(() => api(`${ex}?date=${p.occurrence}`, { method: 'DELETE' }), 'Back on its usual day')}>↩️ Put it back on its usual day</button>
+          )}
+          {scope === null && (
+            <div className="grid-2">
+              <button className="help-pick" onClick={() => setScope('day')}><span className="help-pick-icon">📍</span>Just this day<span className="small muted">Skip it or move it</span></button>
+              <button className="help-pick" onClick={() => setScope('all')}><span className="help-pick-icon">🔁</span>All upcoming<span className="small muted">Change the practice days</span></button>
+            </div>
+          )}
+          {scope === 'day' && (
+            <>
+              {!p.skipped && <button onClick={() => void run(() => api(ex, { body: { date: p.occurrence, action: 'skip' } }), 'Skipped. It won\'t break the streak.')}>⏭️ Skip this day</button>}
+              <div className="row">
+                <span>Move to</span>
+                <input type="date" value={move.date} onChange={(e) => setMove({ ...move, date: e.target.value })} style={{ maxWidth: 180 }} />
+                <input type="time" value={move.time} onChange={(e) => setMove({ ...move, time: e.target.value })} style={{ maxWidth: 140 }} />
+                <button className="primary" disabled={!move.date} onClick={() => void run(() => api(ex, { body: { date: p.occurrence, action: 'move', newDate: move.date, newTime: move.time || null } }), 'Moved')}>Move</button>
+              </div>
+            </>
+          )}
+          <div className="row"><span className="spacer" /><button className="ghost" onClick={onClose}>Close</button></div>
+        </div>
+      </Modal>
+    );
+  }
+  return <PracticeScheduleEdit goalId={p.goalId} title={p.title} onClose={onClose} onDone={onDone} />;
+}
+
+/** Change a goal's practice days (or its one practice date). */
+function PracticeScheduleEdit({ goalId, title, onClose, onDone }: { goalId: string; title: string; onClose: () => void; onDone: () => void }) {
   const { base, toast } = useApp();
   const [goal] = useLoad<{ practice: { schedule: 'weekly' | 'once'; weekdays: number[]; date: string | null; time: string | null } | null }>(`${base}/therapy/goals/${goalId}`, [goalId]);
   const [f, setF] = useState<PracticeForm | null>(null);

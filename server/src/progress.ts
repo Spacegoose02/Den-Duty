@@ -3,6 +3,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { Row } from './db.ts';
 import { goalsFor, materialize, type HomeInfo } from './chores.ts';
+import { practiceSlots } from './routes/therapy.ts';
 import { addDays, dateRange, startOfWeek } from '../../shared/schedule.ts';
 import { appointmentOn, goalAreaOn } from '../../shared/pages.ts';
 import { achievementsFor, GOAL_LEVEL_BONUS, levelFor, type Achievement, type LevelInfo } from '../../shared/progress.ts';
@@ -127,9 +128,17 @@ export function doctorsStats(db: DatabaseSync, home: HomeInfo, memberId: string,
   const perWeek = areas.map((area) => ({
     area, values: weeks.map((w) => notes.filter((n) => goalArea.get(n.goal_id as string) === area && startOfWeek(n.date as string, home.weekStart) === w).length),
   }));
+  // Practice streak: practice days in a row without missing a scheduled practice. Days with nothing scheduled, skipped
+  // days and an unfinished today don't break it.
   const days = new Set(notes.map((n) => n.date as string));
+  const start = addDays(today, -400);
+  const scheduled = new Set(goals.filter((g) => g.practice_schedule).flatMap((g) => practiceSlots(db, g, start, today).filter((s) => !s.skipped).map((s) => s.date)));
+  const first = [...days].sort()[0] ?? today;
   let streak = 0;
-  for (let d = days.has(today) ? today : addDays(today, -1); days.has(d); d = addDays(d, -1)) streak++;
+  for (let d = today; d >= first && d > start; d = addDays(d, -1)) {
+    if (days.has(d)) streak++;
+    else if (d !== today && scheduled.has(d)) break;
+  }
   const appts = (db.prepare('SELECT kind, status, starts_at FROM therapy_appointments WHERE member_id = ?').all(memberId) as Row[]).filter((a) => appointmentOn(a.kind as string, off));
   return {
     weeks, perWeek, streak, practicesInRange: notes.filter((n) => (n.date as string) >= from).length,
