@@ -1,5 +1,6 @@
 import type { ScheduleKind } from '../../shared/schedule.ts';
 import type { Achievement, LevelInfo } from '../../shared/progress.ts';
+import type { DoctorArea, KidPage } from '../../shared/pages.ts';
 
 export type { Achievement, LevelInfo };
 
@@ -44,6 +45,8 @@ export interface Whoami {
 export interface Kid {
   id: string; name: string; avatar: string; color: string; theme: string | null; hasPin: boolean; balance: number;
   birthdate: string | null; age: number | null; pictureModeSetting: 'auto' | 'on' | 'off'; pictureMode: boolean;
+  /** Pages and Doctors sections a parent switched off for this kid. */
+  pagesOff: KidPage[]; doctorAreasOff: DoctorArea[];
 }
 
 export interface HomeDetail {

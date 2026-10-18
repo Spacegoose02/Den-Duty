@@ -86,7 +86,7 @@ function RoomBoard({ kidId }: { kidId: string }) {
 export function DenDuty() {
   const { home } = useApp();
   const [tab, setTab] = useState<string | null>(null);
-  const kids = home?.kids ?? [];
+  const kids = (home?.kids ?? []).filter((k) => !k.pagesOff.includes('den'));
   const current = tab ?? kids[0]?.id ?? 'parents';
   return (
     <div className="stack">

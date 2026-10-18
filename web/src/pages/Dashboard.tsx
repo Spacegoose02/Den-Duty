@@ -4,7 +4,7 @@ import { api, type QuickReward, type ReviewItem, type Summary } from '../api.ts'
 import { useApp, useLoad } from '../state.tsx';
 import { RaccoonAvatar } from '../components/Raccoon.tsx';
 import { Modal, ProgressBar, dayName, shortDate } from '../components/Bits.tsx';
-import { KIND_ICONS, whenText } from './Therapy.tsx';
+import { KIND_ICONS, whenText } from './Doctors.tsx';
 import { IdeasButton } from '../components/Ideas.tsx';
 import { TodaysTipsCard } from '../components/TherapyHelper.tsx';
 
@@ -85,7 +85,7 @@ export function Dashboard() {
 
       {!!appointments?.length && (
         <section className="card stack">
-          <div className="row"><h2 style={{ margin: 0, flex: 1 }}>Coming up</h2><Link to="/therapy" className="btn ghost">Therapy →</Link></div>
+          <div className="row"><h2 style={{ margin: 0, flex: 1 }}>Coming up</h2><Link to="/doctors" className="btn ghost">Doctors →</Link></div>
           {appointments.slice(0, 4).map((a) => (
             <div key={a.id} className="row">
               <RaccoonAvatar variant={a.kidAvatar} size={32} />
@@ -111,12 +111,12 @@ export function Dashboard() {
                   <div className="small muted">{k.balance} {icon} to spend · {k.level.badge} {k.level.name}{k.streak.current > 1 && ` · 🔥 ${k.streak.current}`}</div>
                 </div>
               </Link>
-              <div className="stats">
+              <div className="stats" hidden={k.pagesOff.includes('chores')}>
                 <div><span className="num">{k.pointsThisWeek}</span><span className="small muted">{icon} this week</span></div>
                 <div><span className="num">{k.choresDone}<span className="small muted">/{k.choresDue}</span></span><span className="small muted">chores done</span></div>
                 <div><span className="num">{k.leftToday}</span><span className="small muted">left today</span></div>
               </div>
-              {goal && (
+              {goal && !k.pagesOff.includes('goals') && (
                 <div className="goal">
                   <div className="row" style={{ justifyContent: 'space-between' }}>
                     <span className="small"><strong>{goal.reached ? '🏆' : '🎯'} {goal.title}</strong></span>
@@ -125,7 +125,7 @@ export function Dashboard() {
                   <ProgressBar percent={goal.percent} color={goal.reached ? 'var(--ok)' : k.color} />
                 </div>
               )}
-              {!!k.choresWaiting && <span className="pill warn">{k.choresWaiting} waiting for review</span>}
+              {!!k.choresWaiting && !k.pagesOff.includes('chores') && <span className="pill warn">{k.choresWaiting} waiting for review</span>}
               <div className="chips">
                 {quick?.map((q) => (
                   <button key={q.id} className="chip" title={`${q.title}: +${q.amount}`} onClick={() => void act(async () => {

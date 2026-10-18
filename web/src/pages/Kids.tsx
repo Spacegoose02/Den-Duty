@@ -7,8 +7,12 @@ import { Modal, ProgressBar, shortDate } from '../components/Bits.tsx';
 import { AVATARS, AVATAR_LABELS, KID_COLORS } from '../../../shared/catalog.ts';
 import { ThemePicker } from '../components/ThemePicker.tsx';
 import { IdeasButton } from '../components/Ideas.tsx';
+import { DOCTOR_AREAS, KID_PAGES, type DoctorArea, type KidPage } from '../../../shared/pages.ts';
 
-interface KidDraft { name: string; avatar: string; color: string; pin: string; theme: string | null; birthdate: string; pictureMode: 'auto' | 'on' | 'off' }
+interface KidDraft {
+  name: string; avatar: string; color: string; pin: string; theme: string | null; birthdate: string; pictureMode: 'auto' | 'on' | 'off';
+  pagesOff: KidPage[]; doctorAreasOff: DoctorArea[];
+}
 
 /** Name, raccoon, color and PIN. Used to add a kid and to edit one. */
 function KidForm({ initial, onSubmit, submitLabel, hasPin, onClearPin }: {
@@ -51,6 +55,38 @@ function KidForm({ initial, onSubmit, submitLabel, hasPin, onClearPin }: {
         </label>
       </div>
       <p className="small muted" style={{ margin: 0 }}>The age tailors chore ideas and AI suggestions (only the age is ever sent, never the name). “By age” shows big pictures for kids under 6.</p>
+      <div className="field">
+        <span>Pages for {d.name.trim() || 'this kid'}</span>
+        <div className="switch-grid">
+          {KID_PAGES.map((p) => {
+            const on = !d.pagesOff.includes(p.id);
+            return (
+              <button key={p.id} type="button" className={`switch${on ? ' on' : ''}`} aria-pressed={on}
+                onClick={() => setD((cur) => ({ ...cur, pagesOff: on ? [...cur.pagesOff, p.id] : cur.pagesOff.filter((x) => x !== p.id) }))}>
+                <span className="switch-knob" aria-hidden />
+                <span><strong>{p.icon} {p.label}</strong><br /><span className="small muted">{p.hint}</span></span>
+              </button>
+            );
+          })}
+        </div>
+        <span className="small muted" style={{ fontWeight: 400 }}>Off hides the page for this kid: on their tablet, in your views, stats, calendar links and Home Assistant. Nothing is deleted; switch it back on any time.</span>
+      </div>
+      {!d.pagesOff.includes('doctors') && (
+        <div className="field">
+          <span>Doctors sections</span>
+          <div className="chips">
+            {DOCTOR_AREAS.map((a) => {
+              const on = !d.doctorAreasOff.includes(a.id);
+              return (
+                <button key={a.id} type="button" className={`chip${on ? ' on' : ''}`} aria-pressed={on}
+                  onClick={() => setD((cur) => ({ ...cur, doctorAreasOff: on ? [...cur.doctorAreasOff, a.id] : cur.doctorAreasOff.filter((x) => x !== a.id) }))}>
+                  {a.icon} {a.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
       <label className="field">Their theme on the tablet
         <ThemePicker value={d.theme} onPick={(theme) => setD({ ...d, theme })} inherit={{ label: 'Same as the home', theme: homeTheme }} />
       </label>
@@ -93,6 +129,7 @@ function KidCard({ kid, onChange }: { kid: Kid; onChange: () => Promise<void> })
         <button onClick={() => setEditing(true)}>Edit</button>
       </div>
 
+      {!kid.pagesOff.includes('goals') && (<>
       <h3 style={{ margin: 0 }}>Goals</h3>
       {goals?.map((g) => (
         <div key={g.id} className="goal">
@@ -116,6 +153,8 @@ function KidCard({ kid, onChange }: { kid: Kid; onChange: () => Promise<void> })
         <button disabled={!goal.title.trim() || goal.targetPoints < 1}>Add goal</button>
       </form>
       <IdeasButton kind="goal" kidId={kid.id} onPick={(i) => setGoal({ title: i.title, targetPoints: i.points, reward: i.detail.slice(0, 200) })} />
+      </>)}
+      {kid.pagesOff.length > 0 && <p className="small muted" style={{ margin: 0 }}>Turned off for {kid.name}: {kid.pagesOff.map((p) => KID_PAGES.find((x) => x.id === p)?.label).join(', ')} (Edit to change).</p>}
 
       <h3 style={{ margin: 0 }}>Bonus or take-back</h3>
       <form className="row" onSubmit={(e) => {
@@ -149,10 +188,10 @@ function KidCard({ kid, onChange }: { kid: Kid; onChange: () => Promise<void> })
         <Modal onClose={() => setEditing(false)}>
           <div className="stack">
             <h2 style={{ margin: 0 }}>Edit {kid.name}</h2>
-            <KidForm initial={{ name: kid.name, avatar: kid.avatar, color: kid.color, pin: '', theme: kid.theme, birthdate: kid.birthdate ?? '', pictureMode: kid.pictureModeSetting }} hasPin={kid.hasPin} submitLabel="Save"
+            <KidForm initial={{ name: kid.name, avatar: kid.avatar, color: kid.color, pin: '', theme: kid.theme, birthdate: kid.birthdate ?? '', pictureMode: kid.pictureModeSetting, pagesOff: kid.pagesOff, doctorAreasOff: kid.doctorAreasOff }} hasPin={kid.hasPin} submitLabel="Save"
               onClearPin={() => void run(() => api(`${base}/kids/${kid.id}`, { method: 'PATCH', body: { pin: null } }), 'PIN removed').then(() => setEditing(false))}
               onSubmit={async (d) => {
-                await api(`${base}/kids/${kid.id}`, { method: 'PATCH', body: { name: d.name, avatar: d.avatar, color: d.color, theme: d.theme, birthdate: d.birthdate, pictureMode: d.pictureMode, ...(d.pin ? { pin: d.pin } : {}) } });
+                await api(`${base}/kids/${kid.id}`, { method: 'PATCH', body: { name: d.name, avatar: d.avatar, color: d.color, theme: d.theme, birthdate: d.birthdate, pictureMode: d.pictureMode, pagesOff: d.pagesOff, doctorAreasOff: d.doctorAreasOff, ...(d.pin ? { pin: d.pin } : {}) } });
                 setEditing(false);
                 toast('Saved');
                 await refreshAll();
@@ -192,7 +231,7 @@ export function Kids() {
         <Modal onClose={() => setAdding(false)}>
           <div className="stack">
             <h2 style={{ margin: 0 }}>Add a kid</h2>
-            <KidForm initial={{ name: '', avatar: AVATARS[count % AVATARS.length], color: KID_COLORS[count % KID_COLORS.length], pin: '', theme: null, birthdate: '', pictureMode: 'auto' }} submitLabel="Add"
+            <KidForm initial={{ name: '', avatar: AVATARS[count % AVATARS.length], color: KID_COLORS[count % KID_COLORS.length], pin: '', theme: null, birthdate: '', pictureMode: 'auto', pagesOff: [], doctorAreasOff: [] }} submitLabel="Add"
               onSubmit={async (d) => {
                 await api(`${base}/kids`, { body: { ...d, pin: d.pin || null } });
                 setAdding(false);

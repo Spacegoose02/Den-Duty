@@ -103,7 +103,7 @@ export function TodaysTipsCard() {
   if (!ok.length) return null;
   return (
     <section className="card stack">
-      <div className="row"><h2 style={{ margin: 0, flex: 1 }}>Today's practice ideas</h2><Link to="/therapy" className="btn ghost">Therapy →</Link></div>
+      <div className="row"><h2 style={{ margin: 0, flex: 1 }}>Today's practice ideas</h2><Link to="/doctors" className="btn ghost">Doctors →</Link></div>
       {ok.map((t) => (
         <div key={`${t.kidId}-${t.area}`} className="row" style={{ alignItems: 'flex-start', flexWrap: 'nowrap' }}>
           <RaccoonAvatar variant={t.kidAvatar} size={36} />

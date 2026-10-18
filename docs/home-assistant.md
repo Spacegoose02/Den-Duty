@@ -68,6 +68,8 @@ rest:
         value_template: "{{ value_json.kids_by_name.ava.level_name }}"
 ```
 
+If a parent switched a page off for a kid (Kids → Edit), that kid's sensors for it are `null`: Chores (`left_today`, `waiting_for_review`…), Goals (`next_goal`), Stats (`streak`, `level`…). `pages_off` lists what's off.
+
 Each kid in `kids` (and `kids_by_name`) has: `balance`, `points_this_week`, `left_today`, `done_today`, `total_today`, `waiting_for_review`, `done_this_week`, `streak`, `best_streak`, `level`, `level_name`, `level_badge`, `next_goal`, `next_goal_percent`, `chores_left`.
 
 ## 4. Actions with `rest_command`

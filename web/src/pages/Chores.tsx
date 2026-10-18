@@ -98,7 +98,7 @@ function ChoreEditor({ draft, onClose, onSaved }: { draft: Draft; onClose: () =>
         )}
         <label className="field">{d.bonus ? 'Who can pick it (none = every kid)' : 'Who does it'}
           <div className="chips">
-            {home?.kids.map((k) => (
+            {home?.kids.filter((k) => !k.pagesOff.includes('chores')).map((k) => (
               <button key={k.id} type="button" className={`chip${d.memberIds.includes(k.id) ? ' on' : ''}`} onClick={() => set({ memberIds: toggle(d.memberIds, k.id) })}>
                 <RaccoonAvatar variant={k.avatar} size={26} /> {k.name}
               </button>

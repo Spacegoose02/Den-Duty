@@ -1,6 +1,7 @@
 import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { useApp } from './state.tsx';
 import { RaccoonAvatar } from './components/Raccoon.tsx';
+import type { KidPage } from '../../shared/pages.ts';
 import { Login } from './pages/Login.tsx';
 import { HomeSetup } from './pages/HomeSetup.tsx';
 import { Dashboard } from './pages/Dashboard.tsx';
@@ -10,7 +11,7 @@ import { Kids } from './pages/Kids.tsx';
 import { Settings } from './pages/Settings.tsx';
 import { Rewards } from './pages/Rewards.tsx';
 import { Stats } from './pages/Stats.tsx';
-import { Therapy } from './pages/Therapy.tsx';
+import { Doctors } from './pages/Doctors.tsx';
 import { DenDuty } from './pages/DenDuty.tsx';
 import { KidPicker } from './pages/KidPicker.tsx';
 import { KidBoard, ParentKidBoard } from './pages/KidBoard.tsx';
@@ -22,13 +23,18 @@ const NAV = [
   { to: '/kids', ico: '🦝', label: 'Kids' },
   { to: '/rewards', ico: '🎁', label: 'Rewards' },
   { to: '/stats', ico: '📊', label: 'Stats' },
-  { to: '/therapy', ico: '🩺', label: 'Therapy' },
+  { to: '/doctors', ico: '🩺', label: 'Doctors' },
   { to: '/den', ico: '🛏️', label: 'Den Duty' },
   { to: '/settings', ico: '⚙️', label: 'Settings' },
 ];
 
+/** Which per-kid page each nav entry belongs to (see shared/pages.ts). */
+const NAV_PAGE: Record<string, KidPage> = { '/week': 'chores', '/chores': 'chores', '/den': 'den', '/rewards': 'goals', '/stats': 'stats', '/doctors': 'doctors' };
+
 function Nav({ className }: { className: string }) {
-  const { who } = useApp();
+  const { who, home } = useApp();
+  const kids = home?.kids ?? [];
+  const shown = NAV.filter((n) => !NAV_PAGE[n.to] || !kids.length || kids.some((k) => !k.pagesOff?.includes(NAV_PAGE[n.to])));
   return (
     <nav className={className} aria-label="Main">
       {className === 'rail' && (
@@ -36,7 +42,7 @@ function Nav({ className }: { className: string }) {
           <RaccoonAvatar variant={who?.user?.avatar} size={56} />
         </div>
       )}
-      {NAV.map((n) => (
+      {shown.map((n) => (
         <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>
           <span className="ico" aria-hidden>{n.ico}</span>
           {n.label}
@@ -74,7 +80,8 @@ export function App() {
           <Route path="/kids/:memberId" element={<ParentKidBoard />} />
           <Route path="/rewards" element={<Rewards />} />
           <Route path="/stats" element={<Stats />} />
-          <Route path="/therapy" element={<Therapy />} />
+          <Route path="/doctors" element={<Doctors />} />
+          <Route path="/therapy" element={<Navigate to="/doctors" replace />} />
           <Route path="/den" element={<DenDuty />} />
           <Route path="/honeydo" element={<Navigate to="/den" replace />} />
           <Route path="/settings" element={<Settings />} />

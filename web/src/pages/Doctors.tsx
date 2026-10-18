@@ -6,6 +6,8 @@ import { Modal, ProgressBar, shortDate } from '../components/Bits.tsx';
 import { LineChart } from '../components/Charts.tsx';
 import { seriesColor } from '../../../shared/catalog.ts';
 import { TherapyHelperCard } from '../components/TherapyHelper.tsx';
+import { AskDoctorCard } from '../components/AskDoctor.tsx';
+import { appointmentOn, goalAreaOn, type DoctorArea } from '../../../shared/pages.ts';
 
 interface Appointment { id: string; kind: string; title: string; provider: string | null; location: string | null; startsAt: string; durationMinutes: number | null; status: string; notes: string | null }
 interface TGoal { id: string; area: string; title: string; description: string | null; targetDate: string | null; status: string; progress: number; metAt: string | null; history: { date: string; progress: number }[]; rewardStep: number; rewardMet: number; rewardMetPaid: boolean }
@@ -19,11 +21,11 @@ const KIND_LABELS: Record<string, string> = {
   doctor: 'Doctor', speech: 'Speech', feeding: 'Feeding', occupational: 'Occupational therapy', physical: 'Physical therapy', behavioral: 'Behavioral', dental: 'Dentist', other: 'Other',
 };
 export const AREA_ICONS: Record<string, string> = {
-  development: '🌱', speech: '🗣️', feeding: '🥄', doctor: '🩺', motor: '✋', sensory: '🌀', selfcare: '🪥', social: '🤝', other: '📌',
+  development: '🌱', speech: '🗣️', feeding: '🥄', doctor: '🩺', motor: '✋', sensory: '🌀', selfcare: '🪥', physical: '🏃', behavioral: '🧩', dental: '🦷', social: '🤝', other: '📌',
 };
 const AREA_LABELS: Record<string, string> = {
   development: 'Development', speech: 'Speech', feeding: 'Feeding', doctor: 'Doctor / health', motor: 'Fine / gross motor', sensory: 'Sensory',
-  selfcare: 'Self-care', social: 'Social', other: 'Other',
+  selfcare: 'Self-care', physical: 'Physical therapy', behavioral: 'Behavioral', dental: 'Dental', social: 'Social', other: 'Other',
 };
 
 export const whenText = (local: string) => {
@@ -37,14 +39,14 @@ function nowLocal(): string {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 }
 
-function AppointmentForm({ onSave, onClose }: { onSave: (a: object) => Promise<void>; onClose: () => void }) {
+function AppointmentForm({ onSave, onClose, areasOff }: { onSave: (a: object) => Promise<void>; onClose: () => void; areasOff: DoctorArea[] }) {
   const [a, setA] = useState({ kind: 'speech', title: '', provider: '', location: '', startsAt: nowLocal(), durationMinutes: 45, notes: '' });
   return (
     <Modal onClose={onClose}>
       <form className="stack" onSubmit={(e) => { e.preventDefault(); void onSave(a); }}>
         <h2 style={{ margin: 0 }}>New appointment</h2>
         <div className="chips">
-          {Object.keys(KIND_ICONS).map((k) => (
+          {Object.keys(KIND_ICONS).filter((k) => appointmentOn(k, areasOff.filter((a) => a !== 'appointments'))).map((k) => (
             <button key={k} type="button" className={`chip${a.kind === k ? ' on' : ''}`} onClick={() => setA({ ...a, kind: k, title: a.title || KIND_LABELS[k] })}>{KIND_ICONS[k]} {KIND_LABELS[k]}</button>
           ))}
         </div>
@@ -144,10 +146,12 @@ function RewardEditor({ goal, goalUrl, onSaved }: { goal: TGoal; goalUrl: string
 /** base is /api/homes/:id/kids/:kid/therapy; goal edits live at /api/homes/:id/therapy/goals/:goal. */
 const goalUrl = (base: string, id: string) => base.replace(/\/kids\/[^/]+\/therapy$/, `/therapy/goals/${id}`);
 
-export function Therapy() {
+export function Doctors() {
   const { base, home, toast, dark } = useApp();
   const [picked, setPicked] = useState<string | null>(null);
-  const kid = home?.kids.find((k) => k.id === picked) ?? home?.kids[0];
+  const docKids = home?.kids.filter((k) => !k.pagesOff.includes('doctors')) ?? [];
+  const kid = docKids.find((k) => k.id === picked) ?? docKids[0];
+  const areasOff = kid?.doctorAreasOff ?? [];
   const tBase = kid ? `${base}/kids/${kid.id}/therapy` : null;
   const [data, reload] = useLoad<TherapyData>(tBase, [tBase]);
   const [adding, setAdding] = useState<'appointment' | 'goal' | null>(null);
@@ -165,12 +169,13 @@ export function Therapy() {
   return (
     <div className="stack">
       <div className="topbar">
-        <h1>Therapy</h1>
+        <h1>Doctors</h1>
         <span className="pill">🔒 Parents only</span>
       </div>
       {!home.kids.length && <div className="card">Add a kid first in Kids.</div>}
+      {home.kids.length > 0 && !docKids.length && <div className="card">Doctors is turned off for every kid. Turn it on in Kids → Edit.</div>}
       <div className="chips">
-        {home.kids.map((k) => (
+        {docKids.map((k) => (
           <button key={k.id} className={`chip${kid?.id === k.id ? ' on' : ''}`} onClick={() => setPicked(k.id)}>
             <RaccoonAvatar variant={k.avatar} size={28} /> {k.name}
           </button>
@@ -185,7 +190,7 @@ export function Therapy() {
             <span style={{ flex: 1 }}>Show {kid.name} their active goals and next appointments on the tablet <span className="small muted">(notes always stay private)</span></span>
           </label>
 
-          <section className="card stack">
+          <section className="card stack" hidden={areasOff.includes('appointments')}>
             <div className="row">
               <h2 style={{ margin: 0, flex: 1 }}>Appointments</h2>
               <button className="primary" onClick={() => setAdding('appointment')}>＋ Appointment</button>
@@ -217,9 +222,11 @@ export function Therapy() {
           </section>
 
           <div className="grid-2">
-            <TherapyHelperCard key={`speech-${kid.id}`} kidId={kid.id} area="speech" goals={data.goals} onChange={reload} />
-            <TherapyHelperCard key={`ot-${kid.id}`} kidId={kid.id} area="ot" goals={data.goals} onChange={reload} />
+            {!areasOff.includes('speech') && <TherapyHelperCard key={`speech-${kid.id}`} kidId={kid.id} area="speech" goals={data.goals} onChange={reload} />}
+            {['ot', 'sensory', 'selfcare'].some((a) => !areasOff.includes(a as DoctorArea)) && <TherapyHelperCard key={`ot-${kid.id}`} kidId={kid.id} area="ot" goals={data.goals} onChange={reload} />}
           </div>
+
+          <AskDoctorCard key={`ask-${kid.id}`} kidId={kid.id} kidName={kid.name} />
 
           <section className="stack">
             <div className="row">
@@ -252,7 +259,7 @@ export function Therapy() {
       )}
 
       {adding === 'appointment' && tBase && (
-        <AppointmentForm onClose={() => setAdding(null)} onSave={(a) => run(async () => { await api(`${tBase}/appointments`, { body: a }); setAdding(null); }, 'Appointment added')} />
+        <AppointmentForm areasOff={areasOff} onClose={() => setAdding(null)} onSave={(a) => run(async () => { await api(`${tBase}/appointments`, { body: a }); setAdding(null); }, 'Appointment added')} />
       )}
       {adding === 'goal' && tBase && (
         <Modal onClose={() => setAdding(null)}>
@@ -262,7 +269,7 @@ export function Therapy() {
           }}>
             <h2 style={{ margin: 0 }}>New goal for {kid?.name}</h2>
             <div className="chips">
-              {Object.keys(AREA_ICONS).map((a) => <button key={a} type="button" className={`chip${goal.area === a ? ' on' : ''}`} onClick={() => setGoal({ ...goal, area: a })}>{AREA_ICONS[a]} {AREA_LABELS[a]}</button>)}
+              {Object.keys(AREA_ICONS).filter((a) => goalAreaOn(a, areasOff)).map((a) => <button key={a} type="button" className={`chip${goal.area === a ? ' on' : ''}`} onClick={() => setGoal({ ...goal, area: a })}>{AREA_ICONS[a]} {AREA_LABELS[a]}</button>)}
             </div>
             <input placeholder="Goal, e.g. Use 3-word sentences" value={goal.title} onChange={(e) => setGoal({ ...goal, title: e.target.value })} autoFocus />
             <textarea placeholder="Details from the therapist or doctor (optional)" value={goal.description} onChange={(e) => setGoal({ ...goal, description: e.target.value })} style={{ minHeight: 80 }} />
@@ -274,7 +281,7 @@ export function Therapy() {
                 <input type="number" min={0} value={goal.rewardMet} onChange={(e) => setGoal({ ...goal, rewardMet: Math.max(0, Math.round(Number(e.target.value) || 0)) })} style={{ width: 120 }} />
               </label>
             </div>
-            <p className="small muted" style={{ margin: 0 }}>Optional. Each progress note pays the practice {home?.pointsName}; reaching the goal pays the bonus once. Kids see “Great practice!” (with the goal's name only if you share therapy with them).</p>
+            <p className="small muted" style={{ margin: 0 }}>Optional. Each progress note pays the practice {home?.pointsName}; reaching the goal pays the bonus once. Kids see “Great practice!” (with the goal's name only if you share Doctors with them).</p>
             <label className="field">Aiming for (optional)
               <input type="date" value={goal.targetDate} onChange={(e) => setGoal({ ...goal, targetDate: e.target.value })} style={{ maxWidth: 220 }} />
             </label>

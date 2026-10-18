@@ -176,3 +176,20 @@ export function DaytimeScene({ variant = 'ninja' }: { variant?: string }) {
     </svg>
   );
 }
+
+/** Dr. Bandit: the raccoon doctor who answers questions in Doctors (head mirror and stethoscope). */
+export function DoctorRaccoon({ size = 64, title = 'Raccoon doctor' }: { size?: number; title?: string }) {
+  return (
+    <svg viewBox="0 0 120 124" width={size} height={size} role="img" aria-label={title}>
+      <Head variant="classic" />
+      {/* head band with the round doctor's mirror */}
+      <path d="M26 46 q34 -26 68 0" fill="none" stroke="#e9ecef" strokeWidth="6" strokeLinecap="round" />
+      <circle cx="60" cy="30" r="11" fill="#dee2e6" stroke="#adb5bd" strokeWidth="2.5" />
+      <circle cx="60" cy="30" r="5" fill="#f8f9fa" />
+      {/* stethoscope around the neck */}
+      <path d="M36 98 q24 22 48 0" fill="none" stroke="#1f6fb2" strokeWidth="4.5" strokeLinecap="round" />
+      <path d="M84 98 q8 10 2 18" fill="none" stroke="#1f6fb2" strokeWidth="4.5" strokeLinecap="round" />
+      <circle cx="85" cy="118" r="5.5" fill="#adb5bd" stroke="#495057" strokeWidth="2" />
+    </svg>
+  );
+}

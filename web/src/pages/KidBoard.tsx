@@ -6,7 +6,7 @@ import { RaccoonAvatar } from '../components/Raccoon.tsx';
 import { Modal, ProgressBar, dayName, shortDate, STATUS_LABEL } from '../components/Bits.tsx';
 import { addDays } from '../../../shared/schedule.ts';
 import { AVATARS, AVATAR_LABELS, AVATAR_UNLOCK_LEVEL, avatarUnlocked } from '../../../shared/catalog.ts';
-import { AREA_ICONS, KIND_ICONS, whenText } from './Therapy.tsx';
+import { AREA_ICONS, KIND_ICONS, whenText } from './Doctors.tsx';
 import { FEED_ICONS } from './Calendars.tsx';
 
 const IDLE_MS = 3 * 60e3;
@@ -104,7 +104,7 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
   const decided = polls?.filter((p) => p.status === 'closed').slice(0, 2) ?? [];
 
   return (
-    <div className={`stack board${asParent && kid.theme ? ' themed' : ''}${kid.pictureMode ? ' picture' : ''}`} data-theme={asParent ? kid.theme ?? undefined : undefined} style={{ ['--kid' as string]: kid.color }}>
+    <div className={`stack board${asParent && kid.theme ? ' themed' : ''}${kid.pictureMode ? ' picture' : ''}${kid.pagesOff.map((p) => ` off-${p}`).join('')}`} data-theme={asParent ? kid.theme ?? undefined : undefined} style={{ ['--kid' as string]: kid.color }}>
       <header className="board-head">
         <button className="avatar-button" onClick={() => setPicking(true)} aria-label="Change raccoon">
           <RaccoonAvatar variant={kid.avatar} size={92} />
@@ -116,7 +116,7 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
             {left ? `${left} chore${left === 1 ? '' : 's'} left today` : board.todayItems.length ? 'All done for today! 🎉' : 'Nothing to do today'}
             {streak.current > 0 && ` · 🔥 ${streak.current}-day streak`}
           </p>
-          <div className="level-line">
+          <div className="level-line pg-stats">
             <strong>{level.name}</strong>
             <ProgressBar percent={level.percent} color={kid.color} />
             <span className="small muted">{level.next ? `${level.next.min - level.points} to ${level.next.badge} ${level.next.name}` : 'Top level!'}</span>
@@ -129,7 +129,7 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
         {onExit && <button className="kid-exit" onClick={onExit}>👋 I'm done</button>}
       </header>
 
-      <section>
+      <section className="pg-chores">
         <h2>Today</h2>
         <div className="kanban">
           {COLUMNS.map((col) => {
@@ -190,7 +190,7 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
       )}
 
       {board.bonus.length > 0 && (
-        <section className="card stack">
+        <section className="card stack pg-chores">
           <h2 style={{ margin: 0 }}>💪 Up for grabs</h2>
           <p className="small muted" style={{ margin: 0 }}>Extra chores for extra {home?.pointsName}. Pick one if you want it!</p>
           <div className="bonus-grid">
@@ -214,7 +214,7 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
       )}
 
       <div className="grid-2">
-        <section className="card stack">
+        <section className="card stack pg-goals">
           <h2 style={{ margin: 0 }}>Goals</h2>
           {board.goals.map((g) => (
             <div key={g.id} className="goal">
@@ -228,7 +228,7 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
           ))}
           {!board.goals.length && <p className="muted" style={{ margin: 0 }}>No goals yet. Ask a grown-up to set one!</p>}
         </section>
-        <section className="card stack">
+        <section className="card stack pg-stats">
           <h2 style={{ margin: 0 }}>This week</h2>
           <div className="stats">
             <div><span className="num">{stats.pointsThisWeek}</span><span className="small muted">{home?.pointsName} earned</span></div>
@@ -272,7 +272,7 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
       )}
 
       {(openPolls.length > 0 || decided.length > 0) && (
-        <section className="card stack">
+        <section className="card stack pg-goals">
           <h2 style={{ margin: 0 }}>🗳️ Vote for a reward</h2>
           {openPolls.map((p) => (
             <div key={p.id} className="stack">
@@ -297,7 +297,7 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
         </section>
       )}
 
-      <section className="card stack">
+      <section className="card stack pg-stats">
         <h2 style={{ margin: 0 }}>Badges <span className="pill">{earned.length} / {board.achievements.length}</span></h2>
         <div className="badge-grid">
           {board.achievements.map((a) => (
@@ -310,7 +310,7 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
         </div>
       </section>
 
-      <section>
+      <section className="pg-chores pg-calendar-week">
         <div className="row">
           <h2 style={{ margin: 0, flex: 1 }}>Week</h2>
           <button className="icon" aria-label="Previous week" onClick={() => setWeekStart(addDays(board.weekStart, -7))}>◀</button>
