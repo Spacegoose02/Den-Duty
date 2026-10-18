@@ -49,6 +49,8 @@ export interface Kid {
   pagesOff: KidPage[]; doctorAreasOff: DoctorArea[];
   /** Daily practice ideas switched off (anger starts off). */
   ideasOff: PracticeIdea[];
+  /** The per-kid AI master switch (on by default). */
+  aiOn: boolean;
 }
 
 export interface HomeDetail {

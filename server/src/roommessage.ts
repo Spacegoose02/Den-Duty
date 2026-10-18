@@ -3,6 +3,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { Row } from './db.ts';
 import { aiSettings, roomMessageAi } from './ai.ts';
+import { kidAiOn } from './routes/homes.ts';
 
 export const ROOM_MESSAGES = [
   'Good morning, {name}! A tidy den is a happy den. 🦝',
@@ -45,6 +46,8 @@ const retryAfter = new Map<string, number>();
 export async function roomMessage(db: DatabaseSync, homeId: string, kid: { id: string; name: string; age: number | null }, date: string): Promise<{ text: string; source: 'ai' | 'builtin' }> {
   const fill = (t: string) => t.replaceAll('{name}', kid.name);
   const ai = aiSettings(db, homeId);
+  // The per-kid AI switch: off means the built-in messages only.
+  if (!kidAiOn(db, kid.id)) ai.enabled = false;
   const cached = db.prepare('SELECT text, source FROM room_messages WHERE member_id = ? AND date = ?').get(kid.id, date) as Row | undefined;
   // A cached built-in message is upgraded once AI is turned on; an AI message stays for the day.
   if (cached && (cached.source === 'ai' || !ai.enabled || !ai.hasKey)) return { text: fill(cached.text as string), source: cached.source as 'ai' | 'builtin' };

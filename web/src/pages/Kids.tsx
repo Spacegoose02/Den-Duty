@@ -11,16 +11,19 @@ import { DOCTOR_AREAS, IDEAS_OFF_DEFAULT, KID_PAGES, PRACTICE_IDEAS, type Doctor
 
 interface KidDraft {
   name: string; avatar: string; color: string; pin: string; theme: string | null; birthdate: string; pictureMode: 'auto' | 'on' | 'off';
-  pagesOff: KidPage[]; doctorAreasOff: DoctorArea[]; ideasOff: PracticeIdea[];
+  pagesOff: KidPage[]; doctorAreasOff: DoctorArea[]; ideasOff: PracticeIdea[]; aiOn: boolean;
 }
 
 /** Name, raccoon, color and PIN. Used to add a kid and to edit one. */
 function KidForm({ initial, onSubmit, submitLabel, hasPin, onClearPin }: {
   initial: KidDraft; onSubmit: (d: KidDraft) => Promise<void>; submitLabel: string; hasPin?: boolean; onClearPin?: () => void;
 }) {
-  const { home } = useApp();
+  const { home, base, toast } = useApp();
   const homeTheme = home?.theme ?? 'sunny';
   const [d, setD] = useState(initial);
+  const [ai] = useLoad<{ enabled: boolean; hasKey: boolean }>(`${base}/ai`);
+  // Why AI features can't show for anyone right now, if that's the case.
+  const aiProblem = !ai ? null : !ai.hasKey ? 'AI ideas need an Anthropic API key first.' : !ai.enabled ? 'AI ideas are turned off for the whole home.' : null;
   const [error, setError] = useState<string | null>(null);
   return (
     <form className="stack" onSubmit={async (e) => {
@@ -71,6 +74,16 @@ function KidForm({ initial, onSubmit, submitLabel, hasPin, onClearPin }: {
         </div>
         <span className="small muted" style={{ fontWeight: 400 }}>Off hides the page for this kid: on their tablet, in your views, stats, calendar links and Home Assistant. Nothing is deleted; switch it back on any time.</span>
       </div>
+      <div className="field">
+        <div className="switch-grid">
+          <button type="button" className={`switch${d.aiOn ? ' on' : ''}`} aria-pressed={d.aiOn} onClick={() => setD((cur) => ({ ...cur, aiOn: !cur.aiOn }))}>
+            <span className="switch-knob" aria-hidden />
+            <span><strong>💡 AI ideas for {d.name || 'this kid'}</strong><br />
+              <span className="small muted">Goal, chore and penalty ideas, daily practice ideas, the den message and Ask Dr. Bandit. Off: built-ins only, nothing is sent.</span></span>
+          </button>
+        </div>
+        {aiProblem && <span className="small chip-reason">{aiProblem} <Link to="/settings#ai">Open Settings → AI ideas</Link></span>}
+      </div>
       {!d.pagesOff.includes('doctors') && (
         <div className="field">
           <span>Doctors sections</span>
@@ -85,17 +98,39 @@ function KidForm({ initial, onSubmit, submitLabel, hasPin, onClearPin }: {
               );
             })}
           </div>
-          <span>Daily practice ideas <span className="small muted" style={{ fontWeight: 400 }}>(with AI ideas on)</span></span>
-          <div className="chips">
+          <span>Daily practice ideas</span>
+          {aiProblem && (
+            <p className="small chip-reason" style={{ margin: 0 }}>
+              {aiProblem} <Link to="/settings#ai">Open Settings → AI ideas</Link>
+            </p>
+          )}
+          {!aiProblem && !d.aiOn && <p className="small chip-reason" style={{ margin: 0 }}>AI ideas are off for {d.name || 'this kid'} (switch above), so these won't show.</p>}
+          <div className="idea-chips">
             {PRACTICE_IDEAS.map((p) => {
               const on = !d.ideasOff.includes(p.id);
               const sectionOff = d.doctorAreasOff.includes(p.section);
+              const section = DOCTOR_AREAS.find((a) => a.id === p.section)!;
               return (
-                <button key={p.id} type="button" className={`chip${on && !sectionOff ? ' on' : ''}`} aria-pressed={on} disabled={sectionOff}
-                  title={sectionOff ? 'Turn its Doctors section on first' : undefined}
-                  onClick={() => setD((cur) => ({ ...cur, ideasOff: on ? [...cur.ideasOff, p.id] : cur.ideasOff.filter((x) => x !== p.id) }))}>
-                  {p.icon} {p.label}
-                </button>
+                <div key={p.id} className="idea-chip">
+                  <button type="button" className={`chip${on ? ' on' : ''}`} aria-pressed={on}
+                    onClick={() => {
+                      // Turning an idea on also turns on the Doctors section it needs.
+                      if (!on && sectionOff) toast(`Also turned on the ${section.label} section`);
+                      setD((cur) => ({
+                        ...cur,
+                        ideasOff: on ? [...cur.ideasOff, p.id] : cur.ideasOff.filter((x) => x !== p.id),
+                        doctorAreasOff: !on ? cur.doctorAreasOff.filter((x) => x !== p.section) : cur.doctorAreasOff,
+                      }));
+                    }}>
+                    {p.icon} {p.label}
+                  </button>
+                  {on && sectionOff && (
+                    <span className="small chip-reason">
+                      Needs the {section.icon} {section.label} section.{' '}
+                      <button type="button" className="link" onClick={() => setD((cur) => ({ ...cur, doctorAreasOff: cur.doctorAreasOff.filter((x) => x !== p.section) }))}>Turn it on</button>
+                    </span>
+                  )}
+                </div>
               );
             })}
           </div>
@@ -202,10 +237,10 @@ function KidCard({ kid, onChange }: { kid: Kid; onChange: () => Promise<void> })
         <Modal onClose={() => setEditing(false)}>
           <div className="stack">
             <h2 style={{ margin: 0 }}>Edit {kid.name}</h2>
-            <KidForm initial={{ name: kid.name, avatar: kid.avatar, color: kid.color, pin: '', theme: kid.theme, birthdate: kid.birthdate ?? '', pictureMode: kid.pictureModeSetting, pagesOff: kid.pagesOff, doctorAreasOff: kid.doctorAreasOff, ideasOff: kid.ideasOff }} hasPin={kid.hasPin} submitLabel="Save"
+            <KidForm initial={{ name: kid.name, avatar: kid.avatar, color: kid.color, pin: '', theme: kid.theme, birthdate: kid.birthdate ?? '', pictureMode: kid.pictureModeSetting, pagesOff: kid.pagesOff, doctorAreasOff: kid.doctorAreasOff, ideasOff: kid.ideasOff, aiOn: kid.aiOn }} hasPin={kid.hasPin} submitLabel="Save"
               onClearPin={() => void run(() => api(`${base}/kids/${kid.id}`, { method: 'PATCH', body: { pin: null } }), 'PIN removed').then(() => setEditing(false))}
               onSubmit={async (d) => {
-                await api(`${base}/kids/${kid.id}`, { method: 'PATCH', body: { name: d.name, avatar: d.avatar, color: d.color, theme: d.theme, birthdate: d.birthdate, pictureMode: d.pictureMode, pagesOff: d.pagesOff, doctorAreasOff: d.doctorAreasOff, ideasOff: d.ideasOff, ...(d.pin ? { pin: d.pin } : {}) } });
+                await api(`${base}/kids/${kid.id}`, { method: 'PATCH', body: { name: d.name, avatar: d.avatar, color: d.color, theme: d.theme, birthdate: d.birthdate, pictureMode: d.pictureMode, pagesOff: d.pagesOff, doctorAreasOff: d.doctorAreasOff, ideasOff: d.ideasOff, aiOn: d.aiOn, ...(d.pin ? { pin: d.pin } : {}) } });
                 setEditing(false);
                 toast('Saved');
                 await refreshAll();
@@ -245,7 +280,7 @@ export function Kids() {
         <Modal onClose={() => setAdding(false)}>
           <div className="stack">
             <h2 style={{ margin: 0 }}>Add a kid</h2>
-            <KidForm initial={{ name: '', avatar: AVATARS[count % AVATARS.length], color: KID_COLORS[count % KID_COLORS.length], pin: '', theme: null, birthdate: '', pictureMode: 'auto', pagesOff: [], doctorAreasOff: [], ideasOff: IDEAS_OFF_DEFAULT }} submitLabel="Add"
+            <KidForm initial={{ name: '', avatar: AVATARS[count % AVATARS.length], color: KID_COLORS[count % KID_COLORS.length], pin: '', theme: null, birthdate: '', pictureMode: 'auto', pagesOff: [], doctorAreasOff: [], ideasOff: IDEAS_OFF_DEFAULT, aiOn: true }} submitLabel="Add"
               onSubmit={async (d) => {
                 await api(`${base}/kids`, { body: { ...d, pin: d.pin || null } });
                 setAdding(false);

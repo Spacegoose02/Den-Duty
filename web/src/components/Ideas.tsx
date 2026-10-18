@@ -15,7 +15,8 @@ export function IdeasButton({ kind, kidId, onPick }: { kind: 'goal' | 'penalty' 
   const [hint, setHint] = useState('');
   const [ideas, setIdeas] = useState<Idea[] | null>(null);
   const [busy, setBusy] = useState(false);
-  if (!ai?.enabled) return null;
+  // Hidden while AI is off for the home, or for this kid.
+  if (!ai?.enabled || (kidId && home?.kids.find((k) => k.id === kidId)?.aiOn === false)) return null;
 
   const ask = async () => {
     setBusy(true);
@@ -58,7 +59,7 @@ export function AiCard() {
     try { await api(`${base}/ai`, { method: 'PATCH', body }); toast(msg); await reload(); } catch (e) { toast((e as Error).message); }
   };
   return (
-    <div className="card stack">
+    <div className="card stack" id="ai">
       <h2 style={{ margin: 0 }}>💡 AI ideas</h2>
       <p className="small muted" style={{ margin: 0 }}>
         Get ideas for goals, chores and gentle penalties from Claude. Off until you turn it on with your own Anthropic API key

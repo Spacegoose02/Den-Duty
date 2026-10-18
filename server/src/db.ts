@@ -515,6 +515,10 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE homes ADD COLUMN wall_settings TEXT NOT NULL DEFAULT '{}';
   `,
+  // Per-kid AI master switch (on by default): off means no AI requests about that kid at all.
+  `
+  ALTER TABLE members ADD COLUMN ai_off INTEGER NOT NULL DEFAULT 0;
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

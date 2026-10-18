@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.ts';
 import { useApp, useLoad } from '../state.tsx';
@@ -320,6 +320,12 @@ function FamilyWallCard() {
 
 export function Settings() {
   const { who } = useApp();
+  // Links like /settings#ai jump to that card once it has loaded.
+  useEffect(() => {
+    if (!location.hash) return;
+    const t = window.setTimeout(() => document.querySelector(location.hash)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 600);
+    return () => window.clearTimeout(t);
+  }, []);
   return (
     <div className="stack" style={{ maxWidth: 960 }}>
       <div className="topbar"><h1>Settings</h1></div>

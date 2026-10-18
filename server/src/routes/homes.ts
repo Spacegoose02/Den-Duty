@@ -59,6 +59,7 @@ export function kidView(db: DatabaseSync, r: Row) {
     birthdate, age, pictureModeSetting: setting, pictureMode: pictureMode(setting, age),
     pagesOff: offList(r.pages_off, KID_PAGE_IDS), doctorAreasOff: offList(r.doctor_areas_off, DOCTOR_AREA_IDS),
     ideasOff: r.ideas_off == null ? IDEAS_OFF_DEFAULT : offList(r.ideas_off, PRACTICE_IDEA_IDS),
+    aiOn: !r.ai_off,
   };
 }
 
@@ -72,6 +73,7 @@ function applyKidProfile(db: DatabaseSync, id: string, b: Row, today: string): v
   // Page and Doctors-section switches: lists of what's turned off for this kid. Off hides, it never deletes.
   if ('pagesOff' in b) db.prepare('UPDATE members SET pages_off = ? WHERE id = ?').run(JSON.stringify(offList(b.pagesOff, KID_PAGE_IDS)), id);
   if ('doctorAreasOff' in b) db.prepare('UPDATE members SET doctor_areas_off = ? WHERE id = ?').run(JSON.stringify(offList(b.doctorAreasOff, DOCTOR_AREA_IDS)), id);
+  if (typeof b.aiOn === 'boolean') db.prepare('UPDATE members SET ai_off = ? WHERE id = ?').run(b.aiOn ? 0 : 1, id);
   if ('ideasOff' in b) db.prepare('UPDATE members SET ideas_off = ? WHERE id = ?').run(JSON.stringify(offList(b.ideasOff, PRACTICE_IDEA_IDS)), id);
   if ('pictureMode' in b) {
     if (!['auto', 'on', 'off'].includes(String(b.pictureMode))) throw new HttpError(400, 'pictureMode must be auto, on or off');
@@ -330,4 +332,9 @@ export function doctorAreasOff(db: DatabaseSync, memberId: string): DoctorArea[]
 export function ideasOff(db: DatabaseSync, memberId: string): PracticeIdea[] {
   const r = db.prepare('SELECT ideas_off FROM members WHERE id = ?').get(memberId) as Row | undefined;
   return r?.ideas_off == null ? IDEAS_OFF_DEFAULT : offList(r.ideas_off, PRACTICE_IDEA_IDS);
+}
+
+/** Is AI allowed for this kid (the per-kid master switch; the home switch is checked separately)? */
+export function kidAiOn(db: DatabaseSync, memberId: string): boolean {
+  return !(db.prepare('SELECT ai_off FROM members WHERE id = ?').get(memberId) as Row | undefined)?.ai_off;
 }

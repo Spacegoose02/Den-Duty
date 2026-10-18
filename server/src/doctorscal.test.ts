@@ -125,3 +125,27 @@ test('Stats has a Doctors panel and a Goals panel, respecting page and section s
   assert.equal(kid.doctors, null);
   assert.equal(kid.goalStats, null);
 });
+
+test('per-kid AI switch: on by default; off means no AI requests about that kid (built-ins instead)', async () => {
+  const { call, mom, base, ava, ben } = await family();
+  const sent: Sent[] = [];
+  fakeClaude(sent, (body) => (JSON.stringify(body).includes('tidy') ? { message: 'Hi {name}!' }
+    : { tip: { title: 'T', activity: 'A', minutes: 5, why: 'W' }, goals: [], ideas: [], answer: 'ok', urgent: false }));
+  await call(mom, 'PATCH', `${base}/ai`, { apiKey: 'sk-ant-api03-test-key-abcdefghijklmnop', enabled: true });
+  const kid = async () => (await call(mom, 'GET', `${base}/kids`)).body.find((k: { id: string }) => k.id === ava.id);
+  assert.equal((await kid()).aiOn, true);
+  await call(mom, 'PATCH', `${base}/kids/${ava.id}`, { aiOn: false });
+  assert.equal((await kid()).aiOn, false);
+
+  const before = sent.length;
+  assert.match((await call(mom, 'GET', `${base}/kids/${ava.id}/therapy/helper/speech`)).body.error, /turned off for Avaleigh/);
+  assert.equal((await call(mom, 'POST', `${base}/ai/ideas`, { kind: 'goal', kidId: ava.id })).status, 403);
+  assert.equal((await call(mom, 'POST', `${base}/kids/${ava.id}/doctors/ask`, { question: 'hi' })).status, 403);
+  assert.equal((await call(mom, 'GET', `${base}/kids/${ava.id}/doctors/ask`)).body.aiOn, false);
+  assert.equal((await call(mom, 'GET', `${base}/kids/${ava.id}/room-message`)).body.source, 'builtin');
+  assert.ok(!(await call(mom, 'GET', `${base}/therapy/tips`)).body.some((t: { kidId: string }) => t.kidId === ava.id));
+  assert.equal(sent.length, before, 'nothing was sent for Ava');
+  // Ben is unaffected.
+  assert.equal((await call(mom, 'GET', `${base}/kids/${ben.id}/room-message`)).body.source, 'ai');
+  setAiFetch(undefined);
+});

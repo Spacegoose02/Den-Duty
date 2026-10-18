@@ -9,7 +9,7 @@ import { BEHAVIOR_TOPICS, DOCTOR_AREAS, DOCTOR_NAME, GOAL_AREA_SECTION } from '.
 import { newId } from '../util.ts';
 import { OT_AREAS } from './therapy.ts';
 import type { HomeCtx } from '../auth.ts';
-import { doctorAreasOff, getKid, ideasOff, kidView, listKids, pageOn } from './homes.ts';
+import { doctorAreasOff, getKid, ideasOff, kidAiOn, kidView, listKids, pageOn } from './homes.ts';
 import { goalAreaOn } from '../../../shared/pages.ts';
 import { rateLimit } from '../security.ts';
 import { addDays } from '../../../shared/schedule.ts';
@@ -26,7 +26,7 @@ function activeGoals(db: DatabaseSync, memberId: string, area: HelperArea): stri
 
 /** Is this helper turned on for the kid (Doctors page on, its section(s) on, and the idea itself not switched off)? */
 function helperOn(db: DatabaseSync, memberId: string, area: HelperArea): boolean {
-  if (!pageOn(db, memberId, 'doctors') || ideasOff(db, memberId).includes(area)) return false;
+  if (!kidAiOn(db, memberId) || !pageOn(db, memberId, 'doctors') || ideasOff(db, memberId).includes(area)) return false;
   const off = doctorAreasOff(db, memberId);
   return helperAreas(area).some((a) => goalAreaOn(a, off));
 }
@@ -34,6 +34,8 @@ function helperOn(db: DatabaseSync, memberId: string, area: HelperArea): boolean
 /** Today's tip for one kid and area: from the cache, or freshly made (and cached) when missing or refreshed. */
 async function dailyTip(db: DatabaseSync, ctx: HomeCtx, memberId: string, area: HelperArea, refresh: boolean) {
   const kid = kidView(db, getKid(db, ctx, memberId));
+  if (!kid.aiOn) throw new HttpError(403, `AI ideas are turned off for ${kid.name} (Kids → Edit)`);
+  if (ideasOff(db, memberId).includes(area)) throw new HttpError(403, `This practice idea is switched off for ${kid.name} (Kids → Edit)`);
   if (!helperOn(db, memberId, area)) throw new HttpError(403, `That section is turned off for ${kid.name}`);
   const today = homeToday(homeInfo(db, ctx.homeId));
   if (!aiSettings(db, ctx.homeId).enabled) throw new HttpError(403, 'AI ideas are turned off. A parent can turn them on in Settings.');
@@ -89,6 +91,7 @@ export function aiRoutes(app: FastifyInstance, db: DatabaseSync): void {
       : kind === 'chore'
         ? (db.prepare('SELECT title FROM chores WHERE home_id = ? AND active = 1').all(ctx.homeId) as Row[]).map((r) => r.title as string)
         : [];
+    if (b.kidId && !kidAiOn(db, kidIds[0])) throw new HttpError(403, 'AI ideas are turned off for this kid (Kids → Edit)');
     const kidAge = b.kidId ? kidView(db, getKid(db, ctx, String(b.kidId))).age : null;
     const age = num(b.age) ?? kidAge;
     return {
@@ -132,7 +135,7 @@ export function aiRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const kid = getKid(db, ctx, (req.params as { memberId: string }).memberId);
     // Quick behavior topics only when the Behavioral section is on for this kid.
     const behavior = !doctorAreasOff(db, kid.id as string).includes('behavioral');
-    return { name: DOCTOR_NAME, disclaimer: ASK_DISCLAIMER, urgentNote: URGENT_NOTE, history: history(kid.id as string), topics: behavior ? BEHAVIOR_TOPICS : [] };
+    return { name: DOCTOR_NAME, disclaimer: ASK_DISCLAIMER, urgentNote: URGENT_NOTE, history: history(kid.id as string), topics: behavior ? BEHAVIOR_TOPICS : [], aiOn: kidAiOn(db, kid.id as string) };
   });
 
   app.post('/api/homes/:homeId/kids/:memberId/doctors/ask', async (req) => {
@@ -140,6 +143,7 @@ export function aiRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const kid = kidView(db, getKid(db, ctx, (req.params as { memberId: string }).memberId));
     if (!pageOn(db, kid.id, 'doctors')) throw new HttpError(403, `Doctors is turned off for ${kid.name}`);
     if (!aiSettings(db, ctx.homeId).enabled) throw new HttpError(403, 'AI ideas are turned off. A parent can turn them on in Settings.');
+    if (!kid.aiOn) throw new HttpError(403, `AI ideas are turned off for ${kid.name} (Kids → Edit)`);
     const off = doctorAreasOff(db, kid.id);
     // A quick topic button sends a topic id; the question for it is fixed here.
     const topicId = (req.body as Row)?.topic;

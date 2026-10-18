@@ -6,7 +6,7 @@ import { DOCTOR_NAME } from '../../../shared/pages.ts';
 
 interface Answer { id: string; question: string; answer: string; urgent: boolean; at?: string }
 interface Topic { id: string; icon: string; label: string; ask: string }
-interface AskInfo { name: string; disclaimer: string; urgentNote: string; history: Answer[]; topics: Topic[] }
+interface AskInfo { name: string; disclaimer: string; urgentNote: string; history: Answer[]; topics: Topic[]; aiOn: boolean }
 
 /**
  * "Ask Dr. Bandit" in Doctors: a parent asks about one kid. Only shows when AI ideas are on. The server sends just the
@@ -18,7 +18,7 @@ export function AskDoctorCard({ kidId, kidName }: { kidId: string; kidName: stri
   const [info, reload] = useLoad<AskInfo>(`${base}/kids/${kidId}/doctors/ask`, [kidId]);
   const [question, setQuestion] = useState('');
   const [busy, setBusy] = useState(false);
-  if (!ai?.enabled || !info) return null;
+  if (!ai?.enabled || !info || !info.aiOn) return null;
 
   const ask = async (topic?: string) => {
     setBusy(true);

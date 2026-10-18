@@ -423,3 +423,9 @@ a.agenda-ext.duty { text-decoration: none; color: var(--text); border-left-color
 .wall-day-title { font-weight: 900; font-size: 1.15rem; }
 .wall-line { font-size: 1rem; padding-left: 8px; border-left: 4px solid var(--border); }
 .wall-error { position: fixed; bottom: 12px; left: 0; right: 0; text-align: center; color: var(--danger); font-weight: 700; }
+
+/* Practice idea chips with their reason shown right under them (never a silent grey-out) */
+.idea-chips { display: flex; flex-wrap: wrap; gap: 10px 14px; }
+.idea-chip { display: flex; flex-direction: column; gap: 2px; max-width: 260px; }
+.chip-reason { color: var(--warn-text, #a15c00); font-weight: 600; }
+button.link { background: none; border: none; padding: 0; min-height: 0; color: var(--primary); text-decoration: underline; font: inherit; font-weight: 700; cursor: pointer; }
