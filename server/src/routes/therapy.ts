@@ -5,12 +5,32 @@ import type { DatabaseSync } from 'node:sqlite';
 import { homeCtx, type HomeCtx } from '../auth.ts';
 import { tx, type Row } from '../db.ts';
 import { HttpError, newId, num, requireStr, str } from '../util.ts';
-import { homeInfo, homeToday } from '../chores.ts';
+import { homeInfo, homeToday, writeLedger } from '../chores.ts';
+import { byOf } from './chores.ts';
 import { getKid } from './homes.ts';
 import { isIsoDate } from '../../../shared/schedule.ts';
 
 export const APPOINTMENT_KINDS = ['doctor', 'speech', 'feeding', 'occupational', 'physical', 'behavioral', 'dental', 'other'] as const;
-export const GOAL_AREAS = ['development', 'speech', 'feeding', 'doctor', 'motor', 'social', 'other'] as const;
+export const GOAL_AREAS = ['development', 'speech', 'feeding', 'doctor', 'motor', 'sensory', 'selfcare', 'social', 'other'] as const;
+/** Goal areas the occupational therapy helper looks at. */
+export const OT_AREAS = ['motor', 'sensory', 'selfcare'];
+
+function rewardPoints(v: unknown): number {
+  if (v == null || v === '') return 0;
+  const n = num(v);
+  if (n == null || !Number.isInteger(n) || n < 0 || n > 1000) throw new HttpError(400, 'Reward points are a whole number from 0 to 1000');
+  return n;
+}
+
+/**
+ * What the kid sees in their points history. Only a kid whose therapy is shared with them sees the goal's name;
+ * otherwise it's a kind, private "great practice".
+ */
+function rewardReason(db: DatabaseSync, memberId: string, title: string, met: boolean): string {
+  const shared = !!(db.prepare('SELECT therapy_kid_visible FROM members WHERE id = ?').get(memberId) as Row).therapy_kid_visible;
+  if (met) return shared ? `🏆 You reached a big goal: ${title}!` : '🏆 You reached a big goal!';
+  return shared ? `🌈 Great practice: ${title}` : '🌈 Great practice!';
+}
 const STATUSES = ['scheduled', 'done', 'cancelled', 'missed'] as const;
 const LOCAL_DT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
 
@@ -39,6 +59,7 @@ function goalView(db: DatabaseSync, r: Row) {
     id: r.id as string, memberId: r.member_id as string, area: r.area as string, title: r.title as string, description: r.description as string | null,
     targetDate: r.target_date as string | null, status: r.status as string, progress: r.progress as number,
     createdAt: r.created_at as string, metAt: r.met_at as string | null, history,
+    rewardStep: (r.reward_step as number) ?? 0, rewardMet: (r.reward_met as number) ?? 0, rewardMetPaid: !!r.reward_met_paid,
   };
 }
 
@@ -53,8 +74,11 @@ export function kidTherapyView(db: DatabaseSync, memberId: string, today: string
   const m = db.prepare('SELECT therapy_kid_visible FROM members WHERE id = ?').get(memberId) as Row | undefined;
   if (!m?.therapy_kid_visible) return null;
   return {
-    goals: (db.prepare("SELECT id, area, title, progress FROM therapy_goals WHERE member_id = ? AND status = 'active' ORDER BY created_at").all(memberId) as Row[])
-      .map((g) => ({ id: g.id as string, area: g.area as string, title: g.title as string, progress: g.progress as number })),
+    goals: (db.prepare("SELECT id, area, title, progress, reward_step, reward_met FROM therapy_goals WHERE member_id = ? AND status = 'active' ORDER BY created_at").all(memberId) as Row[])
+      .map((g) => ({
+        id: g.id as string, area: g.area as string, title: g.title as string, progress: g.progress as number,
+        rewardStep: g.reward_step as number, rewardMet: g.reward_met as number,
+      })),
     upcoming: (db.prepare(`SELECT id, kind, title, provider, starts_at FROM therapy_appointments
       WHERE member_id = ? AND status = 'scheduled' AND starts_at >= ? ORDER BY starts_at LIMIT 3`).all(memberId, today) as Row[])
       .map((a) => ({ id: a.id as string, kind: a.kind as string, title: a.title as string, provider: a.provider as string | null, startsAt: a.starts_at as string })),
@@ -139,9 +163,11 @@ export function therapyRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const b = (req.body ?? {}) as Row;
     if (b.targetDate != null && b.targetDate !== '' && !isIsoDate(b.targetDate)) throw new HttpError(400, 'Target dates look like 2026-12-01');
     const id = newId();
-    db.prepare(`INSERT INTO therapy_goals (id, home_id, member_id, area, title, description, target_date, progress, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    db.prepare(`INSERT INTO therapy_goals (id, home_id, member_id, area, title, description, target_date, progress, created_by, reward_step, reward_met)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(id, ctx.homeId, kid.id as string, oneOf(GOAL_AREAS, b.area, 'Area', 'development'), requireStr(b.title, 'Goal', 120), str(b.description, 2000),
-        (b.targetDate as string) || null, b.progress == null ? 0 : progressValue(b.progress), ctx.user?.id ?? null);
+        (b.targetDate as string) || null, b.progress == null ? 0 : progressValue(b.progress), ctx.user?.id ?? null,
+        rewardPoints(b.rewardStep), rewardPoints(b.rewardMet));
     return goalView(db, ownRow(db, 'therapy_goals', ctx, id));
   });
 
@@ -160,6 +186,19 @@ export function therapyRoutes(app: FastifyInstance, db: DatabaseSync): void {
       status,
       'progress' in b ? progressValue(b.progress) : status === 'met' ? 100 : cur.progress as number,
       status, cur.id as string);
+    if ('rewardStep' in b) db.prepare('UPDATE therapy_goals SET reward_step = ? WHERE id = ?').run(rewardPoints(b.rewardStep), cur.id as string);
+    if ('rewardMet' in b) db.prepare('UPDATE therapy_goals SET reward_met = ? WHERE id = ?').run(rewardPoints(b.rewardMet), cur.id as string);
+    // Reaching the goal pays its bonus once, even if it's later reopened and met again.
+    const after = ownRow(db, 'therapy_goals', ctx, cur.id as string);
+    if (after.status === 'met' && !after.reward_met_paid && (after.reward_met as number) > 0) {
+      tx(db, () => {
+        writeLedger(db, {
+          homeId: ctx.homeId, memberId: after.member_id as string, amount: after.reward_met as number, kind: 'bonus',
+          reason: rewardReason(db, after.member_id as string, after.title as string, true), date: homeToday(homeInfo(db, ctx.homeId)), by: byOf(ctx),
+        });
+        db.prepare('UPDATE therapy_goals SET reward_met_paid = 1 WHERE id = ?').run(cur.id as string);
+      });
+    }
     return goalView(db, ownRow(db, 'therapy_goals', ctx, cur.id as string));
   });
 
@@ -183,13 +222,27 @@ export function therapyRoutes(app: FastifyInstance, db: DatabaseSync): void {
     if (progress != null && !goalId) throw new HttpError(400, 'Progress goes with a goal');
     const date = isIsoDate(b.date) ? b.date : homeToday(homeInfo(db, ctx.homeId));
     const id = newId();
+    let awarded = 0;
     tx(db, () => {
       db.prepare(`INSERT INTO therapy_notes (id, home_id, member_id, goal_id, appointment_id, body, progress, date, by_name, created_by)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, ctx.homeId, kid.id as string, goalId, appointmentId, requireStr(b.body, 'Note', 4000), progress, date,
         ctx.user?.name ?? null, ctx.user?.id ?? null);
       if (goalId && progress != null) db.prepare("UPDATE therapy_goals SET progress = ?, updated_at = datetime('now') WHERE id = ?").run(progress, goalId);
+      // A practice note on an active goal with step points pays them (a planned step saved from a tip doesn't).
+      if (goalId && b.noReward !== true) {
+        const g = ownRow(db, 'therapy_goals', ctx, goalId);
+        const pts = g.reward_step as number;
+        if (pts > 0 && g.status === 'active') {
+          writeLedger(db, {
+            homeId: ctx.homeId, memberId: kid.id as string, amount: pts, kind: 'bonus',
+            reason: rewardReason(db, kid.id as string, g.title as string, false), date: homeToday(homeInfo(db, ctx.homeId)), by: byOf(ctx),
+          });
+          db.prepare('UPDATE therapy_notes SET awarded = ? WHERE id = ?').run(pts, id);
+          awarded = pts;
+        }
+      }
     });
-    return { id };
+    return { id, awarded };
   });
 
   app.delete('/api/homes/:homeId/therapy/notes/:id', async (req) => {

@@ -86,7 +86,7 @@ export interface Board {
   today: string; weekStart: string; kid: Kid; stats: KidWeek; todayItems: AgendaItem[]; week: Day[]; goals: Goal[];
   bonus: BonusOffer[]; level: LevelInfo; streak: Streak; achievements: Achievement[]; recent: LedgerEntry[];
   /** Present only when a parent shares the kid's therapy goals with them. */
-  therapy: { goals: { id: string; area: string; title: string; progress: number }[]; upcoming: { id: string; kind: string; title: string; provider: string | null; startsAt: string }[] } | null;
+  therapy: { goals: { id: string; area: string; title: string; progress: number; rewardStep: number; rewardMet: number }[]; upcoming: { id: string; kind: string; title: string; provider: string | null; startsAt: string }[] } | null;
 }
 
 export interface QuickReward { id: string; title: string; icon: string; amount: number }

@@ -234,6 +234,9 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
             <div key={g.id} className="goal">
               <div className="row" style={{ justifyContent: 'space-between' }}>
                 <strong>{AREA_ICONS[g.area] ?? '🌱'} {g.title}</strong>
+                {(g.rewardStep > 0 || g.rewardMet > 0) && (
+                  <span className="pill ok">{g.rewardStep > 0 && `+${g.rewardStep} ${icon} each practice`}{g.rewardStep > 0 && g.rewardMet > 0 && ' · '}{g.rewardMet > 0 && `+${g.rewardMet} ${icon} when you get there!`}</span>
+                )}
                 <span className="small">{g.progress}%</span>
               </div>
               <ProgressBar percent={g.progress} color={kid.color} />

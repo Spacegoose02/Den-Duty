@@ -386,6 +386,13 @@ const MIGRATIONS: string[] = [
   ALTER TABLE members ADD COLUMN birthdate TEXT;
   ALTER TABLE members ADD COLUMN picture_mode TEXT NOT NULL DEFAULT 'auto' CHECK (picture_mode IN ('auto', 'on', 'off'));
   `,
+  // Therapy goals can earn points: some for each practice/progress note, and a bonus (paid once) when the goal is met.
+  `
+  ALTER TABLE therapy_goals ADD COLUMN reward_step INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE therapy_goals ADD COLUMN reward_met INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE therapy_goals ADD COLUMN reward_met_paid INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE therapy_notes ADD COLUMN awarded INTEGER NOT NULL DEFAULT 0;
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

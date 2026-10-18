@@ -76,3 +76,34 @@ test('kids have birthdays; age and picture mode follow, and AI ideas get the age
   assert.ok(!text.includes('Avaleigh'));
   setAiFetch(undefined);
 });
+
+test('therapy goals earn points through the ledger, worded kindly and privately', async () => {
+  const { call, mom, base, ava, tablet, asKid } = await family();
+  const t = `${base}/kids/${ava.id}/therapy`;
+  assert.equal((await call(mom, 'POST', `${t}/goals`, { title: 'x', rewardStep: -1 })).status, 400);
+  const goal = (await call(mom, 'POST', `${t}/goals`, { area: 'speech', title: 'Say "s" clearly', rewardStep: 2, rewardMet: 10 })).body;
+  assert.deepEqual([goal.rewardStep, goal.rewardMet, goal.rewardMetPaid], [2, 10, false]);
+
+  const practice = await call(mom, 'POST', `${t}/notes`, { goalId: goal.id, body: 'Practiced with flashcards', progress: 30 });
+  assert.equal(practice.body.awarded, 2);
+  assert.equal((await call(mom, 'POST', `${t}/notes`, { goalId: goal.id, body: 'Plan: try the snake game', noReward: true })).body.awarded, 0, 'saved plans are not paid');
+  assert.equal((await call(mom, 'POST', `${t}/notes`, { body: 'General note' })).body.awarded, 0);
+
+  await call(mom, 'PATCH', `${base}/therapy/goals/${goal.id}`, { status: 'met' });
+  await call(mom, 'PATCH', `${base}/therapy/goals/${goal.id}`, { status: 'active' });
+  const met = (await call(mom, 'PATCH', `${base}/therapy/goals/${goal.id}`, { status: 'met' })).body;
+  assert.equal(met.rewardMetPaid, true);
+
+  const ledger = (await call(mom, 'GET', `${base}/kids/${ava.id}/ledger`)).body;
+  assert.equal(ledger.balance, 12, 'the met bonus is paid once');
+  assert.deepEqual(ledger.entries.map((e: { reason: string }) => e.reason), ['🏆 You reached a big goal!', '🌈 Great practice!'], 'the goal stays private until shared');
+
+  // Shared with the kid: the board shows what each practice earns, and new entries name the goal.
+  const goal2 = (await call(mom, 'POST', `${t}/goals`, { area: 'feeding', title: 'Try a new food', rewardStep: 3 })).body;
+  await call(mom, 'PATCH', t, { kidVisible: true });
+  await call(mom, 'POST', `${t}/notes`, { goalId: goal2.id, body: 'Tried peas' });
+  await asKid(ava);
+  const board = (await call(tablet, 'GET', `${base}/kids/${ava.id}/board`)).body;
+  assert.equal(board.therapy.goals[0].rewardStep, 3);
+  assert.equal(board.recent[0].reason, '🌈 Great practice: Try a new food');
+});

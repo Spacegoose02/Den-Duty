@@ -7,7 +7,7 @@ import { LineChart } from '../components/Charts.tsx';
 import { seriesColor } from '../../../shared/catalog.ts';
 
 interface Appointment { id: string; kind: string; title: string; provider: string | null; location: string | null; startsAt: string; durationMinutes: number | null; status: string; notes: string | null }
-interface TGoal { id: string; area: string; title: string; description: string | null; targetDate: string | null; status: string; progress: number; metAt: string | null; history: { date: string; progress: number }[] }
+interface TGoal { id: string; area: string; title: string; description: string | null; targetDate: string | null; status: string; progress: number; metAt: string | null; history: { date: string; progress: number }[]; rewardStep: number; rewardMet: number; rewardMetPaid: boolean }
 interface TNote { id: string; goalId: string | null; goalTitle: string | null; body: string; progress: number | null; date: string; by: string | null }
 interface TherapyData { kidVisible: boolean; appointments: Appointment[]; goals: TGoal[]; notes: TNote[] }
 
@@ -18,10 +18,11 @@ const KIND_LABELS: Record<string, string> = {
   doctor: 'Doctor', speech: 'Speech', feeding: 'Feeding', occupational: 'Occupational therapy', physical: 'Physical therapy', behavioral: 'Behavioral', dental: 'Dentist', other: 'Other',
 };
 export const AREA_ICONS: Record<string, string> = {
-  development: '🌱', speech: '🗣️', feeding: '🥄', doctor: '🩺', motor: '🤸', social: '🤝', other: '📌',
+  development: '🌱', speech: '🗣️', feeding: '🥄', doctor: '🩺', motor: '✋', sensory: '🌀', selfcare: '🪥', social: '🤝', other: '📌',
 };
 const AREA_LABELS: Record<string, string> = {
-  development: 'Development', speech: 'Speech', feeding: 'Feeding', doctor: 'Doctor / health', motor: 'Motor skills', social: 'Social', other: 'Other',
+  development: 'Development', speech: 'Speech', feeding: 'Feeding', doctor: 'Doctor / health', motor: 'Fine / gross motor', sensory: 'Sensory',
+  selfcare: 'Self-care', social: 'Social', other: 'Other',
 };
 
 export const whenText = (local: string) => {
@@ -62,7 +63,7 @@ function AppointmentForm({ onSave, onClose }: { onSave: (a: object) => Promise<v
 }
 
 function GoalCard({ goal, color, onChange, base }: { goal: TGoal; color: string; onChange: () => Promise<void>; base: string }) {
-  const { toast } = useApp();
+  const { toast, home } = useApp();
   const [note, setNote] = useState('');
   const [progress, setProgress] = useState(goal.progress);
   const run = async (fn: () => Promise<unknown>) => { try { await fn(); await onChange(); } catch (e) { toast((e as Error).message); } };
@@ -79,6 +80,7 @@ function GoalCard({ goal, color, onChange, base }: { goal: TGoal; color: string;
         <span style={{ fontWeight: 800, fontSize: '1.3rem' }}>{goal.progress}%</span>
       </div>
       {goal.description && <p className="small" style={{ margin: 0 }}>{goal.description}</p>}
+      <RewardEditor goal={goal} onSaved={onChange} goalUrl={goalUrl(base, goal.id)} />
       <ProgressBar percent={goal.progress} color={goal.status === 'met' ? 'var(--ok)' : color} />
       {goal.history.length >= 2 && (
         <LineChart height={150} unit="%" labels={history.map((h) => shortDate(h.date))} series={[{ id: goal.id, name: 'Progress', color, values: history.map((h) => h.progress) }]} />
@@ -87,9 +89,9 @@ function GoalCard({ goal, color, onChange, base }: { goal: TGoal; color: string;
         <form className="stack" onSubmit={(e) => {
           e.preventDefault();
           void run(async () => {
-            await api(`${base}/notes`, { body: { goalId: goal.id, body: note, progress } });
+            const r = await api<{ awarded: number }>(`${base}/notes`, { body: { goalId: goal.id, body: note, progress } });
             setNote('');
-            toast('Progress saved');
+            toast(r.awarded ? `Progress saved, +${r.awarded} ${home?.pointsIcon ?? ''} for practicing` : 'Progress saved');
           });
         }}>
           <div className="row">
@@ -113,6 +115,31 @@ function GoalCard({ goal, color, onChange, base }: { goal: TGoal; color: string;
   );
 }
 
+function RewardEditor({ goal, goalUrl, onSaved }: { goal: TGoal; goalUrl: string; onSaved: () => Promise<void> }) {
+  const { home, toast } = useApp();
+  const [open, setOpen] = useState(false);
+  const [r, setR] = useState({ rewardStep: goal.rewardStep, rewardMet: goal.rewardMet });
+  const icon = home?.pointsIcon ?? '✨';
+  if (!open) {
+    return (
+      <button type="button" className="ghost small" style={{ alignSelf: 'flex-start', minHeight: 36 }} onClick={() => setOpen(true)}>
+        🎁 {goal.rewardStep || goal.rewardMet ? `+${goal.rewardStep} ${icon} per practice · +${goal.rewardMet} ${icon} when reached${goal.rewardMetPaid ? ' (paid)' : ''}` : 'Add a reward'}
+      </button>
+    );
+  }
+  return (
+    <form className="row" onSubmit={async (e) => {
+      e.preventDefault();
+      try { await api(goalUrl, { method: 'PATCH', body: r }); toast('Rewards saved'); setOpen(false); await onSaved(); } catch (err) { toast((err as Error).message); }
+    }}>
+      <label className="small">{icon} per practice <input type="number" min={0} value={r.rewardStep} onChange={(e) => setR({ ...r, rewardStep: Math.max(0, Math.round(Number(e.target.value) || 0)) })} style={{ width: 90 }} /></label>
+      <label className="small">{icon} when reached <input type="number" min={0} value={r.rewardMet} onChange={(e) => setR({ ...r, rewardMet: Math.max(0, Math.round(Number(e.target.value) || 0)) })} style={{ width: 90 }} /></label>
+      <button>Save</button>
+      <button type="button" className="ghost" onClick={() => setOpen(false)}>Cancel</button>
+    </form>
+  );
+}
+
 /** base is /api/homes/:id/kids/:kid/therapy; goal edits live at /api/homes/:id/therapy/goals/:goal. */
 const goalUrl = (base: string, id: string) => base.replace(/\/kids\/[^/]+\/therapy$/, `/therapy/goals/${id}`);
 
@@ -123,7 +150,7 @@ export function Therapy() {
   const tBase = kid ? `${base}/kids/${kid.id}/therapy` : null;
   const [data, reload] = useLoad<TherapyData>(tBase, [tBase]);
   const [adding, setAdding] = useState<'appointment' | 'goal' | null>(null);
-  const [goal, setGoal] = useState({ area: 'speech', title: '', description: '', targetDate: '' });
+  const [goal, setGoal] = useState({ area: 'speech', title: '', description: '', targetDate: '', rewardStep: 0, rewardMet: 0 });
   const [note, setNote] = useState('');
   const [showPast, setShowPast] = useState(false);
   if (!home) return null;
@@ -225,7 +252,7 @@ export function Therapy() {
         <Modal onClose={() => setAdding(null)}>
           <form className="stack" onSubmit={(e) => {
             e.preventDefault();
-            void run(async () => { await api(`${tBase}/goals`, { body: goal }); setAdding(null); setGoal({ area: 'speech', title: '', description: '', targetDate: '' }); }, 'Goal added');
+            void run(async () => { await api(`${tBase}/goals`, { body: goal }); setAdding(null); setGoal({ area: 'speech', title: '', description: '', targetDate: '', rewardStep: 0, rewardMet: 0 }); }, 'Goal added');
           }}>
             <h2 style={{ margin: 0 }}>New goal for {kid?.name}</h2>
             <div className="chips">
@@ -233,6 +260,15 @@ export function Therapy() {
             </div>
             <input placeholder="Goal, e.g. Use 3-word sentences" value={goal.title} onChange={(e) => setGoal({ ...goal, title: e.target.value })} autoFocus />
             <textarea placeholder="Details from the therapist or doctor (optional)" value={goal.description} onChange={(e) => setGoal({ ...goal, description: e.target.value })} style={{ minHeight: 80 }} />
+            <div className="row">
+              <label className="field">{home?.pointsIcon} per practice
+                <input type="number" min={0} value={goal.rewardStep} onChange={(e) => setGoal({ ...goal, rewardStep: Math.max(0, Math.round(Number(e.target.value) || 0)) })} style={{ width: 120 }} />
+              </label>
+              <label className="field">{home?.pointsIcon} when reached
+                <input type="number" min={0} value={goal.rewardMet} onChange={(e) => setGoal({ ...goal, rewardMet: Math.max(0, Math.round(Number(e.target.value) || 0)) })} style={{ width: 120 }} />
+              </label>
+            </div>
+            <p className="small muted" style={{ margin: 0 }}>Optional. Each progress note pays the practice {home?.pointsName}; reaching the goal pays the bonus once. Kids see “Great practice!” (with the goal's name only if you share therapy with them).</p>
             <label className="field">Aiming for (optional)
               <input type="date" value={goal.targetDate} onChange={(e) => setGoal({ ...goal, targetDate: e.target.value })} style={{ maxWidth: 220 }} />
             </label>
