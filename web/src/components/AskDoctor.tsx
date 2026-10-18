@@ -5,7 +5,8 @@ import { DoctorRaccoon } from './Raccoon.tsx';
 import { DOCTOR_NAME } from '../../../shared/pages.ts';
 
 interface Answer { id: string; question: string; answer: string; urgent: boolean; at?: string }
-interface AskInfo { name: string; disclaimer: string; urgentNote: string; history: Answer[] }
+interface Topic { id: string; icon: string; label: string; ask: string }
+interface AskInfo { name: string; disclaimer: string; urgentNote: string; history: Answer[]; topics: Topic[] }
 
 /**
  * "Ask Dr. Bandit" in Doctors: a parent asks about one kid. Only shows when AI ideas are on. The server sends just the
@@ -19,11 +20,11 @@ export function AskDoctorCard({ kidId, kidName }: { kidId: string; kidName: stri
   const [busy, setBusy] = useState(false);
   if (!ai?.enabled || !info) return null;
 
-  const ask = async () => {
+  const ask = async (topic?: string) => {
     setBusy(true);
     try {
-      await api(`${base}/kids/${kidId}/doctors/ask`, { body: { question } });
-      setQuestion('');
+      await api(`${base}/kids/${kidId}/doctors/ask`, { body: topic ? { topic } : { question } });
+      if (!topic) setQuestion('');
       await reload();
     } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
   };
@@ -37,6 +38,14 @@ export function AskDoctorCard({ kidId, kidName }: { kidId: string; kidName: stri
           <span className="small muted">Questions about {kidName}, using their age and the sections you follow here. Only you see this.</span>
         </div>
       </div>
+      {info.topics.length > 0 && (
+        <div className="stack" style={{ gap: 6 }}>
+          <strong className="small">🧩 Feelings and behavior: ideas for {kidName}'s age</strong>
+          <div className="chips">
+            {info.topics.map((t) => <button key={t.id} type="button" className="chip" disabled={busy} title={t.ask} onClick={() => void ask(t.id)}>{t.icon} {t.label}</button>)}
+          </div>
+        </div>
+      )}
       <form className="row" onSubmit={(e) => { e.preventDefault(); void ask(); }}>
         <input placeholder={`e.g. How can I help ${kidName} practice "s" sounds at bath time?`} value={question} onChange={(e) => setQuestion(e.target.value)} maxLength={500} style={{ flex: 1, minWidth: 220 }} />
         <button className="primary" disabled={busy || !question.trim()}>{busy ? 'Thinking…' : 'Ask'}</button>

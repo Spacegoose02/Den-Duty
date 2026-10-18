@@ -134,3 +134,26 @@ test(`Ask ${DOCTOR_NAME}: parent-only, AI-gated, scoped to the kid's areas, shor
   assert.equal((await call(mom, 'POST', ask, { question: 'x' })).status, 403, 'off with the Doctors page');
   setAiFetch(undefined);
 });
+
+test(`${DOCTOR_NAME} behavior topics: quick buttons with age-aware ideas, only when Behavioral is on`, async () => {
+  const { call, mom, base, ava } = await family();
+  const ask = `${base}/kids/${ava.id}/doctors/ask`;
+  const sent: Sent[] = [];
+  fakeClaude(sent, () => ({ answer: 'Name the feeling, then breathe together like blowing out candles.', urgent: false }));
+  await call(mom, 'PATCH', `${base}/ai`, { apiKey: 'sk-ant-api03-test-key-abcdefghijklmnop', enabled: true });
+
+  const info = (await call(mom, 'GET', ask)).body;
+  assert.ok(info.topics.some((t: { id: string }) => t.id === 'anger') && info.topics.some((t: { id: string }) => t.id === 'meltdowns'));
+  const r = (await call(mom, 'POST', ask, { topic: 'anger' })).body;
+  assert.match(r.question, /Anger/);
+  assert.match(r.disclaimer, /not medical advice/i);
+  const body = JSON.stringify(sent[0].body);
+  assert.ok(body.includes('4 years old') && body.includes('feelings and behavior') && body.includes('handle anger'));
+  assert.ok(!body.includes('Avaleigh'), 'no names');
+  assert.equal((await call(mom, 'POST', ask, { topic: 'nope' })).status, 400);
+
+  await call(mom, 'PATCH', `${base}/kids/${ava.id}`, { doctorAreasOff: ['behavioral'] });
+  assert.equal((await call(mom, 'GET', ask)).body.topics.length, 0);
+  assert.equal((await call(mom, 'POST', ask, { topic: 'anger' })).status, 403);
+  setAiFetch(undefined);
+});

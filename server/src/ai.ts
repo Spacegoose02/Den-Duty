@@ -235,8 +235,12 @@ high fever in a baby, dehydration, a sudden change, self-harm), say clearly to c
 Stay within the areas the parent has turned on; if the question is outside them, answer briefly and suggest asking their doctor.`;
 
 /** Only the age, the areas turned on, active goal text and the question are sent. Never names, notes or appointments. */
-export function askPrompt(age: number | null, areas: string[], goals: string[], question: string): string {
+const BEHAVIOR_FOCUS = 'The parent wants practical, age-appropriate ideas for feelings and behavior: what to say, what to try in the moment, and '
+  + 'how to practice when everyone is calm. Be gentle and positive: name the feeling, connect first, no shaming or harsh punishment.';
+
+export function askPrompt(age: number | null, areas: string[], goals: string[], question: string, behavior = false): string {
   return [
+    behavior ? BEHAVIOR_FOCUS : '',
     age != null ? `The child is ${age} years old.` : "The child's age isn't known.",
     `Areas the parent follows for this child: ${areas.length ? areas.join(', ') : 'none set'}.`,
     goals.length ? `Current goals: ${goals.slice(0, 15).join('; ')}.` : '',
@@ -244,7 +248,7 @@ export function askPrompt(age: number | null, areas: string[], goals: string[], 
   ].filter(Boolean).join('\n');
 }
 
-export async function askDoctor(db: DatabaseSync, homeId: string, name: string, age: number | null, areas: string[], goals: string[], question: string): Promise<{ answer: string; urgent: boolean }> {
-  const r = await askJson<{ answer: string; urgent: boolean }>(db, homeId, ASK_SYSTEM(name), askPrompt(age, areas, goals, question), ASK_SCHEMA);
+export async function askDoctor(db: DatabaseSync, homeId: string, name: string, age: number | null, areas: string[], goals: string[], question: string, behavior = false): Promise<{ answer: string; urgent: boolean }> {
+  const r = await askJson<{ answer: string; urgent: boolean }>(db, homeId, ASK_SYSTEM(name), askPrompt(age, areas, goals, question, behavior), ASK_SCHEMA);
   return { answer: String(r.answer ?? '').slice(0, 2000), urgent: !!r.urgent };
 }

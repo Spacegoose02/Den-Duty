@@ -5,7 +5,7 @@ import type { Row } from '../db.ts';
 import { HttpError, num, str } from '../util.ts';
 import { earnedBetween, homeInfo, homeToday } from '../chores.ts';
 import { aiSettings, ASK_DISCLAIMER, askDoctor, sealKey, suggest, therapyHelper, THERAPY_DISCLAIMER, URGENT_NOTE, type HelperArea, type IdeaKind } from '../ai.ts';
-import { DOCTOR_AREAS, DOCTOR_NAME, GOAL_AREA_SECTION } from '../../../shared/pages.ts';
+import { BEHAVIOR_TOPICS, DOCTOR_AREAS, DOCTOR_NAME, GOAL_AREA_SECTION } from '../../../shared/pages.ts';
 import { newId } from '../util.ts';
 import { OT_AREAS } from './therapy.ts';
 import type { HomeCtx } from '../auth.ts';
@@ -129,7 +129,9 @@ export function aiRoutes(app: FastifyInstance, db: DatabaseSync): void {
   app.get('/api/homes/:homeId/kids/:memberId/doctors/ask', async (req) => {
     const ctx = homeCtx(db, req, 'parent');
     const kid = getKid(db, ctx, (req.params as { memberId: string }).memberId);
-    return { name: DOCTOR_NAME, disclaimer: ASK_DISCLAIMER, urgentNote: URGENT_NOTE, history: history(kid.id as string) };
+    // Quick behavior topics only when the Behavioral section is on for this kid.
+    const behavior = !doctorAreasOff(db, kid.id as string).includes('behavioral');
+    return { name: DOCTOR_NAME, disclaimer: ASK_DISCLAIMER, urgentNote: URGENT_NOTE, history: history(kid.id as string), topics: behavior ? BEHAVIOR_TOPICS : [] };
   });
 
   app.post('/api/homes/:homeId/kids/:memberId/doctors/ask', async (req) => {
@@ -137,14 +139,19 @@ export function aiRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const kid = kidView(db, getKid(db, ctx, (req.params as { memberId: string }).memberId));
     if (!pageOn(db, kid.id, 'doctors')) throw new HttpError(403, `Doctors is turned off for ${kid.name}`);
     if (!aiSettings(db, ctx.homeId).enabled) throw new HttpError(403, 'AI ideas are turned off. A parent can turn them on in Settings.');
-    const question = str((req.body as Row)?.question, 500);
+    const off = doctorAreasOff(db, kid.id);
+    // A quick topic button sends a topic id; the question for it is fixed here.
+    const topicId = (req.body as Row)?.topic;
+    const topic = topicId ? BEHAVIOR_TOPICS.find((t) => t.id === topicId) : undefined;
+    if (topicId && !topic) throw new HttpError(400, 'Unknown topic');
+    if (topic && off.includes('behavioral')) throw new HttpError(403, `Behavioral is turned off for ${kid.name}`);
+    const question = topic ? `${topic.icon} ${topic.label}: ${topic.ask}` : str((req.body as Row)?.question, 500);
     if (!question) throw new HttpError(400, 'Type a question');
     rateLimit(`ai:${ctx.homeId}`, 40, 15 * 60e3);
-    const off = doctorAreasOff(db, kid.id);
     const areas = DOCTOR_AREAS.filter((a) => a.id !== 'appointments' && !off.includes(a.id)).map((a) => a.label);
     const goals = (db.prepare("SELECT title, area FROM therapy_goals WHERE member_id = ? AND status = 'active'").all(kid.id) as Row[])
       .filter((g) => { const sec = GOAL_AREA_SECTION[g.area as string]; return !sec || !off.includes(sec); }).map((g) => g.title as string);
-    const r = await askDoctor(db, ctx.homeId, DOCTOR_NAME, kid.age, areas, goals, question);
+    const r = await askDoctor(db, ctx.homeId, DOCTOR_NAME, kid.age, areas, goals, topic ? topic.ask : question, !!topic);
     const id = newId();
     db.prepare('INSERT INTO ai_questions (id, member_id, home_id, question, answer) VALUES (?, ?, ?, ?, ?)').run(id, kid.id, ctx.homeId, question, JSON.stringify(r));
     // A short history: the newest 10 are kept.

@@ -61,3 +61,19 @@ export const appointmentOn = (kind: string, off: readonly string[]) => {
 
 /** The raccoon doctor who answers "Ask" questions in Doctors. One place to rename it. */
 export const DOCTOR_NAME = 'Dr. Bandit';
+
+/** Quick topics for Dr. Bandit in Doctors > Behavioral: age-appropriate ideas for feelings and behavior. */
+export const BEHAVIOR_TOPICS = [
+  { id: 'anger', icon: '😠', label: 'Anger', ask: 'How can I help my child calm down and handle anger without hurting anyone?' },
+  { id: 'sadness', icon: '😢', label: 'Sadness', ask: 'How can I comfort my child when they feel sad, and help them talk about it?' },
+  { id: 'worry', icon: '😟', label: 'Worry', ask: 'What helps a child who worries a lot or feels anxious?' },
+  { id: 'frustration', icon: '😤', label: 'Frustration', ask: 'How can I help my child cope when something is hard and they want to give up?' },
+  { id: 'meltdowns', icon: '🌋', label: 'Meltdowns', ask: 'What can I do during and after a meltdown, and how can I help prevent them?' },
+  { id: 'transitions', icon: '🔁', label: 'Transitions', ask: 'How can I make stopping one thing and starting another (like screen time ending) easier?' },
+  { id: 'listening', icon: '👂', label: 'Listening', ask: 'How can I get my child to listen the first time without yelling?' },
+  { id: 'siblings', icon: '🤼', label: 'Sibling fights', ask: 'What helps when siblings fight a lot?' },
+  { id: 'bedtime', icon: '🌙', label: 'Bedtime', ask: 'How can I make bedtime calmer when my child resists it?' },
+  { id: 'jealousy', icon: '💚', label: 'Jealousy', ask: 'How can I help my child with jealousy?' },
+  { id: 'fears', icon: '👻', label: 'Fears', ask: 'How can I help my child with fears, like the dark or new places?' },
+  { id: 'kindness', icon: '🤝', label: 'Being kind', ask: 'How can I encourage kindness, sharing and saying sorry?' },
+] as const;
