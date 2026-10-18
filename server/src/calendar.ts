@@ -6,6 +6,7 @@ import type { Row } from './db.ts';
 import { randomToken } from './util.ts';
 import { agenda, homeInfo, homeToday, kidsWithPageOff, type HomeInfo } from './chores.ts';
 import { dutyDue } from './routes/parentduty.ts';
+import { remindersDue } from './routes/reminders.ts';
 import { appointmentOn, DOCTOR_AREA_IDS, offList } from '../../shared/pages.ts';
 
 const doctorAreasOffFor = (db: DatabaseSync, memberId: string) =>
@@ -74,6 +75,9 @@ export function calendarFor(db: DatabaseSync, token: string): string | null {
     }
   }
   if (!kid) {
+    for (const r of remindersDue(db, info.id, from, addDays(today, 120))) {
+      events.push({ uid: `reminder-${r.id}@den-duty`, date: r.dueDate!, time: r.dueTime, durationMinutes: 15, summary: `🔔 ${r.kidName ? `${r.kidName}: ` : ''}${r.title}`, description: r.notes });
+    }
     for (const d of dutyDue(db, info.id, from, addDays(today, 60))) {
       events.push({ uid: `duty-${d.id}@den-duty`, date: d.dueDate!, summary: `📝 ${d.kidName ? `For ${d.kidName}: ` : ''}${d.title}`, description: d.notes });
     }

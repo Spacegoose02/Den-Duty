@@ -5,7 +5,8 @@ import type { Row } from './db.ts';
 
 export type EventType = 'chore_submitted' | 'chore_approved' | 'goal_reached' | 'goal_redeemed' | 'points_changed'
   | 'timeout_started' | 'timeout_ended' | 'timeout_buy_requested' | 'timeout_time_bought'
-  | 'helpdesk_requested' | 'helpdesk_answered';
+  | 'helpdesk_requested' | 'helpdesk_answered'
+  | 'reminder_due' | 'reminder_done';
 
 /** Swapped out in tests so nothing leaves the machine. */
 export let deliver = async (url: string, payload: unknown): Promise<void> => {

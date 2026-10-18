@@ -19,7 +19,7 @@ interface TherapyData { kidVisible: boolean; appointments: Appointment[]; goals:
 export const KIND_ICONS: Record<string, string> = {
   doctor: '🩺', speech: '🗣️', feeding: '🥄', occupational: '✋', physical: '🏃', behavioral: '🧩', dental: '🦷', other: '📌',
 };
-const KIND_LABELS: Record<string, string> = {
+export const KIND_LABELS: Record<string, string> = {
   doctor: 'Doctor', speech: 'Speech', feeding: 'Feeding', occupational: 'Occupational therapy', physical: 'Physical therapy', behavioral: 'Behavioral', dental: 'Dentist', other: 'Other',
 };
 export const AREA_ICONS: Record<string, string> = {

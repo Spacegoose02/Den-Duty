@@ -12,6 +12,7 @@ import { kidTherapyView, withDoctors } from './therapy.ts';
 import { dutyDue } from './parentduty.ts';
 import { homeTimeouts, kidTimeouts } from './timeouts.ts';
 import { waitingRequests } from './helpdesk.ts';
+import { listReminders, remindersDue } from './reminders.ts';
 import { roomMessage } from '../roommessage.ts';
 import { externalBetween, refreshStale } from '../calendar.ts';
 import { cleanIcon, doctorAreasOff, getKid, kidView, listKids, pageOn } from './homes.ts';
@@ -179,7 +180,8 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const withExt = withDoctors(db, await withFeeds(db, ctx, agenda(db, ctx.homeId, kidIds, start, days, today), ctx.actor.kind === 'kid' ? ctx.actor.memberId : q.kid), doctorKids(db, ctx, q.kid), ctx.actor.kind !== 'parent');
     if (ctx.actor.kind !== 'parent' || q.kid) return { today, start, days: withExt };
     const duty = dutyDue(db, ctx.homeId, start, addDays(start, days - 1));
-    return { today, start, days: withExt.map((d) => ({ ...d, duty: duty.filter((x) => x.dueDate === d.date) })) };
+    const reminders = remindersDue(db, ctx.homeId, start, addDays(start, days - 1));
+    return { today, start, days: withExt.map((d) => ({ ...d, duty: duty.filter((x) => x.dueDate === d.date), reminders: reminders.filter((x) => x.dueDate === d.date) })) };
   });
 
   // Everything a kid's screen needs in one go.
@@ -342,6 +344,8 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
       waiting: reviewQueue(db, ctx.homeId).length,
       timeouts: homeTimeouts(db, ctx.homeId),
       helpdesk: waitingRequests(db, ctx.homeId),
+      // Overdue, due today and the next week (undated ones live on the Reminders page).
+      reminders: listReminders(db, ctx.homeId).filter((r) => r.state === 'overdue' || r.state === 'today' || (r.state === 'upcoming' && r.dueDate! <= addDays(today, 7))),
       kids: listKids(db, ctx.homeId).map((k) => ({
         ...k, ...kidWeek(db, home, k.id, today), goals: goalsFor(db, k.id), streak: streaks(db, k.id, today), level: levelOf(db, k.id),
       })),

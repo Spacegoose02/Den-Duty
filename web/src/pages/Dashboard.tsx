@@ -9,6 +9,7 @@ import { IdeasButton } from '../components/Ideas.tsx';
 import { TodaysTipsCard } from '../components/TherapyHelper.tsx';
 import { TimeoutCard, TimeoutForm } from '../components/Timeouts.tsx';
 import { HelpdeskCard } from '../components/Helpdesk.tsx';
+import { RemindersCard } from '../components/Reminders.tsx';
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -86,6 +87,7 @@ export function Dashboard() {
         {queue && !queue.length && <p className="muted" style={{ margin: 0 }}>Nothing waiting. 🦝 The raccoons are on it.</p>}
       </section>
 
+      {summary && <RemindersCard items={summary.reminders} onChange={() => void reloadSummary()} />}
       {summary && <HelpdeskCard items={summary.helpdesk} onChange={() => void reloadSummary()} />}
 
       {!!summary?.timeouts.length && (

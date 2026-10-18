@@ -13,6 +13,7 @@ import { eventView } from '../events.ts';
 import { listKids } from './homes.ts';
 import { homeTimeouts } from './timeouts.ts';
 import { waitingRequests } from './helpdesk.ts';
+import { listReminders } from './reminders.ts';
 
 const slug = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'kid';
 
@@ -56,6 +57,7 @@ export function haRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const waiting = reviewQueue(db, ctx.homeId);
     const timeouts = homeTimeouts(db, ctx.homeId);
     const helpdesk = waitingRequests(db, ctx.homeId);
+    const reminders = listReminders(db, ctx.homeId).filter((r) => r.state === 'today' || r.state === 'overdue');
     const kids = listKids(db, ctx.homeId).map((k) => {
       const off = new Set(k.pagesOff);
       const w = kidWeek(db, home, k.id, today);
@@ -92,6 +94,7 @@ export function haRoutes(app: FastifyInstance, db: DatabaseSync): void {
     return {
       home: home.name, points_name: home.pointsName, points_icon: home.pointsIcon, today,
       helpdesk_waiting: helpdesk.length,
+      reminders_due: reminders.length, reminders_overdue: reminders.filter((r) => r.state === 'overdue').length, reminders_due_titles: reminders.map((r) => r.title),
       active_timeouts: timeouts.filter((t) => t.state === 'active').length,
       timeout_requests_waiting: timeouts.filter((t) => t.pending).length,
       waiting_for_review: waiting.filter((i) => !kids.find((k) => k.id === i.memberId)?.pages_off.includes('chores')).length, kids, kids_by_name: Object.fromEntries(kids.map((k) => [k.slug, k])),

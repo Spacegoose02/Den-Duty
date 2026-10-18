@@ -7,6 +7,8 @@ import { dayName, shortDate, STATUS_LABEL } from '../components/Bits.tsx';
 import { FEED_ICONS } from './Calendars.tsx';
 import { AREA_ICONS, AppointmentForm, KIND_ICONS, NO_PRACTICE, PracticeFields, practiceReady, timeText, type PracticeForm } from './Doctors.tsx';
 import { Modal } from '../components/Bits.tsx';
+import { ReminderForm } from '../components/Reminders.tsx';
+import type { Reminder } from '../api.ts';
 import { addDays, startOfWeek } from '../../../shared/schedule.ts';
 
 const mark = (i: AgendaItem) => (i.status === 'approved' ? '✅' : i.status === 'submitted' ? '⏳' : i.status === 'rejected' ? '🔁' : '');
@@ -99,13 +101,13 @@ function AppointmentLine({ a, kid, withName, onEdit }: { a: AppointmentItem; kid
 }
 
 /** Everything on one day, grouped per kid: chores, practices, appointments; then Parent Duty and subscribed feeds. */
-interface Edits { appt: (a: AppointmentItem) => void; practice: (p: PracticeItem) => void; duty: (d: DutyItem) => void }
+interface Edits { appt: (a: AppointmentItem) => void; practice: (p: PracticeItem) => void; duty: (d: DutyItem) => void; reminder: (r: Reminder) => void }
 
 function DayDetail({ d, kids, today, parent, solo, onTap, onTick, edit }: {
   d: Day; kids: Kid[]; today: string; parent: boolean; solo: boolean; onTap?: (i: AgendaItem) => void; onTick?: (p: PracticeItem) => void; edit?: Edits;
 }) {
   const past = d.date <= today;
-  const empty = !d.items.length && !d.external?.length && !d.duty?.length && !d.practices?.length && !d.appointments?.length;
+  const empty = !d.items.length && !d.external?.length && !d.duty?.length && !d.reminders?.length && !d.practices?.length && !d.appointments?.length;
   return (
     <>
       {kids.map((k) => {
@@ -121,6 +123,13 @@ function DayDetail({ d, kids, today, parent, solo, onTap, onTick, edit }: {
           </div>
         );
       })}
+      {d.reminders?.map((r) => (
+        <button key={r.id} className="agenda-ext duty reminder-line as-button" title="Edit reminder" onClick={() => edit?.reminder(r)} disabled={!edit}>
+          <span aria-hidden>🔔</span>
+          <span style={{ flex: 1 }}>{r.dueTime && <strong>{timeText(r.dueTime)} </strong>}{r.kidName ? `${r.kidName}: ` : ''}{r.title}</span>
+          {edit && <span aria-hidden className="small">✏️</span>}
+        </button>
+      ))}
       {d.duty?.map((x) => (
         <button key={x.id} className="agenda-ext duty as-button" title="Change the due date" onClick={() => edit?.duty(x)} disabled={!edit}>
           <span aria-hidden>📝</span>
@@ -195,9 +204,9 @@ export function Calendar({ kidId, title = 'Calendar' }: { kidId?: string; title?
   const step = (n: number) => setAnchor(month ? addMonths(month, n) : addDays(start, 7 * n));
   const label = month ? MONTH_FMT.format(new Date(`${month}T00:00:00Z`)) : `${shortDate(start)} – ${shortDate(addDays(start, 6))}`;
   const pickedDay = data?.days.find((d) => d.date === picked);
-  const [editing, setEditing] = useState<{ appt?: AppointmentItem; practice?: PracticeItem; duty?: DutyItem } | null>(null);
+  const [editing, setEditing] = useState<{ appt?: AppointmentItem; practice?: PracticeItem; duty?: DutyItem; reminder?: Reminder } | null>(null);
   // Parents edit straight from the calendar; kids only look.
-  const edits: Edits | undefined = parent ? { appt: (a) => setEditing({ appt: a }), practice: (p) => setEditing({ practice: p }), duty: (d) => setEditing({ duty: d }) } : undefined;
+  const edits: Edits | undefined = parent ? { appt: (a) => setEditing({ appt: a }), practice: (p) => setEditing({ practice: p }), duty: (d) => setEditing({ duty: d }), reminder: (r) => setEditing({ reminder: r }) } : undefined;
   const done = async () => { setEditing(null); await reload(); };
 
   return (
@@ -249,6 +258,7 @@ export function Calendar({ kidId, title = 'Calendar' }: { kidId?: string; title?
                   })}
                   {d.appointments?.map((a) => <span key={a.id} className="month-line appt">{KIND_ICONS[a.kind] ?? '📌'} {timeText(a.time)}</span>)}
                   {!!d.duty?.length && <span className="month-line">📝 {d.duty.length}</span>}
+                  {!!d.reminders?.length && <span className="month-line">🔔 {d.reminders.length}</span>}
                   {!!d.external?.length && <span className="month-line muted">📅 {d.external.length}</span>}
                 </button>
               );
@@ -285,6 +295,7 @@ export function Calendar({ kidId, title = 'Calendar' }: { kidId?: string; title?
         />
       )}
       {editing?.practice && <PracticeEdit goalId={editing.practice.goalId} title={editing.practice.title} onClose={() => setEditing(null)} onDone={() => void done()} />}
+      {editing?.reminder && <ReminderForm initial={editing.reminder} onClose={() => setEditing(null)} onDone={() => void done()} />}
       {editing?.duty && <DutyDueEdit item={editing.duty} onClose={() => setEditing(null)} onDone={() => void done()} />}
     </div>
   );

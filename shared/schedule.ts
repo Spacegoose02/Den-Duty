@@ -34,6 +34,24 @@ export function todayIn(timeZone: string, now: Date = new Date()): string {
   }
 }
 
+/** Wall-clock time 'HH:MM' in a time zone. */
+export function timeIn(timeZone: string, now: Date = new Date()): string {
+  try {
+    return new Intl.DateTimeFormat('en-GB', { timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(now);
+  } catch {
+    return now.toISOString().slice(11, 16);
+  }
+}
+
+/** Adds months to a date, keeping the day where it can (Jan 31 + 1 month = Feb 28/29). */
+export function addMonths(iso: string, n: number): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  const target = new Date(Date.UTC(y, m - 1 + n, 1));
+  const last = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+  target.setUTCDate(Math.min(d, last));
+  return target.toISOString().slice(0, 10);
+}
+
 export function isTimeZone(v: unknown): v is string {
   if (typeof v !== 'string' || !v) return false;
   try {

@@ -544,6 +544,29 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE helpdesk_requests ADD COLUMN close_note TEXT;
   ALTER TABLE helpdesk_requests ADD COLUMN closed_by_kid INTEGER NOT NULL DEFAULT 0;
   `,
+  // Parents' reminders ("call to book Ava's dentist"): optional due date/time, kid tag and repeat. A repeating reminder
+  // moves to its next date when ticked. appt_kind marks a "make an appointment" reminder (it can become one).
+  `
+  CREATE TABLE reminders (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    notes TEXT,
+    kid_id TEXT REFERENCES members(id) ON DELETE SET NULL,
+    due_date TEXT,
+    due_time TEXT,
+    repeat_every INTEGER,
+    repeat_unit TEXT CHECK (repeat_unit IN ('day', 'week', 'month', 'year')),
+    appt_kind TEXT,
+    done_at TEXT,
+    last_done_at TEXT,
+    times_done INTEGER NOT NULL DEFAULT 0,
+    notified_for TEXT,
+    created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX reminders_home ON reminders(home_id, done_at, due_date);
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

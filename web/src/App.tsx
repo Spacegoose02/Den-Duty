@@ -15,6 +15,7 @@ import { Doctors } from './pages/Doctors.tsx';
 import { ParentDuty } from './pages/ParentDuty.tsx';
 import { KidPicker } from './pages/KidPicker.tsx';
 import { FamilyWall } from './pages/FamilyWall.tsx';
+import { Reminders } from './pages/Reminders.tsx';
 import { KidBoard, ParentKidBoard } from './pages/KidBoard.tsx';
 
 const NAV = [
@@ -26,6 +27,7 @@ const NAV = [
   { to: '/stats', ico: '📊', label: 'Stats' },
   { to: '/doctors', ico: '🩺', label: 'Doctors' },
   { to: '/parent-duty', ico: '📝', label: 'Parent Duty' },
+  { to: '/reminders', ico: '🔔', label: 'Reminders' },
   { to: '/settings', ico: '⚙️', label: 'Settings' },
 ];
 
@@ -78,6 +80,7 @@ export function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/calendar" element={<Week />} />
+          <Route path="/reminders" element={<Reminders />} />
           <Route path="/week" element={<Navigate to="/calendar" replace />} />
           <Route path="/chores" element={<Chores />} />
           <Route path="/kids" element={<Kids />} />

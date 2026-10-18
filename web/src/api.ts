@@ -83,7 +83,7 @@ export interface AppointmentItem {
   id: string; memberId: string; kind: string; title: string; provider: string | null; time: string; status: string;
   location?: string | null; durationMinutes?: number | null; notes?: string | null;
 }
-export interface Day { date: string; items: AgendaItem[]; external?: ExternalItem[]; duty?: DutyItem[]; practices?: PracticeItem[]; appointments?: AppointmentItem[] }
+export interface Day { date: string; items: AgendaItem[]; external?: ExternalItem[]; duty?: DutyItem[]; reminders?: Reminder[]; practices?: PracticeItem[]; appointments?: AppointmentItem[] }
 
 export interface Goal {
   id: string; memberId: string; title: string; targetPoints: number; reward: string | null; status: 'active' | 'redeemed';
@@ -151,6 +151,12 @@ export interface HelpRequest {
 }
 export type HomeHelpRequest = HelpRequest & { kid: { name: string; avatar: string; color: string } };
 
-export interface Summary { today: string; weekStart: string; weekEnd: string; waiting: number; timeouts: HomeTimeout[]; helpdesk: HomeHelpRequest[]; kids: (Kid & KidWeek & { goals: Goal[]; streak: Streak; level: LevelInfo })[] }
+export interface Reminder {
+  id: string; title: string; notes: string | null; kidId: string | null; kidName: string | null; dueDate: string | null; dueTime: string | null;
+  repeat: { every: number; unit: 'day' | 'week' | 'month' | 'year' } | null; apptKind: string | null; doneAt: string | null; lastDoneAt: string | null;
+  timesDone: number; state: 'done' | 'someday' | 'overdue' | 'today' | 'upcoming';
+}
+
+export interface Summary { today: string; weekStart: string; weekEnd: string; waiting: number; timeouts: HomeTimeout[]; helpdesk: HomeHelpRequest[]; reminders: Reminder[]; kids: (Kid & KidWeek & { goals: Goal[]; streak: Streak; level: LevelInfo })[] }
 
 export interface LedgerEntry { id: number; amount: number; kind: string; reason: string; date: string; by: string | null; createdAt: string }

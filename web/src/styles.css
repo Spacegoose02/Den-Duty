@@ -451,3 +451,16 @@ button.link { background: none; border: none; padding: 0; min-height: 0; color: 
 .agenda-ext.as-button { width: 100%; background: none; border-top: none; border-right: none; border-bottom: none; border-radius: 0; text-align: left; justify-content: flex-start; min-height: 0; font-weight: 500; cursor: pointer; }
 .agenda-ext.as-button:disabled { cursor: default; opacity: 1; }
 .edit-btn { min-height: 36px; min-width: 36px; padding: 0; font-size: 0.9rem; }
+
+/* Reminders */
+.reminder { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px; background: var(--surface-2); }
+.reminder.overdue { background: color-mix(in srgb, var(--danger) 12%, var(--surface)); }
+.reminder.today { background: color-mix(in srgb, var(--warn) 16%, var(--surface)); }
+.reminder.done { opacity: 0.6; }
+.reminder.done .reminder-title { text-decoration: line-through; }
+.reminder-tick { width: 34px; height: 34px; min-height: 34px; padding: 0; border-radius: 50%; border: 2px solid var(--border); background: var(--surface); font-weight: 900; flex-shrink: 0; }
+.reminder.done .reminder-tick { background: var(--ok); color: #fff; border-color: var(--ok); }
+.reminder-title { font-weight: 700; }
+.reminder-due.overdue { color: var(--danger); font-weight: 700; }
+.reminder-due.today { font-weight: 700; color: var(--text); }
+.agenda-ext.reminder-line { border-left-color: var(--warn); }
