@@ -345,3 +345,12 @@ td, th { text-align: left; padding: 8px; border-bottom: 1px solid var(--border);
 /* The daily den message on the kid's screen */
 .den-note { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 18px; font-size: 1.15rem; font-weight: 600;
   background: color-mix(in srgb, var(--kid, var(--primary)) 14%, var(--surface)); border: 2px dashed color-mix(in srgb, var(--kid, var(--primary)) 45%, transparent); }
+
+/* Calendar weeks: one line per kid per day ("Ava has 5 chores"), tap to open */
+.chore-group { display: flex; flex-direction: column; gap: 4px; padding-left: 6px; border-radius: 10px; }
+.chore-group-head {
+  display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 10px; background: var(--surface-2); border: none;
+  font-size: 0.9rem; font-weight: 700; min-height: 40px; width: 100%; justify-content: flex-start; text-align: left; color: inherit;
+}
+.chore-group-head .agenda-title { flex: 1; }
+a.agenda-ext.duty { text-decoration: none; color: var(--text); border-left-color: var(--primary); }

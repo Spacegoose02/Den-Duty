@@ -44,8 +44,8 @@ test('ICS links out: whole home for parents, one kid each, resettable', async ()
   assert.match(String(homeIcs.type), /text\/calendar/);
   const homeEvents = parseIcs(homeIcs.body, 'UTC');
   const today = todayIn('UTC');
-  assert.ok(homeEvents.some((e) => e.date === today && e.summary === 'Ava: 1 chore (0 done)'));
-  assert.ok(homeEvents.some((e) => e.date === addDays(today, 3) && e.summary === 'Ben: 1 chore'), 'future days show what is planned');
+  assert.ok(homeEvents.some((e) => e.date === today && e.summary === 'Ava has 1 chore (0 done)'));
+  assert.ok(homeEvents.some((e) => e.date === addDays(today, 3) && e.summary === 'Ben has 1 chore'), 'future days show what is planned');
   assert.ok(homeEvents.some((e) => e.summary === 'Ava: Speech' && e.time === '15:30'), 'parents see appointments');
 
   const avaLink = links.kids.find((k: { id: string }) => k.id === ava.id).url;

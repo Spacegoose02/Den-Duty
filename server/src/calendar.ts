@@ -43,7 +43,7 @@ export function calendarFor(db: DatabaseSync, token: string): string | null {
   const from = addDays(today, -14);
   const days = agenda(db, info.id, wanted.map((k) => k.id as string), from, 14 + 29, today);
   const events: IcsEvent[] = [];
-  // One all-day event per kid per day, listing that day's chores, instead of a pile of separate events.
+  // One all-day event per kid per day ("Ava has 5 chores"), listing that day's chores inside, instead of a pile of events.
   for (const day of days) {
     for (const k of wanted) {
       const items = day.items.filter((i) => i.memberId === k.id);
@@ -51,7 +51,7 @@ export function calendarFor(db: DatabaseSync, token: string): string | null {
       const done = items.filter((i) => i.status === 'approved').length;
       events.push({
         uid: `chores-${k.id}-${day.date}@den-duty`,
-        summary: `${kid ? '' : `${k.name}: `}${items.length} chore${items.length === 1 ? '' : 's'}${day.date <= today ? ` (${done} done)` : ''}`,
+        summary: `${k.name} has ${items.length} chore${items.length === 1 ? '' : 's'}${day.date <= today ? ` (${done} done)` : ''}`,
         description: items.map((i) => `${i.status === 'approved' ? '✅' : i.status === 'submitted' ? '⏳' : '▫️'} ${i.icon} ${i.title} (+${i.points} ${info.pointsName})`).join('\n'),
         date: day.date,
       });

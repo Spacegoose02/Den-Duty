@@ -8,6 +8,7 @@ import { addDays } from '../../../shared/schedule.ts';
 import { AVATARS, AVATAR_LABELS, AVATAR_UNLOCK_LEVEL, avatarUnlocked } from '../../../shared/catalog.ts';
 import { AREA_ICONS, KIND_ICONS, whenText } from './Doctors.tsx';
 import { FEED_ICONS } from './Calendars.tsx';
+import { ChoreGroup } from './Week.tsx';
 import { TimeoutCard, TimeoutForm } from '../components/Timeouts.tsx';
 
 const IDLE_MS = 3 * 60e3;
@@ -320,15 +321,10 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
           {board.week.map((d) => (
             <div key={d.date} className={`agenda-day${d.date === board.today ? ' today' : ''}${d.date < board.today ? ' past' : ''}`}>
               <div className="agenda-date"><strong>{dayName(d.date)}</strong> <span className="small muted">{shortDate(d.date)}</span></div>
-              {d.items.map((i, n) => (
-                <div key={i.id ?? `${i.choreId}-${n}`} className={`agenda-item ${i.status}`} title={STATUS_LABEL[i.status]}>
-                  <span aria-hidden>{i.icon}</span>
-                  <span className="agenda-title">{i.title}</span>
-                  <span className="agenda-mark" aria-label={STATUS_LABEL[i.status]}>
-                    {i.status === 'approved' ? '✅' : i.status === 'submitted' ? '⏳' : i.status === 'rejected' ? '🔁' : ''}
-                  </span>
-                </div>
-              ))}
+              {d.items.length > 0 && (
+                <ChoreGroup key={`${d.date}-${board.weekStart}`} name={kid.name} avatar={kid.avatar} color={kid.color} items={d.items} past={d.date <= board.today}
+                  label={`${asParent ? `${kid.name} has` : 'You have'} ${d.items.length} chore${d.items.length === 1 ? '' : 's'}`} />
+              )}
               {d.external?.map((x, n) => (
                 <div key={`x-${n}`} className="agenda-ext" title={x.feed}>
                   <span aria-hidden>{FEED_ICONS[x.kind] ?? '📅'}</span>
