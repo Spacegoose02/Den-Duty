@@ -56,7 +56,7 @@ function CloseTicket({ r, kidName, onClose, onDone }: { r: HelpRequest; kidName:
         <p className="small muted" style={{ margin: 0 }}>{kidName} sees “Closed” and your note, and it moves to their history.</p>
         <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={200} autoFocus placeholder="A note (optional), e.g. All fixed!" />
         {hasCard && (
-          <label className="row"><input type="checkbox" checked={finish} onChange={(e) => setFinish(e.target.checked)} /> Also mark the Parent Duty card done</label>
+          <label className="row check-row"><input type="checkbox" checked={finish} onChange={(e) => setFinish(e.target.checked)} /> Also mark the Parent Duty card done</label>
         )}
         <div className="row"><span className="spacer" /><button type="button" className="ghost" onClick={onClose}>Cancel</button><button className="primary" disabled={busy}>Close it</button></div>
       </form>

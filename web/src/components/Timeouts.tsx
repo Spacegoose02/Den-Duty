@@ -146,10 +146,10 @@ export function TimeoutForm({ kidId, kidName, onClose, onDone }: { kidId: string
           <select value={f.unit} onChange={(e) => setF({ ...f, unit: e.target.value })}>
             <option value="hours">hours</option><option value="days">days</option><option value="weeks">weeks</option>
           </select>
-          <label className="row small"><input type="checkbox" checked={f.later} onChange={(e) => setF({ ...f, later: e.target.checked })} /> Start later</label>
+          <label className="row small check-row"><input type="checkbox" checked={f.later} onChange={(e) => setF({ ...f, later: e.target.checked })} /> Start later</label>
           {f.later && <input type="datetime-local" value={f.startsAt} onChange={(e) => setF({ ...f, startsAt: e.target.value })} />}
         </div>
-        <label className="row"><input type="checkbox" checked={f.buy} onChange={(e) => setF({ ...f, buy: e.target.checked })} /> Let {kidName} buy time back with {home?.pointsName}</label>
+        <label className="row check-row"><input type="checkbox" checked={f.buy} onChange={(e) => setF({ ...f, buy: e.target.checked })} /> Let {kidName} buy time back with {home?.pointsName}</label>
         {f.buy && (
           <div className="row">
             <input type="number" min={1} value={f.buyPrice} onChange={(e) => setF({ ...f, buyPrice: Number(e.target.value) })} style={{ width: 80 }} />

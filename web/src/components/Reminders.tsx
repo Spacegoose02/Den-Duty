@@ -27,7 +27,7 @@ export function ReminderForm({ initial, onClose, onDone }: { initial?: Reminder;
     repeatOn: !!initial.repeat, every: initial.repeat?.every ?? 6, unit: initial.repeat?.unit ?? 'month', appt: !!initial.apptKind, apptKind: initial.apptKind ?? 'doctor',
   } : { title: '', notes: '', kidId: '', dueDate: '', dueTime: '', repeatOn: false, every: 6, unit: 'month', appt: false, apptKind: 'doctor' });
   const [busy, setBusy] = useState(false);
-  const set = (p: Partial<Draft>) => setD({ ...d, ...p });
+  const set = (p: Partial<Draft>) => setD((cur) => ({ ...cur, ...p }));
   const save = async () => {
     setBusy(true);
     try {
@@ -54,7 +54,7 @@ export function ReminderForm({ initial, onClose, onDone }: { initial?: Reminder;
             {home?.kids.map((k) => <option key={k.id} value={k.id}>{k.name}</option>)}
           </select></label>
         </div>
-        <label className="row"><input type="checkbox" checked={d.repeatOn} onChange={(e) => set({ repeatOn: e.target.checked })} /> Repeat</label>
+        <label className="row check-row"><input type="checkbox" checked={d.repeatOn} onChange={(e) => set({ repeatOn: e.target.checked })} /> Repeat</label>
         {d.repeatOn && (
           <div className="row">
             <span>Every</span>
@@ -66,7 +66,7 @@ export function ReminderForm({ initial, onClose, onDone }: { initial?: Reminder;
             {!d.dueDate && <span className="small chip-reason">Pick a first date</span>}
           </div>
         )}
-        <label className="row"><input type="checkbox" checked={d.appt} onChange={(e) => set({ appt: e.target.checked })} /> This is about making an appointment</label>
+        <label className="row check-row"><input type="checkbox" checked={d.appt} onChange={(e) => set({ appt: e.target.checked })} /> This is about making an appointment</label>
         {d.appt && (
           <div className="chips">
             {Object.keys(KIND_ICONS).map((k) => <button key={k} type="button" className={`chip${d.apptKind === k ? ' on' : ''}`} onClick={() => set({ apptKind: k })}>{KIND_ICONS[k]} {KIND_LABELS[k]}</button>)}
