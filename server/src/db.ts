@@ -416,6 +416,20 @@ const MIGRATIONS: string[] = [
   ALTER TABLE honeydo ADD COLUMN paid_at TEXT;
   CREATE INDEX honeydo_kid ON honeydo(kid_id, status);
   `,
+  // Per-kid switches (pages off, Doctors sections off) and the "Ask AI" history in Doctors.
+  `
+  ALTER TABLE members ADD COLUMN pages_off TEXT NOT NULL DEFAULT '[]';
+  ALTER TABLE members ADD COLUMN doctor_areas_off TEXT NOT NULL DEFAULT '[]';
+  CREATE TABLE ai_questions (
+    id TEXT PRIMARY KEY,
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    question TEXT NOT NULL,
+    answer TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX ai_questions_member ON ai_questions(member_id, created_at);
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

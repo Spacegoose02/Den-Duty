@@ -8,7 +8,7 @@ import { tx, type Row } from '../db.ts';
 import { HttpError, newId, num, requireStr, str } from '../util.ts';
 import { homeInfo, homeToday, writeLedger } from '../chores.ts';
 import { byOf } from './chores.ts';
-import { cleanIcon, getKid } from './homes.ts';
+import { cleanIcon, getKid, pageOn } from './homes.ts';
 import { isIsoDate } from '../../../shared/schedule.ts';
 
 const STATUSES = ['todo', 'doing', 'done'] as const;
@@ -81,6 +81,7 @@ export function denRoutes(app: FastifyInstance, db: DatabaseSync): void {
     // Kids can only move their own room cards; everything else is for parents.
     if (kid && (ctx.actor.kind === 'kid' && cur.kid_id !== ctx.actor.memberId)) throw new HttpError(403, 'That card is on someone else\'s board');
     if (kid && Object.keys(b).some((k) => k !== 'status')) throw new HttpError(403, 'Kids can only move their cards');
+    if (kid && !pageOn(db, cur.kid_id as string, 'den')) throw new HttpError(403, 'Den Duty is turned off');
     const st = 'status' in b ? status(b.status) : cur.status as Status;
     const position = 'position' in b && num(b.position) != null ? num(b.position)!
       : st !== cur.status ? nextPosition(ctx.homeId, cur.kid_id as string | null, st) : cur.position as number;
@@ -105,7 +106,7 @@ export function denRoutes(app: FastifyInstance, db: DatabaseSync): void {
   app.get('/api/homes/:homeId/den', async (req) => {
     const ctx = homeCtx(db, req);
     const today = homeToday(homeInfo(db, ctx.homeId));
-    if (ctx.actor.kind === 'kid') return denFor(db, ctx.homeId, ctx.actor.memberId, today);
+    if (ctx.actor.kind === 'kid') return pageOn(db, ctx.actor.memberId, 'den') ? denFor(db, ctx.homeId, ctx.actor.memberId, today) : [];
     if (ctx.actor.kind !== 'parent') throw new HttpError(403, 'Tap your avatar first');
     resetDailyDen(db, ctx.homeId, today);
     const kid = (req.query as { kid?: string }).kid;

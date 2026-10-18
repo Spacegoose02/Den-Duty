@@ -7,11 +7,12 @@ import { tx, type Row } from '../db.ts';
 import { HttpError, newId, num, requireStr, str } from '../util.ts';
 import { homeInfo, homeToday, writeLedger } from '../chores.ts';
 import { byOf } from './chores.ts';
-import { getKid } from './homes.ts';
+import { doctorAreasOff, getKid, pageOn } from './homes.ts';
+import { appointmentOn, goalAreaOn } from '../../../shared/pages.ts';
 import { isIsoDate } from '../../../shared/schedule.ts';
 
 export const APPOINTMENT_KINDS = ['doctor', 'speech', 'feeding', 'occupational', 'physical', 'behavioral', 'dental', 'other'] as const;
-export const GOAL_AREAS = ['development', 'speech', 'feeding', 'doctor', 'motor', 'sensory', 'selfcare', 'social', 'other'] as const;
+export const GOAL_AREAS = ['development', 'speech', 'feeding', 'doctor', 'motor', 'sensory', 'selfcare', 'physical', 'behavioral', 'dental', 'social', 'other'] as const;
 /** Goal areas the occupational therapy helper looks at. */
 export const OT_AREAS = ['motor', 'sensory', 'selfcare'];
 
@@ -73,14 +74,17 @@ function ownRow(db: DatabaseSync, table: 'therapy_appointments' | 'therapy_goals
 export function kidTherapyView(db: DatabaseSync, memberId: string, today: string) {
   const m = db.prepare('SELECT therapy_kid_visible FROM members WHERE id = ?').get(memberId) as Row | undefined;
   if (!m?.therapy_kid_visible) return null;
+  const off = doctorAreasOff(db, memberId);
   return {
     goals: (db.prepare("SELECT id, area, title, progress, reward_step, reward_met FROM therapy_goals WHERE member_id = ? AND status = 'active' ORDER BY created_at").all(memberId) as Row[])
+      .filter((g) => goalAreaOn(g.area as string, off))
       .map((g) => ({
         id: g.id as string, area: g.area as string, title: g.title as string, progress: g.progress as number,
         rewardStep: g.reward_step as number, rewardMet: g.reward_met as number,
       })),
     upcoming: (db.prepare(`SELECT id, kind, title, provider, starts_at FROM therapy_appointments
-      WHERE member_id = ? AND status = 'scheduled' AND starts_at >= ? ORDER BY starts_at LIMIT 3`).all(memberId, today) as Row[])
+      WHERE member_id = ? AND status = 'scheduled' AND starts_at >= ? ORDER BY starts_at LIMIT 20`).all(memberId, today) as Row[])
+      .filter((a) => appointmentOn(a.kind as string, off)).slice(0, 3)
       .map((a) => ({ id: a.id as string, kind: a.kind as string, title: a.title as string, provider: a.provider as string | null, startsAt: a.starts_at as string })),
   };
 }
@@ -90,12 +94,20 @@ export function therapyRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const ctx = homeCtx(db, req, 'parent');
     const kid = getKid(db, ctx, (req.params as { memberId: string }).memberId);
     const id = kid.id as string;
+    if (!pageOn(db, id, 'doctors')) throw new HttpError(403, `Doctors is turned off for ${kid.name}. Turn it on in Kids → Edit.`);
+    // Only the sections turned on for this kid; the rest is kept, just hidden.
+    const off = doctorAreasOff(db, id);
+    const goalRows = db.prepare("SELECT * FROM therapy_goals WHERE member_id = ? ORDER BY status = 'active' DESC, created_at DESC").all(id) as Row[];
+    const hiddenGoals = new Set(goalRows.filter((g) => !goalAreaOn(g.area as string, off)).map((g) => g.id as string));
     return {
       kidVisible: !!kid.therapy_kid_visible,
-      appointments: (db.prepare('SELECT * FROM therapy_appointments WHERE member_id = ? ORDER BY starts_at DESC LIMIT 200').all(id) as Row[]).map(appointmentView),
-      goals: (db.prepare("SELECT * FROM therapy_goals WHERE member_id = ? ORDER BY status = 'active' DESC, created_at DESC").all(id) as Row[]).map((g) => goalView(db, g)),
+      areasOff: off,
+      appointments: (db.prepare('SELECT * FROM therapy_appointments WHERE member_id = ? ORDER BY starts_at DESC LIMIT 200').all(id) as Row[])
+        .filter((a) => appointmentOn(a.kind as string, off)).map(appointmentView),
+      goals: goalRows.filter((g) => !hiddenGoals.has(g.id as string)).map((g) => goalView(db, g)),
       notes: (db.prepare(`SELECT n.*, g.title AS goal_title FROM therapy_notes n LEFT JOIN therapy_goals g ON g.id = n.goal_id
-        WHERE n.member_id = ? ORDER BY n.date DESC, n.created_at DESC LIMIT 100`).all(id) as Row[]).map((n) => ({
+        WHERE n.member_id = ? ORDER BY n.date DESC, n.created_at DESC LIMIT 100`).all(id) as Row[])
+        .filter((n) => !n.goal_id || !hiddenGoals.has(n.goal_id as string)).map((n) => ({
         id: n.id as string, goalId: n.goal_id as string | null, goalTitle: n.goal_title as string | null, appointmentId: n.appointment_id as string | null,
         body: n.body as string, progress: n.progress as number | null, date: n.date as string, by: n.by_name as string | null,
       })),
@@ -115,7 +127,9 @@ export function therapyRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const ctx = homeCtx(db, req, 'parent');
     const today = homeToday(homeInfo(db, ctx.homeId));
     return (db.prepare(`SELECT a.*, m.name AS kid_name, m.avatar AS kid_avatar FROM therapy_appointments a JOIN members m ON m.id = a.member_id
-      WHERE a.home_id = ? AND a.status = 'scheduled' AND a.starts_at >= ? ORDER BY a.starts_at LIMIT 10`).all(ctx.homeId, today) as Row[])
+      WHERE a.home_id = ? AND a.status = 'scheduled' AND a.starts_at >= ? ORDER BY a.starts_at LIMIT 50`).all(ctx.homeId, today) as Row[])
+      .filter((r) => pageOn(db, r.member_id as string, 'doctors') && appointmentOn(r.kind as string, doctorAreasOff(db, r.member_id as string)))
+      .slice(0, 10)
       .map((r) => ({ ...appointmentView(r), kidName: r.kid_name as string, kidAvatar: r.kid_avatar as string }));
   });
 

@@ -7,6 +7,7 @@ import { HttpError, newId, randomToken, readableCode, requireStr, sha256, str } 
 import { hashPassword } from '../security.ts';
 import { balance, homeInfo, homeToday } from '../chores.ts';
 import { ageOn, pictureMode } from '../../../shared/ages.ts';
+import { DOCTOR_AREA_IDS, KID_PAGE_IDS, offList, type DoctorArea, type KidPage } from '../../../shared/pages.ts';
 import { AVATARS, isAvatar, isKidColor, KID_COLORS, POINT_ICONS } from '../../../shared/catalog.ts';
 import { isIsoDate, isTimeZone } from '../../../shared/schedule.ts';
 import { isThemeId } from '../../../shared/themes.ts';
@@ -56,6 +57,7 @@ export function kidView(db: DatabaseSync, r: Row) {
     id: r.id as string, name: r.name as string, avatar: r.avatar as string, color: r.color as string,
     theme: (r.theme as string | null) ?? null, hasPin: !!r.pin_hash, balance: balance(db, r.id as string),
     birthdate, age, pictureModeSetting: setting, pictureMode: pictureMode(setting, age),
+    pagesOff: offList(r.pages_off, KID_PAGE_IDS), doctorAreasOff: offList(r.doctor_areas_off, DOCTOR_AREA_IDS),
   };
 }
 
@@ -66,6 +68,9 @@ function applyKidProfile(db: DatabaseSync, id: string, b: Row, today: string): v
     if (v && (!isIsoDate(v) || v > today)) throw new HttpError(400, 'Birthdays look like 2019-05-14 and can\'t be in the future');
     db.prepare('UPDATE members SET birthdate = ? WHERE id = ?').run(v, id);
   }
+  // Page and Doctors-section switches: lists of what's turned off for this kid. Off hides, it never deletes.
+  if ('pagesOff' in b) db.prepare('UPDATE members SET pages_off = ? WHERE id = ?').run(JSON.stringify(offList(b.pagesOff, KID_PAGE_IDS)), id);
+  if ('doctorAreasOff' in b) db.prepare('UPDATE members SET doctor_areas_off = ? WHERE id = ?').run(JSON.stringify(offList(b.doctorAreasOff, DOCTOR_AREA_IDS)), id);
   if ('pictureMode' in b) {
     if (!['auto', 'on', 'off'].includes(String(b.pictureMode))) throw new HttpError(400, 'pictureMode must be auto, on or off');
     db.prepare('UPDATE members SET picture_mode = ? WHERE id = ?').run(String(b.pictureMode), id);
@@ -305,4 +310,16 @@ export function homeRoutes(app: FastifyInstance, db: DatabaseSync): void {
     db.prepare('DELETE FROM users WHERE id = ?').run(userId);
     return { ok: true };
   });
+}
+
+/** Is this page turned on for this kid? */
+export function pageOn(db: DatabaseSync, memberId: string, page: KidPage): boolean {
+  const r = db.prepare('SELECT pages_off FROM members WHERE id = ?').get(memberId) as Row | undefined;
+  return !offList(r?.pages_off, KID_PAGE_IDS).includes(page);
+}
+
+/** Doctors sections turned off for this kid. */
+export function doctorAreasOff(db: DatabaseSync, memberId: string): DoctorArea[] {
+  const r = db.prepare('SELECT doctor_areas_off FROM members WHERE id = ?').get(memberId) as Row | undefined;
+  return offList(r?.doctor_areas_off, DOCTOR_AREA_IDS);
 }

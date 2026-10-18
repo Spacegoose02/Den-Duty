@@ -43,6 +43,12 @@ function activeChores(db: DatabaseSync, homeId: string, choreId?: string): (Chor
   return rows.map((c) => ({ ...c, memberIds: (assigned.all(c.id) as Row[]).map((r) => r.member_id as string) }));
 }
 
+/** Kids in a home with a page switched off (see shared/pages.ts). */
+export function kidsWithPageOff(db: DatabaseSync, homeId: string, page: string): Set<string> {
+  return new Set((db.prepare(`SELECT m.id FROM members m WHERE m.home_id = ? AND m.role = 'kid'
+    AND EXISTS (SELECT 1 FROM json_each(m.pages_off) WHERE value = ?)`).all(homeId, page) as Row[]).map((r) => r.id as string));
+}
+
 /**
  * Makes sure instances exist for every chore due between `from` and `to`, but never past today: future days are
  * shown as "planned" without storing anything, so editing a chore changes them for free. Filling in past days
@@ -54,13 +60,14 @@ export function materialize(db: DatabaseSync, homeId: string, from: string, to: 
   const ins = db.prepare(`INSERT OR IGNORE INTO chore_instances (id, home_id, chore_id, member_id, date, title, icon, points)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
   tx(db, () => {
+    const paused = kidsWithPageOff(db, homeId, 'chores');
     for (const c of activeChores(db, homeId)) {
       if (!c.memberIds.length || c.bonus) continue;
       const s = scheduleOf(c);
       const start = from > c.start_date ? from : c.start_date;
       for (const date of dateRange(start, last)) {
         if (!isScheduledOn(s, date)) continue;
-        for (const m of c.memberIds) ins.run(newId(), homeId, c.id, m, date, c.title, c.icon, c.points);
+        for (const m of c.memberIds) if (!paused.has(m)) ins.run(newId(), homeId, c.id, m, date, c.title, c.icon, c.points);
       }
     }
   });

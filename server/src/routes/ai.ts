@@ -4,24 +4,37 @@ import { homeCtx } from '../auth.ts';
 import type { Row } from '../db.ts';
 import { HttpError, num, str } from '../util.ts';
 import { earnedBetween, homeInfo, homeToday } from '../chores.ts';
-import { aiSettings, sealKey, suggest, therapyHelper, THERAPY_DISCLAIMER, type HelperArea, type IdeaKind } from '../ai.ts';
+import { aiSettings, ASK_DISCLAIMER, askDoctor, sealKey, suggest, therapyHelper, THERAPY_DISCLAIMER, URGENT_NOTE, type HelperArea, type IdeaKind } from '../ai.ts';
+import { DOCTOR_AREAS, DOCTOR_NAME, GOAL_AREA_SECTION } from '../../../shared/pages.ts';
+import { newId } from '../util.ts';
 import { OT_AREAS } from './therapy.ts';
 import type { HomeCtx } from '../auth.ts';
-import { getKid, kidView, listKids } from './homes.ts';
+import { doctorAreasOff, getKid, kidView, listKids, pageOn } from './homes.ts';
+import { goalAreaOn } from '../../../shared/pages.ts';
 import { rateLimit } from '../security.ts';
 import { addDays } from '../../../shared/schedule.ts';
 
 const helperAreas = (area: HelperArea) => (area === 'speech' ? ['speech'] : OT_AREAS);
 
 function activeGoals(db: DatabaseSync, memberId: string, area: HelperArea): string[] {
-  const areas = helperAreas(area);
+  const off = doctorAreasOff(db, memberId);
+  const areas = helperAreas(area).filter((a) => goalAreaOn(a, off));
+  if (!areas.length) return [];
   return (db.prepare(`SELECT title FROM therapy_goals WHERE member_id = ? AND status = 'active' AND area IN (${areas.map(() => '?').join(',')}) ORDER BY created_at`)
     .all(memberId, ...areas) as Row[]).map((r) => r.title as string);
+}
+
+/** Is this helper's area turned on for the kid (Doctors page on, and its section(s) on)? */
+function helperOn(db: DatabaseSync, memberId: string, area: HelperArea): boolean {
+  if (!pageOn(db, memberId, 'doctors')) return false;
+  const off = doctorAreasOff(db, memberId);
+  return helperAreas(area).some((a) => goalAreaOn(a, off));
 }
 
 /** Today's tip for one kid and area: from the cache, or freshly made (and cached) when missing or refreshed. */
 async function dailyTip(db: DatabaseSync, ctx: HomeCtx, memberId: string, area: HelperArea, refresh: boolean) {
   const kid = kidView(db, getKid(db, ctx, memberId));
+  if (!helperOn(db, memberId, area)) throw new HttpError(403, `That section is turned off for ${kid.name}`);
   const today = homeToday(homeInfo(db, ctx.homeId));
   if (!aiSettings(db, ctx.homeId).enabled) throw new HttpError(403, 'AI ideas are turned off. A parent can turn them on in Settings.');
   const cached = refresh ? undefined : db.prepare('SELECT data FROM ai_tips WHERE member_id = ? AND area = ? AND date = ?').get(memberId, area, today) as Row | undefined;
@@ -99,7 +112,7 @@ export function aiRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const ctx = homeCtx(db, req, 'parent');
     if (!aiSettings(db, ctx.homeId).enabled) return [];
     const wanted = listKids(db, ctx.homeId).flatMap((k) => (['speech', 'ot'] as HelperArea[])
-      .filter((area) => activeGoals(db, k.id, area).length > 0).map((area) => ({ kid: k, area })));
+      .filter((area) => helperOn(db, k.id, area) && activeGoals(db, k.id, area).length > 0).map((area) => ({ kid: k, area })));
     return Promise.all(wanted.map(async ({ kid, area }) => {
       try {
         return { kidId: kid.id, kidName: kid.name, kidAvatar: kid.avatar, ...(await dailyTip(db, ctx, kid.id, area, false)) };
@@ -107,5 +120,42 @@ export function aiRoutes(app: FastifyInstance, db: DatabaseSync): void {
         return { kidId: kid.id, kidName: kid.name, kidAvatar: kid.avatar, area, error: (err as Error).message };
       }
     }));
+  });
+
+  // ----- Ask Dr. Bandit (DOCTOR_NAME): parent-only questions about one kid, scoped to the Doctors sections turned on for them -----
+  const history = (memberId: string) => (db.prepare('SELECT id, question, answer, created_at FROM ai_questions WHERE member_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 10')
+    .all(memberId) as Row[]).map((r) => ({ id: r.id as string, question: r.question as string, ...JSON.parse(r.answer as string), at: r.created_at as string }));
+
+  app.get('/api/homes/:homeId/kids/:memberId/doctors/ask', async (req) => {
+    const ctx = homeCtx(db, req, 'parent');
+    const kid = getKid(db, ctx, (req.params as { memberId: string }).memberId);
+    return { name: DOCTOR_NAME, disclaimer: ASK_DISCLAIMER, urgentNote: URGENT_NOTE, history: history(kid.id as string) };
+  });
+
+  app.post('/api/homes/:homeId/kids/:memberId/doctors/ask', async (req) => {
+    const ctx = homeCtx(db, req, 'parent');
+    const kid = kidView(db, getKid(db, ctx, (req.params as { memberId: string }).memberId));
+    if (!pageOn(db, kid.id, 'doctors')) throw new HttpError(403, `Doctors is turned off for ${kid.name}`);
+    if (!aiSettings(db, ctx.homeId).enabled) throw new HttpError(403, 'AI ideas are turned off. A parent can turn them on in Settings.');
+    const question = str((req.body as Row)?.question, 500);
+    if (!question) throw new HttpError(400, 'Type a question');
+    rateLimit(`ai:${ctx.homeId}`, 40, 15 * 60e3);
+    const off = doctorAreasOff(db, kid.id);
+    const areas = DOCTOR_AREAS.filter((a) => a.id !== 'appointments' && !off.includes(a.id)).map((a) => a.label);
+    const goals = (db.prepare("SELECT title, area FROM therapy_goals WHERE member_id = ? AND status = 'active'").all(kid.id) as Row[])
+      .filter((g) => { const sec = GOAL_AREA_SECTION[g.area as string]; return !sec || !off.includes(sec); }).map((g) => g.title as string);
+    const r = await askDoctor(db, ctx.homeId, DOCTOR_NAME, kid.age, areas, goals, question);
+    const id = newId();
+    db.prepare('INSERT INTO ai_questions (id, member_id, home_id, question, answer) VALUES (?, ?, ?, ?, ?)').run(id, kid.id, ctx.homeId, question, JSON.stringify(r));
+    // A short history: the newest 10 are kept.
+    db.prepare('DELETE FROM ai_questions WHERE member_id = ? AND id NOT IN (SELECT id FROM ai_questions WHERE member_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 10)').run(kid.id, kid.id);
+    return { id, question, ...r, name: DOCTOR_NAME, disclaimer: ASK_DISCLAIMER, urgentNote: URGENT_NOTE };
+  });
+
+  app.delete('/api/homes/:homeId/kids/:memberId/doctors/ask', async (req) => {
+    const ctx = homeCtx(db, req, 'parent');
+    const kid = getKid(db, ctx, (req.params as { memberId: string }).memberId);
+    db.prepare('DELETE FROM ai_questions WHERE member_id = ?').run(kid.id as string);
+    return { ok: true };
   });
 }

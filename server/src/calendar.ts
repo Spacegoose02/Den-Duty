@@ -4,7 +4,11 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { Row } from './db.ts';
 import { randomToken } from './util.ts';
-import { agenda, homeInfo, homeToday, type HomeInfo } from './chores.ts';
+import { agenda, homeInfo, homeToday, kidsWithPageOff, type HomeInfo } from './chores.ts';
+import { appointmentOn, DOCTOR_AREA_IDS, offList } from '../../shared/pages.ts';
+
+const doctorAreasOffFor = (db: DatabaseSync, memberId: string) =>
+  offList((db.prepare('SELECT doctor_areas_off FROM members WHERE id = ?').get(memberId) as Row | undefined)?.doctor_areas_off, DOCTOR_AREA_IDS);
 import { addDays } from '../../shared/schedule.ts';
 import { buildIcs, parseIcs, type IcsEvent } from '../../shared/ics.ts';
 
@@ -25,10 +29,16 @@ export function calendarFor(db: DatabaseSync, token: string): string | null {
   const home = db.prepare('SELECT id FROM homes WHERE calendar_token = ?').get(token) as Row | undefined;
   const kid = home ? undefined : db.prepare("SELECT id, home_id, name, therapy_kid_visible FROM members WHERE calendar_token = ? AND role = 'kid'").get(token) as Row | undefined;
   if (!home && !kid) return null;
+  // A kid with Calendar switched off has no feed at all; in the home feed they're left out.
+  if (kid && kidsWithPageOff(db, kid.home_id as string, 'calendar').has(kid.id as string)) return null;
   const info = homeInfo(db, (home?.id ?? kid!.home_id) as string);
   const today = homeToday(info);
-  const kids = db.prepare("SELECT id, name FROM members WHERE home_id = ? AND role = 'kid' ORDER BY position, created_at").all(info.id) as Row[];
-  const wanted = kid ? kids.filter((k) => k.id === kid.id) : kids;
+  const calendarOff = kidsWithPageOff(db, info.id, 'calendar');
+  const choresOff = kidsWithPageOff(db, info.id, 'chores');
+  const doctorsOff = kidsWithPageOff(db, info.id, 'doctors');
+  const kids = (db.prepare("SELECT id, name FROM members WHERE home_id = ? AND role = 'kid' ORDER BY position, created_at").all(info.id) as Row[])
+    .filter((k) => !calendarOff.has(k.id as string));
+  const wanted = (kid ? kids.filter((k) => k.id === kid.id) : kids).filter((k) => !choresOff.has(k.id as string));
   const from = addDays(today, -14);
   const days = agenda(db, info.id, wanted.map((k) => k.id as string), from, 14 + 29, today);
   const events: IcsEvent[] = [];
@@ -47,11 +57,13 @@ export function calendarFor(db: DatabaseSync, token: string): string | null {
     }
   }
   // Appointments: always in the parents' home calendar; in a kid's only when a parent shares therapy with them.
-  const apptKids = kid ? (kid.therapy_kid_visible ? [kid.id as string] : []) : kids.map((k) => k.id as string);
+  const apptKids = (kid ? (kid.therapy_kid_visible ? [kid.id as string] : []) : kids.map((k) => k.id as string)).filter((id) => !doctorsOff.has(id));
   if (apptKids.length) {
     const rows = db.prepare(`SELECT a.*, m.name AS kid_name FROM therapy_appointments a JOIN members m ON m.id = a.member_id
       WHERE a.home_id = ? AND a.status = 'scheduled' AND a.starts_at >= ? AND a.member_id IN (${apptKids.map(() => '?').join(',')})`).all(info.id, from, ...apptKids) as Row[];
+    const areasOff = new Map(apptKids.map((id) => [id, doctorAreasOffFor(db, id)]));
     for (const a of rows) {
+      if (!appointmentOn(a.kind as string, areasOff.get(a.member_id as string) ?? [])) continue;
       const [date, time] = (a.starts_at as string).split('T');
       events.push({
         uid: `appt-${a.id}@daytime-ninja`, date, time, durationMinutes: (a.duration_minutes as number | null) ?? 60,

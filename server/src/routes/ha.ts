@@ -53,6 +53,7 @@ export function haRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const today = homeToday(home);
     const waiting = reviewQueue(db, ctx.homeId);
     const kids = listKids(db, ctx.homeId).map((k) => {
+      const off = new Set(k.pagesOff);
       const w = kidWeek(db, home, k.id, today);
       const s = streaks(db, k.id, today);
       const level = levelOf(db, k.id);
@@ -60,24 +61,30 @@ export function haRoutes(app: FastifyInstance, db: DatabaseSync): void {
       const items = todayList(db, ctx.homeId, k.id, today);
       return {
         id: k.id, name: k.name, slug: slug(k.name),
-        balance: w.balance, points_this_week: w.pointsThisWeek,
-        left_today: w.leftToday, done_today: items.filter((i) => i.status === 'approved').length, total_today: items.length,
-        waiting_for_review: waiting.filter((i) => i.memberId === k.id).length, done_this_week: w.choresDone,
-        streak: s.current, best_streak: s.best, level: level.level, level_name: level.name, level_badge: level.badge,
-        next_goal: goal?.title ?? null, next_goal_percent: goal?.percent ?? null,
-        chores_left: items.filter((i) => i.status === 'pending' || i.status === 'rejected').map((i) => i.title),
+        balance: w.balance, points_this_week: w.pointsThisWeek, pages_off: k.pagesOff,
+        ...(off.has('chores')
+          ? { left_today: null, done_today: null, total_today: null, waiting_for_review: null, done_this_week: null, chores_left: [] }
+          : {
+            left_today: w.leftToday, done_today: items.filter((i) => i.status === 'approved').length, total_today: items.length,
+            waiting_for_review: waiting.filter((i) => i.memberId === k.id).length, done_this_week: w.choresDone,
+            chores_left: items.filter((i) => i.status === 'pending' || i.status === 'rejected').map((i) => i.title),
+          }),
+        ...(off.has('stats')
+          ? { streak: null, best_streak: null, level: null, level_name: null, level_badge: null }
+          : { streak: s.current, best_streak: s.best, level: level.level, level_name: level.name, level_badge: level.badge }),
+        next_goal: off.has('goals') ? null : goal?.title ?? null, next_goal_percent: off.has('goals') ? null : goal?.percent ?? null,
       };
     });
     return {
       home: home.name, points_name: home.pointsName, points_icon: home.pointsIcon, today,
-      waiting_for_review: waiting.length, kids, kids_by_name: Object.fromEntries(kids.map((k) => [k.slug, k])),
+      waiting_for_review: waiting.filter((i) => !kids.find((k) => k.id === i.memberId)?.pages_off.includes('chores')).length, kids, kids_by_name: Object.fromEntries(kids.map((k) => [k.slug, k])),
     };
   });
 
   app.get('/api/homes/:homeId/ha/today', async (req) => {
     const ctx = homeCtx(db, req);
     const today = homeToday(homeInfo(db, ctx.homeId));
-    return listKids(db, ctx.homeId).map((k) => ({
+    return listKids(db, ctx.homeId).filter((k) => !k.pagesOff.includes('chores')).map((k) => ({
       kid: k.name, kid_id: k.id,
       chores: todayList(db, ctx.homeId, k.id, today).map((i) => ({ id: i.id, title: i.title, icon: i.icon, points: i.points, status: i.status })),
     }));

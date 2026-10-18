@@ -4,14 +4,15 @@ import { assertCanActFor, homeCtx, type HomeCtx } from '../auth.ts';
 import { tx, type Row } from '../db.ts';
 import { HttpError, newId, num, requireStr, str } from '../util.ts';
 import {
-  agenda, approveInstance, bonusOffers, claimBonus, getInstance, goalsFor, homeInfo, homeToday, kidWeek, ledger, rejectInstance,
+  agenda, approveInstance, bonusOffers, kidsWithPageOff, claimBonus, getInstance, goalsFor, homeInfo, homeToday, kidWeek, ledger, rejectInstance,
   reviewQueue, setStarted, submitInstance, syncChore, todayList, unapproveInstance, unclaimBonus, unsubmitInstance, type By,
 } from '../chores.ts';
 import { achievements, kidStats, levelOf, streaks } from '../progress.ts';
 import { kidTherapyView } from './therapy.ts';
 import { denFor } from './den.ts';
 import { externalBetween, refreshStale } from '../calendar.ts';
-import { cleanIcon, getKid, kidView, listKids } from './homes.ts';
+import { cleanIcon, getKid, kidView, listKids, pageOn } from './homes.ts';
+import type { KidPage } from '../../../shared/pages.ts';
 import { addDays, cleanWeekdays, describeSchedule, isIsoDate, startOfWeek, type ScheduleKind } from '../../../shared/schedule.ts';
 
 /** Who to credit in the ledger and review history. */
@@ -87,8 +88,9 @@ function setAssignments(db: DatabaseSync, choreId: string, memberIds: string[]):
 /** Who the agenda is for: kids only ever see themselves. */
 function agendaKids(db: DatabaseSync, ctx: HomeCtx, kid: string | undefined): string[] {
   if (ctx.actor.kind === 'kid') return [ctx.actor.memberId];
-  if (kid) return [getKid(db, ctx, kid).id as string];
-  return listKids(db, ctx.homeId).map((k) => k.id);
+  const off = kidsWithPageOff(db, ctx.homeId, 'chores');
+  if (kid) return [getKid(db, ctx, kid).id as string].filter((id) => !off.has(id));
+  return listKids(db, ctx.homeId).map((k) => k.id).filter((id) => !off.has(id));
 }
 
 function startParam(v: unknown, fallback: string): string {
@@ -98,8 +100,9 @@ function startParam(v: unknown, fallback: string): string {
 }
 
 /** Adds school lunch, meal plan and other subscribed calendar events to each day. */
-async function withFeeds<T extends { date: string }>(db: DatabaseSync, ctx: HomeCtx, days: T[]) {
+async function withFeeds<T extends { date: string }>(db: DatabaseSync, ctx: HomeCtx, days: T[], kidId?: string) {
   if (!days.length) return [];
+  if (kidId && !pageOn(db, kidId, 'calendar')) return days.map((d) => ({ ...d, external: [] }));
   await refreshStale(db, ctx.homeId);
   const ext = externalBetween(db, ctx.homeId, days[0].date, days[days.length - 1].date, ctx.actor.kind !== 'parent');
   return days.map((d) => ({ ...d, external: ext.get(d.date) ?? [] }));
@@ -172,23 +175,25 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const home = homeInfo(db, ctx.homeId);
     const today = homeToday(home);
     const thisWeek = startOfWeek(today, home.weekStart);
+    // Pages a parent switched off for this kid are left out (their data is kept).
+    const on = (page: KidPage) => pageOn(db, memberId, page);
     const start = startParam((req.query as { start?: string }).start, thisWeek);
     return {
       today,
       weekStart: start,
       kid: kidView(db, kid),
       stats: kidWeek(db, home, memberId, today),
-      todayItems: todayList(db, ctx.homeId, memberId, today),
-      week: await withFeeds(db, ctx, agenda(db, ctx.homeId, [memberId], start, 7, today)),
-      goals: goalsFor(db, memberId),
-      bonus: bonusOffers(db, ctx.homeId, memberId, today),
+      todayItems: on('chores') ? todayList(db, ctx.homeId, memberId, today) : [],
+      week: await withFeeds(db, ctx, on('chores') ? agenda(db, ctx.homeId, [memberId], start, 7, today) : agenda(db, ctx.homeId, [], start, 7, today), memberId),
+      goals: on('goals') ? goalsFor(db, memberId) : [],
+      bonus: on('chores') ? bonusOffers(db, ctx.homeId, memberId, today) : [],
       level: levelOf(db, memberId),
       streak: streaks(db, memberId, today),
-      achievements: achievements(db, memberId, today),
+      achievements: on('stats') ? achievements(db, memberId, today) : [],
       recent: ledger(db, memberId, 8),
       // Only when a parent chose to share it; parents see the full therapy section on its own page.
-      therapy: kidTherapyView(db, memberId, today),
-      den: denFor(db, ctx.homeId, memberId, today),
+      therapy: on('doctors') ? kidTherapyView(db, memberId, today) : null,
+      den: on('den') ? denFor(db, ctx.homeId, memberId, today) : [],
     };
   });
 
@@ -225,7 +230,8 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const home = homeInfo(db, ctx.homeId);
     const today = homeToday(home);
     const weeks = Math.min(Math.max(Number((req.query as { weeks?: string }).weeks) || 12, 2), 52);
-    return { today, weeks, kids: listKids(db, ctx.homeId).map((k) => ({ ...k, ...kidStats(db, home, k.id, today, weeks) })) };
+    const off = kidsWithPageOff(db, ctx.homeId, 'stats');
+    return { today, weeks, kids: listKids(db, ctx.homeId).filter((k) => !off.has(k.id)).map((k) => ({ ...k, ...kidStats(db, home, k.id, today, weeks) })) };
   });
 
   app.get('/api/homes/:homeId/kids/:memberId/stats', async (req) => {
@@ -266,7 +272,8 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
   // ---------- reviewing (parents) ----------
   app.get('/api/homes/:homeId/review', async (req) => {
     const ctx = homeCtx(db, req, 'parent');
-    return reviewQueue(db, ctx.homeId);
+    const off = kidsWithPageOff(db, ctx.homeId, 'chores');
+    return reviewQueue(db, ctx.homeId).filter((i) => !off.has(i.memberId));
   });
 
   app.post('/api/homes/:homeId/instances/:id/approve', async (req) => {

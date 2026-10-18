@@ -211,3 +211,40 @@ export async function therapyHelper(db: DatabaseSync, homeId: string, area: Help
     goals: (r.goals ?? []).slice(0, 5).map((g) => ({ title: String(g.title).slice(0, 120), why: String(g.why ?? '').slice(0, 300) })),
   };
 }
+
+// ---------- "Ask Dr. Bandit" in Doctors ----------
+
+export const ASK_DISCLAIMER = "General information to talk over with your child's doctor or therapist. Not medical advice.";
+export const URGENT_NOTE = 'For anything urgent, call your doctor now, or your local emergency number (911 in the US) in an emergency.';
+
+const ASK_SCHEMA = {
+  type: 'object',
+  properties: {
+    answer: { type: 'string', description: 'A short, practical answer in plain words: 2 to 6 sentences or a few short bullets' },
+    urgent: { type: 'boolean', description: 'True if the question describes something that may need a doctor today or emergency care' },
+  },
+  required: ['answer', 'urgent'],
+  additionalProperties: false,
+};
+
+const ASK_SYSTEM = (name: string) => `You are ${name}, a friendly raccoon doctor character in a family app. You help parents with short, practical,
+everyday information about their child's health, development and therapy goals: what is common at an age, simple things to try at home,
+and good questions to ask their doctor or therapist. Keep answers short and warm. You are not the child's doctor: never diagnose, never
+recommend or dose medicines, never contradict their professionals. If anything sounds urgent or serious (breathing trouble, injury,
+high fever in a baby, dehydration, a sudden change, self-harm), say clearly to contact their doctor or emergency services now and set urgent to true.
+Stay within the areas the parent has turned on; if the question is outside them, answer briefly and suggest asking their doctor.`;
+
+/** Only the age, the areas turned on, active goal text and the question are sent. Never names, notes or appointments. */
+export function askPrompt(age: number | null, areas: string[], goals: string[], question: string): string {
+  return [
+    age != null ? `The child is ${age} years old.` : "The child's age isn't known.",
+    `Areas the parent follows for this child: ${areas.length ? areas.join(', ') : 'none set'}.`,
+    goals.length ? `Current goals: ${goals.slice(0, 15).join('; ')}.` : '',
+    `Question: ${question}`,
+  ].filter(Boolean).join('\n');
+}
+
+export async function askDoctor(db: DatabaseSync, homeId: string, name: string, age: number | null, areas: string[], goals: string[], question: string): Promise<{ answer: string; urgent: boolean }> {
+  const r = await askJson<{ answer: string; urgent: boolean }>(db, homeId, ASK_SYSTEM(name), askPrompt(age, areas, goals, question), ASK_SCHEMA);
+  return { answer: String(r.answer ?? '').slice(0, 2000), urgent: !!r.urgent };
+}
