@@ -4,12 +4,12 @@ import { api, type Chore } from '../api.ts';
 import { useApp, useLoad } from '../state.tsx';
 import { RaccoonAvatar } from '../components/Raccoon.tsx';
 import { Modal } from '../components/Bits.tsx';
-import { CHORE_ICONS } from '../../../shared/catalog.ts';
+import { CHORE_ICONS, ROOM_TEMPLATES } from '../../../shared/catalog.ts';
 import { WEEKDAY_SHORT, type ScheduleKind } from '../../../shared/schedule.ts';
 import { IdeasButton } from '../components/Ideas.tsx';
 import { choresForAge } from '../../../shared/ages.ts';
 
-interface Draft { id?: string; title: string; icon: string; points: number; schedule: ScheduleKind; weekdays: number[]; dueDate: string; memberIds: string[]; bonus: boolean; claimLimit: 'each' | 'one' }
+interface Draft { id?: string; title: string; icon: string; points: number; schedule: ScheduleKind; weekdays: number[]; dueDate: string; memberIds: string[]; bonus: boolean; claimLimit: 'each' | 'one'; category: 'room' | null }
 
 function localToday(): string {
   const d = new Date();
@@ -29,7 +29,7 @@ function ChoreEditor({ draft, onClose, onSaved }: { draft: Draft; onClose: () =>
   async function save() {
     setError(null);
     try {
-      const body = { title: d.title, icon: d.icon, points: d.points, schedule: d.schedule, weekdays: d.weekdays, dueDate: d.schedule === 'once' ? d.dueDate : null, memberIds: d.memberIds, bonus: d.bonus, claimLimit: d.claimLimit };
+      const body = { title: d.title, icon: d.icon, points: d.points, schedule: d.schedule, weekdays: d.weekdays, dueDate: d.schedule === 'once' ? d.dueDate : null, memberIds: d.memberIds, bonus: d.bonus, claimLimit: d.claimLimit, category: d.category };
       if (d.id) await api(`${base}/chores/${d.id}`, { method: 'PATCH', body });
       else await api(`${base}/chores`, { body });
       toast(d.id ? 'Chore saved' : 'Chore added');
@@ -84,6 +84,17 @@ function ChoreEditor({ draft, onClose, onSaved }: { draft: Draft; onClose: () =>
           </div>
         )}
         {d.schedule === 'once' && <input type="date" value={d.dueDate} onChange={(e) => set({ dueDate: e.target.value })} style={{ maxWidth: 220 }} />}
+        <label className="field">Category
+          <div className="chips">
+            <button type="button" className={`chip${!d.category ? ' on' : ''}`} onClick={() => set({ category: null })}>🏠 Around the house</button>
+            <button type="button" className={`chip${d.category === 'room' ? ' on' : ''}`} onClick={() => set({ category: 'room' })}>🛏️ Their room</button>
+          </div>
+        </label>
+        {d.category === 'room' && !d.id && (
+          <div className="chips">
+            {ROOM_TEMPLATES.map((t) => <button key={t.title} type="button" className="chip" onClick={() => set({ title: t.title, icon: t.icon })}>{t.icon} {t.title}</button>)}
+          </div>
+        )}
         <label className="field">Kind of chore
           <div className="chips">
             <button type="button" className={`chip${!d.bonus ? ' on' : ''}`} onClick={() => set({ bonus: false })}>📋 Regular (always on their list)</button>
@@ -122,7 +133,7 @@ export function Chores() {
   const [chores, reload] = useLoad<Chore[]>(`${base}/chores`);
   const [editing, setEditing] = useState<Draft | null>(null);
   const kids = new Map(home?.kids.map((k) => [k.id, k]));
-  const blank = (): Draft => ({ title: '', icon: '⭐', points: 1, schedule: 'daily', weekdays: [1, 2, 3, 4, 5], dueDate: localToday(), memberIds: home?.kids.map((k) => k.id) ?? [], bonus: false, claimLimit: 'each' });
+  const blank = (): Draft => ({ title: '', icon: '⭐', points: 1, schedule: 'daily', weekdays: [1, 2, 3, 4, 5], dueDate: localToday(), memberIds: home?.kids.map((k) => k.id) ?? [], bonus: false, claimLimit: 'each', category: null });
 
   return (
     <div className="stack">
@@ -136,7 +147,7 @@ export function Chores() {
             <span className="big-icon" aria-hidden>{c.icon}</span>
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 700 }}>{c.title}</div>
-              <div className="small muted">{c.bonus && <span className="pill">💪 bonus{c.claimLimit === 'one' ? ', first come' : ''}</span>} {c.describe} · +{c.points} {home?.pointsIcon}</div>
+              <div className="small muted">{c.category === 'room' && <span className="pill">🛏️ room</span>} {c.bonus && <span className="pill">💪 bonus{c.claimLimit === 'one' ? ', first come' : ''}</span>} {c.describe} · +{c.points} {home?.pointsIcon}</div>
             </div>
             <div className="row" style={{ gap: 2 }}>
               {c.memberIds.map((m) => <RaccoonAvatar key={m} variant={kids.get(m)?.avatar} size={30} title={kids.get(m)?.name} />)}

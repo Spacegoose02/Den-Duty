@@ -12,7 +12,7 @@ import { Settings } from './pages/Settings.tsx';
 import { Rewards } from './pages/Rewards.tsx';
 import { Stats } from './pages/Stats.tsx';
 import { Doctors } from './pages/Doctors.tsx';
-import { DenDuty } from './pages/DenDuty.tsx';
+import { ParentDuty } from './pages/ParentDuty.tsx';
 import { KidPicker } from './pages/KidPicker.tsx';
 import { KidBoard, ParentKidBoard } from './pages/KidBoard.tsx';
 
@@ -24,12 +24,12 @@ const NAV = [
   { to: '/rewards', ico: '🎁', label: 'Rewards' },
   { to: '/stats', ico: '📊', label: 'Stats' },
   { to: '/doctors', ico: '🩺', label: 'Doctors' },
-  { to: '/den', ico: '🛏️', label: 'Den Duty' },
+  { to: '/parent-duty', ico: '📝', label: 'Parent Duty' },
   { to: '/settings', ico: '⚙️', label: 'Settings' },
 ];
 
 /** Which per-kid page each nav entry belongs to (see shared/pages.ts). */
-const NAV_PAGE: Record<string, KidPage> = { '/week': 'chores', '/chores': 'chores', '/den': 'den', '/rewards': 'goals', '/stats': 'stats', '/doctors': 'doctors' };
+const NAV_PAGE: Record<string, KidPage> = { '/week': 'chores', '/chores': 'chores', '/parent-duty': 'parentduty', '/rewards': 'goals', '/stats': 'stats', '/doctors': 'doctors' };
 
 function Nav({ className }: { className: string }) {
   const { who, home } = useApp();
@@ -82,8 +82,9 @@ export function App() {
           <Route path="/stats" element={<Stats />} />
           <Route path="/doctors" element={<Doctors />} />
           <Route path="/therapy" element={<Navigate to="/doctors" replace />} />
-          <Route path="/den" element={<DenDuty />} />
-          <Route path="/honeydo" element={<Navigate to="/den" replace />} />
+          <Route path="/parent-duty" element={<ParentDuty />} />
+          <Route path="/den" element={<Navigate to="/parent-duty" replace />} />
+          <Route path="/honeydo" element={<Navigate to="/parent-duty" replace />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/home/new" element={<HomeSetup inline />} />
           <Route path="*" element={<div className="card">That page wandered off. <NavLink to="/">Go home</NavLink></div>} />

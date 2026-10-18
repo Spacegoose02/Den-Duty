@@ -60,7 +60,7 @@ export interface HomeDetail {
 
 export interface Chore {
   id: string; title: string; icon: string; points: number; schedule: ScheduleKind; weekdays: number[]; dueDate: string | null;
-  startDate: string; describe: string; memberIds: string[]; bonus: boolean; claimLimit: 'each' | 'one';
+  startDate: string; describe: string; memberIds: string[]; bonus: boolean; claimLimit: 'each' | 'one'; category: 'room' | null;
 }
 
 export type ItemStatus = 'pending' | 'submitted' | 'approved' | 'rejected' | 'planned';
@@ -72,7 +72,9 @@ export interface AgendaItem {
 
 export interface ExternalItem { date: string; time: string | null; title: string; feed: string; kind: string }
 
-export interface Day { date: string; items: AgendaItem[]; external?: ExternalItem[] }
+export interface DutyItem { id: string; title: string; kidId: string | null; kidName: string | null; dueDate: string | null; status: string }
+
+export interface Day { date: string; items: AgendaItem[]; external?: ExternalItem[]; duty?: DutyItem[] }
 
 export interface Goal {
   id: string; memberId: string; title: string; targetPoints: number; reward: string | null; status: 'active' | 'redeemed';
@@ -89,8 +91,6 @@ export interface Board {
   today: string; weekStart: string; kid: Kid; stats: KidWeek; todayItems: AgendaItem[]; week: Day[]; goals: Goal[];
   bonus: BonusOffer[]; level: LevelInfo; streak: Streak; achievements: Achievement[]; recent: LedgerEntry[];
   /** Present only when a parent shares the kid's therapy goals with them. */
-  /** The kid's room board (Den Duty). */
-  den: { id: string; title: string; icon: string | null; status: 'todo' | 'doing' | 'done'; points: number; repeatDaily: boolean; checked: boolean }[];
   therapy: { goals: { id: string; area: string; title: string; progress: number; rewardStep: number; rewardMet: number }[]; upcoming: { id: string; kind: string; title: string; provider: string | null; startsAt: string }[] } | null;
 }
 

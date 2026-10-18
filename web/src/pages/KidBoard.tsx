@@ -166,29 +166,6 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
         </div>
       </section>
 
-      {board.den.length > 0 && (
-        <section className="card stack">
-          <h2 style={{ margin: 0 }}>🦝 My den</h2>
-          <div className="den-grid">
-            {board.den.map((c) => {
-              const next = c.status === 'todo' ? 'doing' : c.status === 'doing' ? 'done' : null;
-              return (
-                <button key={c.id} className={`den-card ${c.status}`} disabled={busy === c.id || (!next && !asParent)}
-                  onClick={() => void act(c.id, async () => {
-                    await api(`${base}/den/${c.id}`, { method: 'PATCH', body: { status: next ?? 'todo' } });
-                    if (next === 'done' && !asParent) celebrate(c.icon ?? '🧹', 'Your den is looking great!');
-                  })}>
-                  <span className="den-icon" aria-hidden>{c.icon ?? '🧹'}</span>
-                  <span className="den-title">{c.title}</span>
-                  <span className="small">{c.status === 'done' ? (c.checked ? '✅ Checked!' : '⏳ Done!') : c.status === 'doing' ? '▶ Doing' : c.points ? `+${c.points} ${icon}` : 'To do'}</span>
-                </button>
-              );
-            })}
-          </div>
-          <p className="small muted" style={{ margin: 0 }}>Tap to start, tap again when it's done.</p>
-        </section>
-      )}
-
       {board.bonus.length > 0 && (
         <section className="card stack pg-chores">
           <h2 style={{ margin: 0 }}>💪 Up for grabs</h2>

@@ -9,7 +9,7 @@ import {
 } from '../chores.ts';
 import { achievements, kidStats, levelOf, streaks } from '../progress.ts';
 import { kidTherapyView } from './therapy.ts';
-import { denFor } from './den.ts';
+import { dutyDue } from './parentduty.ts';
 import { externalBetween, refreshStale } from '../calendar.ts';
 import { cleanIcon, getKid, kidView, listKids, pageOn } from './homes.ts';
 import type { KidPage } from '../../../shared/pages.ts';
@@ -27,7 +27,7 @@ function choreView(db: DatabaseSync, r: Row) {
     id: r.id as string, title: r.title as string, icon: r.icon as string, points: r.points as number,
     schedule, weekdays, dueDate: r.due_date as string | null, startDate: r.start_date as string,
     describe: describeSchedule({ schedule, weekdays, dueDate: r.due_date as string | null }),
-    bonus: !!r.bonus, claimLimit: r.claim_limit as 'each' | 'one',
+    bonus: !!r.bonus, claimLimit: r.claim_limit as 'each' | 'one', category: (r.category as string | null) ?? null,
     memberIds: (db.prepare('SELECT member_id FROM chore_assignments WHERE chore_id = ?').all(r.id as string) as Row[]).map((a) => a.member_id as string),
   };
 }
@@ -69,7 +69,8 @@ function choreInput(db: DatabaseSync, homeId: string, b: Row, today: string, cur
     if (memberIds.some((m) => !kids.has(m))) throw new HttpError(400, 'Chores can only be assigned to kids in this home');
     if (!bonus && !memberIds.length) throw new HttpError(400, 'Pick which kids do this chore');
   }
-  return { title, icon, points, schedule, weekdays, dueDate, memberIds, bonus, claimLimit };
+  const category = 'category' in b ? (b.category === 'room' ? 'room' : null) : (cur?.category as string | null) ?? null;
+  return { title, icon, points, schedule, weekdays, dueDate, memberIds, bonus, claimLimit, category };
 }
 
 /** Only a kid's own things for kids; parents can act for any kid in the home. */
@@ -121,10 +122,10 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const c = choreInput(db, ctx.homeId, (req.body ?? {}) as Row, today);
     const id = newId();
     tx(db, () => {
-      db.prepare(`INSERT INTO chores (id, home_id, title, icon, points, schedule, weekdays, due_date, start_date, created_by, bonus, claim_limit)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      db.prepare(`INSERT INTO chores (id, home_id, title, icon, points, schedule, weekdays, due_date, start_date, created_by, bonus, claim_limit, category)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(id, ctx.homeId, c.title, c.icon, c.points, c.schedule, JSON.stringify(c.weekdays), c.dueDate,
-          c.dueDate && c.dueDate < today ? c.dueDate : today, ctx.user?.id ?? null, c.bonus ? 1 : 0, c.claimLimit);
+          c.dueDate && c.dueDate < today ? c.dueDate : today, ctx.user?.id ?? null, c.bonus ? 1 : 0, c.claimLimit, c.category);
       setAssignments(db, id, c.memberIds!);
     });
     syncChore(db, ctx.homeId, id, today);
@@ -137,9 +138,9 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const cur = getChore(db, ctx.homeId, (req.params as { choreId: string }).choreId);
     const c = choreInput(db, ctx.homeId, (req.body ?? {}) as Row, today, cur);
     tx(db, () => {
-      db.prepare(`UPDATE chores SET title = ?, icon = ?, points = ?, schedule = ?, weekdays = ?, due_date = ?, bonus = ?, claim_limit = ?,
+      db.prepare(`UPDATE chores SET title = ?, icon = ?, points = ?, schedule = ?, weekdays = ?, due_date = ?, bonus = ?, claim_limit = ?, category = ?,
         start_date = MIN(start_date, COALESCE(?, start_date)), updated_at = datetime('now') WHERE id = ?`)
-        .run(c.title, c.icon, c.points, c.schedule, JSON.stringify(c.weekdays), c.dueDate, c.bonus ? 1 : 0, c.claimLimit, c.dueDate, cur.id as string);
+        .run(c.title, c.icon, c.points, c.schedule, JSON.stringify(c.weekdays), c.dueDate, c.bonus ? 1 : 0, c.claimLimit, c.category, c.dueDate, cur.id as string);
       if (c.memberIds) setAssignments(db, cur.id as string, c.memberIds);
     });
     syncChore(db, ctx.homeId, cur.id as string, today);
@@ -163,7 +164,10 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const q = req.query as { start?: string; days?: string; kid?: string };
     const start = startParam(q.start, startOfWeek(today, home.weekStart));
     const days = Math.min(Math.max(Number(q.days) || 7, 1), 31);
-    return { today, start, days: await withFeeds(db, ctx, agenda(db, ctx.homeId, agendaKids(db, ctx, q.kid), start, days, today)) };
+    const withExt = await withFeeds(db, ctx, agenda(db, ctx.homeId, agendaKids(db, ctx, q.kid), start, days, today));
+    if (ctx.actor.kind !== 'parent' || q.kid) return { today, start, days: withExt };
+    const duty = dutyDue(db, ctx.homeId, start, addDays(start, days - 1));
+    return { today, start, days: withExt.map((d) => ({ ...d, duty: duty.filter((x) => x.dueDate === d.date) })) };
   });
 
   // Everything a kid's screen needs in one go.
@@ -193,7 +197,6 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
       recent: ledger(db, memberId, 8),
       // Only when a parent chose to share it; parents see the full therapy section on its own page.
       therapy: on('doctors') ? kidTherapyView(db, memberId, today) : null,
-      den: on('den') ? denFor(db, ctx.homeId, memberId, today) : [],
     };
   });
 

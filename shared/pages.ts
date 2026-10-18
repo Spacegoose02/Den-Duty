@@ -3,7 +3,8 @@
 
 export const KID_PAGES = [
   { id: 'chores', label: 'Chores', icon: '🧹', hint: 'Daily chores, bonus chores and the week' },
-  { id: 'den', label: 'Den Duty', icon: '🛏️', hint: 'Their room board' },
+  { id: 'parentduty', label: 'Parent Duty', icon: '📝', hint: 'Your to-dos for this kid' },
+  { id: 'timeout', label: 'Time-outs', icon: '⏳', hint: 'Time-outs and buying time back' },
   { id: 'goals', label: 'Goals & rewards', icon: '🎁', hint: 'Goals, rewards and reward votes' },
   { id: 'stats', label: 'Stats & badges', icon: '📊', hint: 'Charts, streaks, levels and badges' },
   { id: 'doctors', label: 'Doctors', icon: '🩺', hint: 'Appointments, goals and notes' },

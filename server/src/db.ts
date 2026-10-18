@@ -5,7 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 export type Row = Record<string, unknown>;
 
 // Each entry runs once, in order. Never edit a shipped migration; append a new one.
-const MIGRATIONS: string[] = [
+export const MIGRATIONS: string[] = [
   `
   -- ---------- people and sign-in (same shape as Nighttime Ninja) ----------
   CREATE TABLE users (
@@ -429,6 +429,17 @@ const MIGRATIONS: string[] = [
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE INDEX ai_questions_member ON ai_questions(member_id, created_at);
+  `,
+  // Parent Duty: the room board becomes parents' to-dos per kid. Kids' room cards turn into regular chores in a new
+  // "room" category (daily cards stay daily, one-offs become one-time chores), so nothing is lost and kids keep them.
+  `
+  ALTER TABLE chores ADD COLUMN category TEXT;
+  INSERT INTO chores (id, home_id, title, icon, points, schedule, weekdays, due_date, start_date, created_by, category)
+    SELECT id, home_id, title, COALESCE(icon, '🧹'), points, CASE WHEN repeat_daily = 1 THEN 'daily' ELSE 'once' END, '[]',
+      CASE WHEN repeat_daily = 1 THEN NULL ELSE date('now') END, date('now'), created_by, 'room'
+    FROM honeydo WHERE kid_id IS NOT NULL;
+  INSERT INTO chore_assignments (chore_id, member_id) SELECT id, kid_id FROM honeydo WHERE kid_id IS NOT NULL;
+  DELETE FROM honeydo WHERE kid_id IS NOT NULL;
   `,
 ];
 

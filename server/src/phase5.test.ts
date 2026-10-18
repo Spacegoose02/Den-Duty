@@ -1,4 +1,4 @@
-// Ages on kids, therapy rewards, the AI speech and OT helpers, and Den Duty room boards.
+// Ages on kids, therapy rewards, the AI speech and OT helpers, and Parent Duty.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
@@ -107,37 +107,49 @@ test('speech and OT helpers: off unless AI is on, cached per day, and only age, 
   setAiFetch(undefined);
 });
 
-test('Den Duty: room boards per kid, kids move their own cards, parents check them off (paid once a day)', async () => {
-  const { db, call, mom, base, ava, ben, tablet, asKid } = await family();
-  const bed = (await call(mom, 'POST', `${base}/den`, { kidId: ava.id, title: 'Make your bed', icon: '🛏️', points: 2 })).body;
-  assert.deepEqual([bed.kidId, bed.repeatDaily, bed.points, bed.status], [ava.id, true, 2, 'todo']);
-  const toys = (await call(mom, 'POST', `${base}/den`, { kidId: ben.id, title: 'Toys away', icon: '🧸' })).body;
-  const parentTodo = (await call(mom, 'POST', `${base}/den`, { title: 'Fix the closet door' })).body;
-  assert.equal(parentTodo.kidId, null);
+test('Parent Duty: per-kid to-dos for parents, due dates on the parents\' week and calendar, never on kids\' screens', async () => {
+  const { call, mom, base, ava, ben, tablet, asKid, today } = await family();
+  const help = (await call(mom, 'POST', `${base}/parent-duty`, { kidId: ava.id, title: 'Help with the science project', dueDate: today })).body;
+  assert.deepEqual([help.kidId, help.status, help.dueDate], [ava.id, 'todo', today]);
+  await call(mom, 'POST', `${base}/parent-duty`, { kidId: ben.id, title: 'Buy new shoes' });
+  await call(mom, 'POST', `${base}/parent-duty`, { title: 'Fix the closet door' });
+  assert.equal((await call(mom, 'POST', `${base}/parent-duty`, { title: 'x', assigneeId: ava.id })).status, 400, 'only parents take cards');
+
+  assert.deepEqual((await call(mom, 'GET', `${base}/parent-duty?kid=${ava.id}`)).body.map((c: { title: string }) => c.title), ['Help with the science project']);
+  assert.deepEqual((await call(mom, 'GET', `${base}/parent-duty?kid=general`)).body.map((c: { title: string }) => c.title), ['Fix the closet door']);
+  assert.deepEqual((await call(mom, 'GET', `${base}/honeydo`)).body.map((c: { title: string }) => c.title), ['Fix the closet door'], 'the old list still works');
+  assert.equal((await call(mom, 'PATCH', `${base}/parent-duty/${help.id}`, { status: 'doing' })).body.status, 'doing');
+
+  const week = (await call(mom, 'GET', `${base}/agenda`)).body;
+  const day = week.days.find((d: { date: string }) => d.date === today);
+  assert.equal(day.duty[0].title, 'Help with the science project');
+  assert.equal(day.duty[0].kidName, 'Avaleigh');
+  const links = (await call(mom, 'GET', `${base}/calendars`)).body;
+  assert.match((await call({}, 'GET', links.home)).body, /For Avaleigh: Help with the science project/);
+  assert.doesNotMatch((await call({}, 'GET', links.kids[0].url)).body, /science project/, "never in the kid's own feed");
 
   await asKid(ava);
-  const mine = (await call(tablet, 'GET', `${base}/den`)).body as { id: string }[];
-  assert.deepEqual(mine.map((c) => c.id), [bed.id], 'kids only see their own room');
-  assert.equal((await call(tablet, 'GET', `${base}/kids/${ava.id}/board`)).body.den.length, 1);
-  assert.equal((await call(tablet, 'PATCH', `${base}/den/${toys.id}`, { status: 'done' })).status, 403, "not a sibling's card");
-  assert.equal((await call(tablet, 'PATCH', `${base}/den/${bed.id}`, { points: 99 })).status, 403, 'kids can only move cards');
-  assert.equal((await call(tablet, 'POST', `${base}/den/${bed.id}/check`, {})).status, 403);
-  assert.equal((await call(tablet, 'PATCH', `${base}/den/${bed.id}`, { status: 'done' })).body.status, 'done');
+  assert.equal((await call(tablet, 'GET', `${base}/parent-duty`)).status, 403, 'parents only');
+  assert.equal((await call(tablet, 'GET', `${base}/agenda`)).body.days[0].duty, undefined);
+  await call(mom, 'PATCH', `${base}/kids/${ava.id}`, { pagesOff: ['parentduty'] });
+  assert.equal((await call(mom, 'GET', `${base}/parent-duty`)).body.length, 2, "a kid's Parent Duty can be switched off too");
+});
 
-  const check = await call(mom, 'POST', `${base}/den/${bed.id}/check`, {});
-  assert.equal(check.body.awarded, 2);
-  assert.equal((await call(mom, 'POST', `${base}/den/${bed.id}/check`, {})).body.awarded, 0, 'no double pay');
-  assert.equal((await call(mom, 'GET', `${base}/kids/${ava.id}/ledger`)).body.entries[0].reason, '🦝 Den Duty: Make your bed');
-
-  // Tomorrow the daily card is back on the board and can earn again.
-  db.prepare("UPDATE honeydo SET done_date = '2000-01-01' WHERE id = ?").run(bed.id);
-  const again = (await call(tablet, 'GET', `${base}/den`)).body[0];
-  assert.deepEqual([again.status, again.checked], ['todo', false]);
-
-  // Parents can filter boards; the old honey-do list is the parents' cards.
-  assert.equal((await call(mom, 'GET', `${base}/den?kid=parents`)).body.length, 1);
-  assert.equal((await call(mom, 'GET', `${base}/den?kid=${ben.id}`)).body[0].title, 'Toys away');
-  assert.deepEqual((await call(mom, 'GET', `${base}/honeydo`)).body.map((c: { title: string }) => c.title), ['Fix the closet door']);
-  await call(tablet, 'POST', '/api/kiosk/kid/logout', {});
-  assert.equal((await call(tablet, 'GET', `${base}/den`)).status, 403, 'the tablet alone shows no boards');
+test('upgrading: kids\' room cards become Room chores, parents\' cards stay', async () => {
+  const { DatabaseSync } = await import('node:sqlite');
+  const { MIGRATIONS } = await import('./db.ts');
+  const db = new DatabaseSync(':memory:');
+  db.exec('PRAGMA foreign_keys = ON;');
+  const roomBoard = MIGRATIONS.findIndex((m) => m.includes('ALTER TABLE chores ADD COLUMN category'));
+  for (const m of MIGRATIONS.slice(0, roomBoard)) db.exec(m);
+  db.exec(`INSERT INTO homes (id, name, join_code) VALUES ('h', 'Den', 'J1');
+    INSERT INTO members (id, home_id, role, name) VALUES ('k', 'h', 'kid', 'Ava');
+    INSERT INTO honeydo (id, home_id, title, icon, kid_id, points, repeat_daily) VALUES ('c1', 'h', 'Make your bed', '🛏️', 'k', 2, 1);
+    INSERT INTO honeydo (id, home_id, title, kid_id, points, repeat_daily) VALUES ('c2', 'h', 'Sort old toys', 'k', 0, 0);
+    INSERT INTO honeydo (id, home_id, title) VALUES ('c3', 'h', 'Fix the closet door');`);
+  for (const m of MIGRATIONS.slice(roomBoard)) db.exec(m);
+  const chores = db.prepare('SELECT title, icon, points, schedule, category FROM chores ORDER BY title').all() as Record<string, unknown>[];
+  assert.deepEqual(chores.map((c) => `${c.title}|${c.icon}|${c.points}|${c.schedule}|${c.category}`), ['Make your bed|🛏️|2|daily|room', 'Sort old toys|🧹|0|once|room']);
+  assert.equal((db.prepare("SELECT member_id FROM chore_assignments WHERE chore_id = 'c1'").get() as { member_id: string }).member_id, 'k');
+  assert.deepEqual((db.prepare('SELECT title FROM honeydo').all() as { title: string }[]).map((r) => r.title), ['Fix the closet door']);
 });

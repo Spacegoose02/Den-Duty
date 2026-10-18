@@ -20,10 +20,10 @@ function localToday(): string {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 }
 
-/** The parents' own kanban (house projects, errands, goals), shown as a tab of Den Duty. Drag cards on a computer, or use the arrows. */
-export function HoneyDo({ embedded = false }: { embedded?: boolean }) {
+/** One board: the things to do for one kid, or the general list (kidId null). Drag cards on a computer, or use the arrows. */
+function DutyBoard({ kidId, kidName }: { kidId: string | null; kidName?: string }) {
   const { base, home, toast } = useApp();
-  const [cards, reload] = useLoad<Card[]>(`${base}/honeydo`);
+  const [cards, reload] = useLoad<Card[]>(`${base}/parent-duty?kid=${kidId ?? 'general'}`, [kidId]);
   const [draft, setDraft] = useState({ title: '', assigneeId: '', dueDate: '' });
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<Status | null>(null);
@@ -31,17 +31,16 @@ export function HoneyDo({ embedded = false }: { embedded?: boolean }) {
   const today = localToday();
 
   const move = async (id: string, status: Status) => {
-    try { await api(`${base}/honeydo/${id}`, { method: 'PATCH', body: { status } }); await reload(); } catch (e) { toast((e as Error).message); }
+    try { await api(`${base}/parent-duty/${id}`, { method: 'PATCH', body: { status } }); await reload(); } catch (e) { toast((e as Error).message); }
   };
 
   return (
     <div className="stack">
-      {!embedded && <div className="topbar"><h1>Parents' list</h1><span className="pill">🔒 Parents only</span></div>}
-      {embedded && <p className="small muted" style={{ margin: 0 }}>🔒 Only parents see this list: house projects, errands, your own goals.</p>}
+      <p className="small muted" style={{ margin: 0 }}>{kidName ? `Things to help ${kidName} with: forms to sign, things to buy, projects, appointments to book. Due dates show on your calendar.` : 'Everything else: house projects, errands, your own goals.'}</p>
       <form className="row card" onSubmit={async (e) => {
         e.preventDefault();
         try {
-          await api(`${base}/honeydo`, { body: { title: draft.title, assigneeId: draft.assigneeId || null, dueDate: draft.dueDate || null } });
+          await api(`${base}/parent-duty`, { body: { title: draft.title, kidId, assigneeId: draft.assigneeId || null, dueDate: draft.dueDate || null } });
           setDraft({ title: '', assigneeId: '', dueDate: '' });
           await reload();
         } catch (err) { toast((err as Error).message); }
@@ -82,7 +81,7 @@ export function HoneyDo({ embedded = false }: { embedded?: boolean }) {
                       {NEXT[c.status] && <button className="primary" onClick={() => void move(c.id, NEXT[c.status]!)} aria-label="Move forward">▶</button>}
                       <button className="ghost danger" aria-label="Delete" onClick={async () => {
                         if (!confirm(`Delete “${c.title}”?`)) return;
-                        await api(`${base}/honeydo/${c.id}`, { method: 'DELETE' });
+                        await api(`${base}/parent-duty/${c.id}`, { method: 'DELETE' });
                         await reload();
                       }}>✕</button>
                     </div>
@@ -94,6 +93,29 @@ export function HoneyDo({ embedded = false }: { embedded?: boolean }) {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/** Parent Duty: a board per kid of what you need to do for them, plus a general list. Parents only. */
+export function ParentDuty() {
+  const { home } = useApp();
+  const [tab, setTab] = useState<string | null>(null);
+  const kids = (home?.kids ?? []).filter((k) => !k.pagesOff.includes('parentduty'));
+  const current = tab ?? kids[0]?.id ?? 'general';
+  const kid = kids.find((k) => k.id === current);
+  return (
+    <div className="stack">
+      <div className="topbar"><h1>📝 Parent Duty</h1><span className="pill">🔒 Parents only</span></div>
+      <div className="chips">
+        {kids.map((k) => (
+          <button key={k.id} className={`chip${current === k.id ? ' on' : ''}`} onClick={() => setTab(k.id)}>
+            <RaccoonAvatar variant={k.avatar} size={26} /> For {k.name}
+          </button>
+        ))}
+        <button className={`chip${current === 'general' ? ' on' : ''}`} onClick={() => setTab('general')}>🏡 General</button>
+      </div>
+      <DutyBoard key={current} kidId={kid ? kid.id : null} kidName={kid?.name} />
     </div>
   );
 }

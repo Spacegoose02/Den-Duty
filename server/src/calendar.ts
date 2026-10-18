@@ -5,6 +5,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { Row } from './db.ts';
 import { randomToken } from './util.ts';
 import { agenda, homeInfo, homeToday, kidsWithPageOff, type HomeInfo } from './chores.ts';
+import { dutyDue } from './routes/parentduty.ts';
 import { appointmentOn, DOCTOR_AREA_IDS, offList } from '../../shared/pages.ts';
 
 const doctorAreasOffFor = (db: DatabaseSync, memberId: string) =>
@@ -70,6 +71,11 @@ export function calendarFor(db: DatabaseSync, token: string): string | null {
         summary: `${kid ? '' : `${a.kid_name}: `}${a.title}${a.provider ? ` with ${a.provider}` : ''}`,
         description: [a.location, a.notes].filter(Boolean).join('\n') || null,
       });
+    }
+  }
+  if (!kid) {
+    for (const d of dutyDue(db, info.id, from, addDays(today, 60))) {
+      events.push({ uid: `duty-${d.id}@den-duty`, date: d.dueDate!, summary: `📝 ${d.kidName ? `For ${d.kidName}: ` : ''}${d.title}`, description: d.notes });
     }
   }
   return buildIcs(kid ? `${kid.name}'s chores` : `${info.name} chores`, info.timezone, events);

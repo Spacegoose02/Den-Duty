@@ -17,7 +17,7 @@ test('turning a page off for one kid hides it everywhere for that kid, keeps the
   const { call, mom, base, ava, ben, tablet, asKid, today } = await family();
   await call(mom, 'POST', `${base}/chores`, { title: 'Make bed', points: 2, memberIds: [ava.id, ben.id] });
   const goal = (await call(mom, 'POST', `${base}/kids/${ava.id}/goals`, { title: 'Zoo trip', targetPoints: 50 })).body;
-  await call(mom, 'POST', `${base}/den`, { kidId: ava.id, title: 'Toys away' });
+  await call(mom, 'POST', `${base}/parent-duty`, { kidId: ava.id, title: 'Sign the field trip form' });
   await call(mom, 'POST', `${base}/kids/${ava.id}/therapy/goals`, { area: 'speech', title: 'Use 3-word sentences' });
   await asKid(ava);
   const item = (await call(tablet, 'GET', `${base}/kids/${ava.id}/board`)).body.todayItems[0];
@@ -26,14 +26,13 @@ test('turning a page off for one kid hides it everywhere for that kid, keeps the
   const links = (await call(mom, 'GET', `${base}/calendars`)).body;
   const avaLink = links.kids.find((k: { id: string }) => k.id === ava.id).url;
 
-  const off = (await call(mom, 'PATCH', `${base}/kids/${ava.id}`, { pagesOff: ['chores', 'den', 'goals', 'stats', 'doctors', 'calendar', 'nonsense'] })).body;
-  assert.deepEqual(off.pagesOff, ['chores', 'den', 'goals', 'stats', 'doctors', 'calendar'], 'unknown pages are dropped');
+  const off = (await call(mom, 'PATCH', `${base}/kids/${ava.id}`, { pagesOff: ['chores', 'parentduty', 'goals', 'stats', 'doctors', 'calendar', 'nonsense'] })).body;
+  assert.deepEqual(off.pagesOff, ['chores', 'parentduty', 'goals', 'stats', 'doctors', 'calendar'], 'unknown pages are dropped');
 
   // The tablet board leaves it all out.
   const board = (await call(tablet, 'GET', `${base}/kids/${ava.id}/board`)).body;
-  assert.deepEqual([board.todayItems.length, board.goals.length, board.den.length, board.achievements.length, board.therapy], [0, 0, 0, 0, null]);
+  assert.deepEqual([board.todayItems.length, board.goals.length, board.achievements.length, board.therapy], [0, 0, 0, null]);
   assert.ok(board.week.every((d: { items: unknown[] }) => d.items.length === 0));
-  assert.equal((await call(tablet, 'GET', `${base}/den`)).body.length, 0);
 
   // Parent views: week, review queue, stats and Doctors skip her; Ben is unaffected.
   const agenda = (await call(mom, 'GET', `${base}/agenda`)).body;
@@ -57,7 +56,7 @@ test('turning a page off for one kid hides it everywhere for that kid, keeps the
   const back = (await call(tablet, 'GET', `${base}/kids/${ava.id}/board`)).body;
   assert.equal(back.todayItems[0].status, 'submitted');
   assert.equal(back.goals[0].id, goal.id);
-  assert.equal(back.den[0].title, 'Toys away');
+  assert.equal((await call(mom, 'GET', `${base}/parent-duty?kid=${ava.id}`)).body[0].title, 'Sign the field trip form');
   assert.equal((await call({}, 'GET', avaLink)).status, 200);
   assert.ok(today);
 });
