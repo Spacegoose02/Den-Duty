@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api.ts';
 import { useApp } from '../state.tsx';
-import { DaytimeScene } from '../components/Raccoon.tsx';
+import { SunnyScene } from '../components/Raccoon.tsx';
 
 /** Create a new home or join one with a code. Shown on first sign-in and from Settings. */
 export function HomeSetup({ inline = false }: { inline?: boolean }) {
@@ -27,7 +27,7 @@ export function HomeSetup({ inline = false }: { inline?: boolean }) {
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const content = (
     <div className="stack" style={{ maxWidth: 720, width: '100%' }}>
-      {!inline && <DaytimeScene variant={who?.user?.avatar ?? 'ninja'} />}
+      {!inline && <SunnyScene variant={who?.user?.avatar ?? 'ninja'} />}
       <h1>{inline ? 'Add a home' : `Welcome, ${who?.user?.name}!`}</h1>
       <p className="muted">A home is your family: its parents, kids, chores and rewards. Start a new one, or join your partner's with their code.</p>
       <div className="grid-2">

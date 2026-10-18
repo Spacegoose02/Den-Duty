@@ -1,9 +1,9 @@
 services:
-  daytime-ninja:
-    image: ghcr.io/spacegoose02/daytime-ninja:latest
+  den-duty:
+    image: ghcr.io/spacegoose02/den-duty:latest
     # To build from this folder instead of pulling: comment out "image" and uncomment "build".
     # build: .
-    container_name: daytime-ninja
+    container_name: den-duty
     restart: unless-stopped
     ports:
       - "8080:8080"

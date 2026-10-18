@@ -10,7 +10,7 @@ function createWindow() {
     height: 860,
     minWidth: 420,
     minHeight: 600,
-    title: 'Daytime Ninja',
+    title: 'Den Duty',
     icon: path.join(__dirname, 'build', 'icon.png'),
     autoHideMenuBar: true,
     webPreferences: { contextIsolation: true, sandbox: true },
@@ -33,7 +33,7 @@ function createWindow() {
 
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     {
-      label: 'Daytime Ninja',
+      label: 'Den Duty',
       submenu: [
         { label: 'Home', accelerator: 'Alt+Home', click: () => win.webContents.executeJavaScript("location.pathname = '/'").catch(() => {}) },
         { label: 'Change server…', click: () => win.loadFile(LAUNCHER, { search: 'change' }) },

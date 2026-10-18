@@ -5,8 +5,8 @@ import type { CapacitorConfig } from '@capacitor/cli';
 const serverUrl = process.env.SERVER_URL;
 
 const config: CapacitorConfig = {
-  appId: 'io.github.daytimeninja.app',
-  appName: 'Daytime Ninja',
+  appId: 'io.github.denduty.app',
+  appName: 'Den Duty',
   webDir: '../apps/launcher',
   server: {
     ...(serverUrl ? { url: serverUrl } : {}),

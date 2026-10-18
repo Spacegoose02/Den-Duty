@@ -1,4 +1,4 @@
-// The Daytime Ninja mascot: a masked raccoon, drawn in plain SVG so it themes and scales cleanly.
+// The Den Duty mascot: a masked raccoon, drawn in plain SVG so it themes and scales cleanly.
 import { AVATAR_LABELS, isAvatar, type Avatar } from '../../../shared/catalog.ts';
 
 function Head({ variant }: { variant: Avatar }) {
@@ -131,7 +131,7 @@ export function RaccoonAvatar({ variant = 'classic', size = 48, title }: { varia
 }
 
 /** The raccoon sweeping in the sunshine, for welcome screens. The sun's rays turn slowly in CSS. */
-export function DaytimeScene({ variant = 'ninja' }: { variant?: string }) {
+export function SunnyScene({ variant = 'ninja' }: { variant?: string }) {
   const v: Avatar = isAvatar(variant) ? variant : 'ninja';
   return (
     <svg viewBox="0 0 360 220" className="day-scene" role="img" aria-label="A raccoon sweeping on a sunny day">

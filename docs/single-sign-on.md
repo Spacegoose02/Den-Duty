@@ -10,8 +10,8 @@ Besides passwords, passkeys and Google, parents can sign in with your own identi
 
 | Variable | Example | Notes |
 | --- | --- | --- |
-| `OIDC_ISSUER` | `https://auth.example.com/application/o/daytime-ninja/` | The issuer URL; `/.well-known/openid-configuration` must be under it. |
-| `OIDC_CLIENT_ID` | `daytime-ninja` | |
+| `OIDC_ISSUER` | `https://auth.example.com/application/o/den-duty/` | The issuer URL; `/.well-known/openid-configuration` must be under it. |
+| `OIDC_CLIENT_ID` | `den-duty` | |
 | `OIDC_CLIENT_SECRET` | `…` | |
 | `OIDC_NAME` | `Authentik` | The button says “Sign in with Authentik”. |
 | `OIDC_SCOPES` | `openid email profile` | The default. |
@@ -19,14 +19,14 @@ Besides passwords, passkeys and Google, parents can sign in with your own identi
 How accounts are matched:
 
 - By the provider's user id (`sub`) after the first sign-in.
-- On the first sign-in, by a **verified** email that matches an existing Daytime Ninja account, which then gets linked.
+- On the first sign-in, by a **verified** email that matches an existing Den Duty account, which then gets linked.
 - Otherwise a new parent account is made, following the sign-up mode: `open`, `invite` (the person types a home's join code on the sign-in screen first, then presses the button) or `closed`.
 
-If the person turned on two-factor in Daytime Ninja, they're asked for a code after the provider too. PUBLIC_URL must be the address people use, and most providers insist on https.
+If the person turned on two-factor in Den Duty, they're asked for a code after the provider too. PUBLIC_URL must be the address people use, and most providers insist on https.
 
 ## Forward-auth (TinyAuth and other reverse-proxy logins)
 
-Your proxy signs the person in and passes their username in a header. Daytime Ninja trusts that header **only on requests that come straight from your proxy's address**.
+Your proxy signs the person in and passes their username in a header. Den Duty trusts that header **only on requests that come straight from your proxy's address**.
 
 | Variable | Default | Notes |
 | --- | --- | --- |
@@ -35,7 +35,7 @@ Your proxy signs the person in and passes their username in a header. Daytime Ni
 | `FORWARD_AUTH_NAME_HEADER` | `Remote-Name` | Optional. The display name for new accounts. |
 | `FORWARD_AUTH_TRUSTED` | `private` | Addresses allowed to send the header: `private` (loopback, LAN and Docker networks), single IPs and IPv4 CIDRs, comma-separated, e.g. `172.18.0.0/16`. |
 
-Example with TinyAuth and Traefik labels on the Daytime Ninja container:
+Example with TinyAuth and Traefik labels on the Den Duty container:
 
 ```yaml
 labels:
@@ -51,7 +51,7 @@ How it behaves:
 - The header username is linked to an account the first time (or to an existing account with the same email). New people get a parent account straight away, because the proxy already decided they may come in. They still have to create a home or join one with its code.
 - Only `closed` sign-up stops new accounts.
 - The person is signed in on every request the proxy forwards, so **Sign out** in the app has no effect; sign out at your proxy.
-- Daytime Ninja's own two-factor isn't asked for; your proxy's login is the gate.
+- Den Duty's own two-factor isn't asked for; your proxy's login is the gate.
 - **Keep the container off the internet except through the proxy.** If you publish its port directly, set `FORWARD_AUTH_TRUSTED` to your proxy's exact address.
 
 The family tablet keeps working behind forward-auth: it signs in with its own device token, and a parent can still sign in on it with the 🔒 Parents button.

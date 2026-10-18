@@ -3,7 +3,7 @@
 Google sign-in is for parents. Kids never need an account: they tap their raccoon on a family tablet.
 
 1. Go to the [Google Cloud console credentials page](https://console.cloud.google.com/apis/credentials) and create a project if you don't have one.
-2. Set up the **OAuth consent screen**: user type **External**, app name “Daytime Ninja”, and add the parents who'll use it as test users (or publish the app).
+2. Set up the **OAuth consent screen**: user type **External**, app name “Den Duty”, and add the parents who'll use it as test users (or publish the app).
 3. **Create credentials → OAuth client ID → Web application**.
 4. Under **Authorized redirect URIs** add `PUBLIC_URL/api/auth/google/callback`, for example `https://chores.example.com/api/auth/google/callback`.
 5. Put the client ID and secret in `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` and restart.

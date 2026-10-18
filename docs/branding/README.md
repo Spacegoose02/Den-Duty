@@ -1,15 +1,15 @@
-# Daytime Ninja brand
+# Den Duty brand
 
-<img src="daytime-ninja-logo.svg" width="128" alt="Daytime Ninja logo">
+<img src="den-duty-logo.svg" width="128" alt="Den Duty logo">
 
-**Idea:** the same masked raccoon as Nighttime Ninja, on the day shift. Where Nighttime Ninja wears a chef hat on a night-green tile, Daytime Ninja has the sun rising behind its head on a sunny orange tile. The two apps sit together as a pair.
+**Idea:** the same masked raccoon as Nighttime Ninja, on the day shift. Where Nighttime Ninja wears a chef hat on a night-green tile, Den Duty has the sun rising behind its head on a sunny orange tile. The two apps sit together as a pair.
 
 ## Files
 
 | File | Use |
 | --- | --- |
-| `daytime-ninja-logo.svg` | Master logo (the app icon tile). |
-| `daytime-ninja-logo-small.svg` | Cut for 16–48 px: fewer, thicker sun rays. Used for `favicon.ico`. |
+| `den-duty-logo.svg` | Master logo (the app icon tile). |
+| `den-duty-logo-small.svg` | Cut for 16–48 px: fewer, thicker sun rays. Used for `favicon.ico`. |
 | `concept-a.svg` | Sunrise (chosen). |
 | `concept-b.svg`, `concept-c.svg` | Alternatives that were considered: ninja headband with a corner sun, and a kerchief with sparkles. |
 | `concepts.png` | Side-by-side review of the three at 256, 64, 32 and 16 px. |

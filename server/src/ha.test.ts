@@ -76,7 +76,7 @@ test('events: chores submitted and approved, goals reached and redeemed; webhook
   const sent: { url: string; payload: { event: string; kid: string; goal?: string } }[] = [];
   setDeliver(async (url, payload) => { sent.push({ url, payload: payload as never }); });
   assert.equal((await call(mom, 'PATCH', base, { haWebhookUrl: 'ftp://nope' })).status, 400);
-  await call(mom, 'PATCH', base, { haWebhookUrl: 'http://homeassistant.local:8123/api/webhook/daytime-ninja' });
+  await call(mom, 'PATCH', base, { haWebhookUrl: 'http://homeassistant.local:8123/api/webhook/den-duty' });
 
   await control('POST', `${base}/ha/complete`, { kid: 'Ava', chore: 'Feed the cat' });
   await control('POST', `${base}/ha/approve`, { kid: 'Ava', chore: 'Feed the cat' });
@@ -96,6 +96,6 @@ test('events: chores submitted and approved, goals reached and redeemed; webhook
   await new Promise((r) => setImmediate(r));
   await new Promise((r) => setImmediate(r));
   assert.equal(sent.length, 6);
-  assert.equal(sent[0].url, 'http://homeassistant.local:8123/api/webhook/daytime-ninja');
+  assert.equal(sent[0].url, 'http://homeassistant.local:8123/api/webhook/den-duty');
   assert.equal(sent.find((s) => s.payload.event === 'goal_reached')!.payload.goal, 'Zoo trip');
 });

@@ -1,4 +1,4 @@
-// Builds the Daytime Ninja logo and every icon from one drawing.
+// Builds the Den Duty logo and every icon from one drawing.
 //   node scripts/brand.mjs concepts   -> docs/branding/concept-*.svg + concepts.png (side-by-side review)
 //   node scripts/brand.mjs            -> all icons (web, PWA, favicon, Android, Windows, Unraid)
 // The raccoon head matches Nighttime Ninja's mark on purpose; the daytime version trades the chef hat for a sun
@@ -127,8 +127,8 @@ async function icons() {
   await png(full, 512, out('apps', 'desktop', 'build', 'icon.png'));
   fs.writeFileSync(out('apps', 'launcher', 'icon.svg'), full);
   // Brand masters.
-  fs.writeFileSync(out('docs', 'branding', 'daytime-ninja-logo.svg'), full);
-  fs.writeFileSync(out('docs', 'branding', 'daytime-ninja-logo-small.svg'), small);
+  fs.writeFileSync(out('docs', 'branding', 'den-duty-logo.svg'), full);
+  fs.writeFileSync(out('docs', 'branding', 'den-duty-logo-small.svg'), small);
   console.log('icons written');
 }
 

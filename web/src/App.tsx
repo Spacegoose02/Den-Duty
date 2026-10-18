@@ -38,7 +38,7 @@ function Nav({ className }: { className: string }) {
   return (
     <nav className={className} aria-label="Main">
       {className === 'rail' && (
-        <div className="brand" title="Daytime Ninja">
+        <div className="brand" title="Den Duty">
           <RaccoonAvatar variant={who?.user?.avatar} size={56} />
         </div>
       )}

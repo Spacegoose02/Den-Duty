@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Daytime Ninja</title>
+  <title>Den Duty</title>
   <style>
     :root { color-scheme: light dark; --bg: #fff9ec; --card: #fff; --text: #2b2108; --muted: #7a6a45; --primary: #c2410c; --border: #f1e1b8; }
     @media (prefers-color-scheme: dark) { :root { --bg: #1c1f22; --card: #262a2e; --text: #eceff1; --muted: #a3aab1; --primary: #ffa94d; --on-primary: #1c1f22; --border: #3a4046; } }
@@ -21,13 +21,13 @@
 <body>
   <div class="card">
     <img src="icon.svg" alt="" />
-    <h1 style="margin:0">Daytime Ninja</h1>
+    <h1 style="margin:0">Den Duty</h1>
     <div id="connecting" hidden>
       <p>Opening <strong id="target"></strong>…</p>
       <button class="ghost" id="change">Use a different server</button>
     </div>
     <form id="setup" hidden>
-      <p class="muted">Enter the address of your Daytime Ninja server, like http://192.168.1.20:8080 or https://chores.example.com</p>
+      <p class="muted">Enter the address of your Den Duty server, like http://192.168.1.20:8080 or https://chores.example.com</p>
       <input id="url" type="url" inputmode="url" autocomplete="url" placeholder="http://192.168.1.20:8080" required />
       <button>Connect</button>
       <p class="error" id="error"></p>
@@ -54,7 +54,7 @@
         res = await fetch(url + '/api/health', { cache: 'no-store', mode: 'no-cors' }).catch(() => null);
         if (!res) throw new Error("Couldn't reach " + url + ". Check the address, and that this device can open it in a browser.");
       } else if (!res.ok) {
-        throw new Error(url + " answered, but it doesn't look like a Daytime Ninja server (" + res.status + ").");
+        throw new Error(url + " answered, but it doesn't look like a Den Duty server (" + res.status + ").");
       }
       localStorage.setItem(KEY, url);
       location.href = url + '/';

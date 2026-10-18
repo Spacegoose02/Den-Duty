@@ -202,10 +202,10 @@ function HomeSettings() {
       </form>
       {newToken && <div className="card" style={{ background: 'var(--surface-2)' }}><strong>Copy this now, it won't be shown again:</strong><br /><code style={{ wordBreak: 'break-all' }}>{newToken}</code></div>}
       <form className="row" onSubmit={(e) => { e.preventDefault(); void patch({ haWebhookUrl: (e.currentTarget.elements.namedItem('wh') as HTMLInputElement).value }, 'Webhook saved'); }}>
-        <input name="wh" defaultValue={home.haWebhookUrl ?? ''} key={home.haWebhookUrl ?? ''} placeholder="Webhook for events, e.g. http://homeassistant.local:8123/api/webhook/daytime-ninja" style={{ flex: 1, minWidth: 260 }} />
+        <input name="wh" defaultValue={home.haWebhookUrl ?? ''} key={home.haWebhookUrl ?? ''} placeholder="Webhook for events, e.g. http://homeassistant.local:8123/api/webhook/den-duty" style={{ flex: 1, minWidth: 260 }} />
         <button>Save webhook</button>
       </form>
-      <p className="small muted" style={{ margin: 0 }}>Optional. Daytime Ninja POSTs an event there when a chore is marked done or approved, points change, or a goal is reached or redeemed.</p>
+      <p className="small muted" style={{ margin: 0 }}>Optional. Den Duty POSTs an event there when a chore is marked done or approved, points change, or a goal is reached or redeemed.</p>
       {tokens?.map((t) => (
         <div key={t.id} className="row">
           <span style={{ flex: 1 }}>{t.name} <span className="pill">{t.scope === 'control' ? 'read + control' : 'read only'}</span> <span className="small muted">{t.last_used_at ? `last used ${t.last_used_at}` : 'never used'}</span></span>
@@ -280,7 +280,7 @@ export function Settings() {
       <Profile />
       <SecurityCard />
       {who?.user?.isAdmin && <Admin />}
-      <p className="small muted">Daytime Ninja is open source under the MIT license.</p>
+      <p className="small muted">Den Duty is open source under the MIT license.</p>
     </div>
   );
 }

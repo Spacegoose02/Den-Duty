@@ -1,11 +1,11 @@
 {
-  "name": "@daytime-ninja/desktop",
+  "name": "@den-duty/desktop",
   "version": "0.1.0",
   "private": true,
-  "description": "Daytime Ninja desktop app",
-  "author": "Daytime Ninja contributors",
+  "description": "Den Duty desktop app",
+  "author": "Den Duty contributors",
   "license": "MIT",
-  "repository": "github:Spacegoose02/Daytime-Ninja",
+  "repository": "github:Spacegoose02/Den-Duty",
   "main": "main.cjs",
   "scripts": {
     "copy-launcher": "node -e \"require('fs').cpSync('../launcher','launcher',{recursive:true})\"",
@@ -19,8 +19,8 @@
     "electron-builder": "^26.15.3"
   },
   "build": {
-    "appId": "io.github.daytimeninja.desktop",
-    "productName": "Daytime Ninja",
+    "appId": "io.github.denduty.desktop",
+    "productName": "Den Duty",
     "directories": {
       "output": "release",
       "buildResources": "build"
@@ -50,10 +50,10 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "artifactName": "DaytimeNinja-Setup-${version}.${ext}"
+      "artifactName": "DenDuty-Setup-${version}.${ext}"
     },
     "portable": {
-      "artifactName": "DaytimeNinja-Portable-${version}.${ext}"
+      "artifactName": "DenDuty-Portable-${version}.${ext}"
     },
     "linux": {
       "category": "Utility",

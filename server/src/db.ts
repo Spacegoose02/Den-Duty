@@ -445,7 +445,13 @@ export const MIGRATIONS: string[] = [
 
 export function openDb(dataDir: string): DatabaseSync {
   fs.mkdirSync(dataDir, { recursive: true });
-  const db = new DatabaseSync(path.join(dataDir, 'daytime-ninja.db'));
+  const file = path.join(dataDir, 'den-duty.db');
+  // The app used to be called Daytime Ninja: carry an existing database over under the new name.
+  const old = path.join(dataDir, 'daytime-ninja.db');
+  if (!fs.existsSync(file) && fs.existsSync(old)) {
+    for (const ext of ['', '-wal', '-shm']) if (fs.existsSync(old + ext)) fs.renameSync(old + ext, file + ext);
+  }
+  const db = new DatabaseSync(file);
   db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
   migrate(db);
   return db;

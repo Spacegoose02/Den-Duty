@@ -1,10 +1,10 @@
-<p align="center"><img src="web/public/icon.png" width="120" alt="Daytime Ninja raccoon with the sun"></p>
+<p align="center"><img src="web/public/icon.png" width="120" alt="Den Duty raccoon with the sun"></p>
 
-<h1 align="center">Daytime Ninja</h1>
+<h1 align="center">Den Duty</h1>
 
 <p align="center">A self-hosted, tablet-first family chore tracker. Chores, points, goals and rewards, run by a very tidy raccoon.</p>
 
-Daytime Ninja is the sibling of [Nighttime Ninja](https://github.com/Spacegoose02/Nighttime-Ninja) (the kitchen manager) and shares its setup, sign-in and look.
+Den Duty is the sibling of [Nighttime Ninja](https://github.com/Spacegoose02/Nighttime-Ninja) (the kitchen manager) and shares its setup, sign-in and look.
 
 ## What it does
 
@@ -36,7 +36,7 @@ Daytime Ninja is the sibling of [Nighttime Ninja](https://github.com/Spacegoose0
 ## Quick start with Docker
 
 ```bash
-docker run -d --name daytime-ninja -p 8080:8080 -v ./data:/data ghcr.io/spacegoose02/daytime-ninja:latest
+docker run -d --name den-duty -p 8080:8080 -v ./data:/data ghcr.io/spacegoose02/den-duty:latest
 ```
 
 Open http://localhost:8080. The first person to sign up becomes the server admin. Then:
@@ -52,7 +52,7 @@ Or with Compose: copy `.env.example` to `.env`, adjust it, and run `docker compo
 In the Docker tab choose **Add Container** and set **Template** to this URL, or drop the file into `/boot/config/plugins/dockerMan/templates-user/`:
 
 ```
-https://raw.githubusercontent.com/Spacegoose02/Daytime-Ninja/main/unraid/daytime-ninja.xml
+https://raw.githubusercontent.com/Spacegoose02/Den-Duty/main/unraid/den-duty.xml
 ```
 
 ## Settings

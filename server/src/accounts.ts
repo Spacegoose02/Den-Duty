@@ -230,7 +230,7 @@ export function accountRoutes(app: FastifyInstance, db: DatabaseSync): void {
     await requireReauth(db, req, user);
     const existing = db.prepare('SELECT id, transports FROM passkeys WHERE user_id = ?').all(user.id) as Row[];
     const options = await generateRegistrationOptions({
-      rpName: 'Daytime Ninja',
+      rpName: 'Den Duty',
       rpID: rp().id,
       userName: user.username ?? user.email ?? user.name,
       userDisplayName: user.name,

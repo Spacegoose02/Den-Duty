@@ -78,7 +78,7 @@ export function Login({ onTablet = false }: { onTablet?: boolean }) {
     <div className="center-screen">
       <div className="card login-card">
         <div><RaccoonAvatar variant="ninja" size={110} /></div>
-        <h1>Daytime Ninja</h1>
+        <h1>Den Duty</h1>
         {onTablet && <p className="muted" style={{ margin: 0 }}>Parent sign-in on the family tablet</p>}
 
         {mode === 'signin' && (

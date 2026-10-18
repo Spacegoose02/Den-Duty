@@ -9,7 +9,7 @@ process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'dn-sso-'));
 process.env.FORWARD_AUTH_HEADER = 'Remote-User';
 process.env.FORWARD_AUTH_TRUSTED = 'private,198.51.100.0/24';
 process.env.OIDC_ISSUER = 'https://auth.example.com';
-process.env.OIDC_CLIENT_ID = 'daytime-ninja';
+process.env.OIDC_CLIENT_ID = 'den-duty';
 process.env.OIDC_NAME = 'Authentik';
 process.env.SIGNUP_MODE = 'invite';
 

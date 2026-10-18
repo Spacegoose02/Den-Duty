@@ -47,7 +47,7 @@ const nextDay = (d: string) => { const t = new Date(`${d}T00:00:00Z`); t.setUTCD
 export function buildIcs(calName: string, tz: string, events: IcsEvent[], now = new Date()): string {
   const stamp = now.toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
   const lines = [
-    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Daytime Ninja//Chores//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Den Duty//Chores//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
     `X-WR-CALNAME:${escapeText(calName)}`, `X-WR-TIMEZONE:${tz}`, 'REFRESH-INTERVAL;VALUE=DURATION:PT1H', 'X-PUBLISHED-TTL:PT1H',
   ];
   for (const e of events) {

@@ -32,7 +32,7 @@ export async function verifyPassword(password: string, stored: string | null | u
   return crypto.timingSafeEqual(key, expected);
 }
 
-const COMMON = new Set(['password', 'password1', 'password123', '123456789', '1234567890', 'qwertyuiop', 'iloveyou', 'letmein123', 'welcome123', 'daytimeninja']);
+const COMMON = new Set(['password', 'password1', 'password123', '123456789', '1234567890', 'qwertyuiop', 'iloveyou', 'letmein123', 'welcome123', 'denduty']);
 
 /** Returns a reason the password is too weak, or null when it's fine. */
 export function passwordProblem(password: string, username = ''): string | null {
@@ -106,7 +106,7 @@ export function verifyTotp(secret: string, code: string, lastStep: number | null
   return null;
 }
 
-export function otpauthUrl(secret: string, account: string, issuer = 'Daytime Ninja'): string {
+export function otpauthUrl(secret: string, account: string, issuer = 'Den Duty'): string {
   return `otpauth://totp/${encodeURIComponent(`${issuer}:${account}`)}?secret=${secret}&issuer=${encodeURIComponent(issuer)}&algorithm=SHA1&digits=6&period=30`;
 }
 

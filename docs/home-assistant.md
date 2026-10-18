@@ -1,10 +1,10 @@
 # Home Assistant
 
-Daytime Ninja has a small API that Home Assistant reads with its built-in `rest` integration, a few actions you can call with `rest_command`, and events it can push to a Home Assistant webhook.
+Den Duty has a small API that Home Assistant reads with its built-in `rest` integration, a few actions you can call with `rest_command`, and events it can push to a Home Assistant webhook.
 
 ## 1. Create tokens
 
-In Daytime Ninja go to **Settings → Home → Home Assistant and automations**. Only parents can do this.
+In Den Duty go to **Settings → Home → Home Assistant and automations**. Only parents can do this.
 
 - A **read only** token is enough for sensors.
 - A **read and control** token can also mark chores done, approve them, and give or take points. It still can't add kids, change chores or delete anything.
@@ -18,8 +18,8 @@ curl -H "Authorization: Bearer YOUR_TOKEN" http://YOUR_SERVER:8080/api/homes/YOU
 ## 2. Add to `secrets.yaml`
 
 ```yaml
-daytime_ninja_read: "Bearer dnk_your_read_token"
-daytime_ninja_control: "Bearer dnk_your_control_token"
+den_duty_read: "Bearer dnk_your_read_token"
+den_duty_control: "Bearer dnk_your_control_token"
 ```
 
 ## 3. Sensors in `configuration.yaml`
@@ -30,15 +30,15 @@ daytime_ninja_control: "Bearer dnk_your_control_token"
 rest:
   - resource: http://YOUR_SERVER:8080/api/homes/YOUR_HOME_ID/ha/summary
     headers:
-      Authorization: !secret daytime_ninja_read
+      Authorization: !secret den_duty_read
     scan_interval: 120
     sensor:
       - name: "Chores waiting for review"
-        unique_id: daytime_ninja_waiting
+        unique_id: den_duty_waiting
         icon: mdi:clipboard-check-outline
         value_template: "{{ value_json.waiting_for_review }}"
       - name: "Ava points"
-        unique_id: daytime_ninja_ava_points
+        unique_id: den_duty_ava_points
         icon: mdi:star-four-points
         unit_of_measurement: "{{ value_json.points_name }}"
         value_template: "{{ value_json.kids_by_name.ava.balance }}"
@@ -50,20 +50,20 @@ rest:
           - next_goal_percent
           - chores_left
       - name: "Ava chores left today"
-        unique_id: daytime_ninja_ava_left
+        unique_id: den_duty_ava_left
         icon: mdi:broom
         value_template: "{{ value_json.kids_by_name.ava.left_today }}"
       - name: "Ava waiting for approval"
-        unique_id: daytime_ninja_ava_waiting
+        unique_id: den_duty_ava_waiting
         icon: mdi:timer-sand
         value_template: "{{ value_json.kids_by_name.ava.waiting_for_review }}"
       - name: "Ava streak"
-        unique_id: daytime_ninja_ava_streak
+        unique_id: den_duty_ava_streak
         icon: mdi:fire
         unit_of_measurement: days
         value_template: "{{ value_json.kids_by_name.ava.streak }}"
       - name: "Ava level"
-        unique_id: daytime_ninja_ava_level
+        unique_id: den_duty_ava_level
         icon: mdi:paw
         value_template: "{{ value_json.kids_by_name.ava.level_name }}"
 ```
@@ -78,32 +78,32 @@ Kids and chores can be named (any case) or given by id. Chores are matched by ti
 
 ```yaml
 rest_command:
-  daytime_ninja_complete:
+  den_duty_complete:
     url: http://YOUR_SERVER:8080/api/homes/YOUR_HOME_ID/ha/complete
     method: POST
     headers:
-      Authorization: !secret daytime_ninja_control
+      Authorization: !secret den_duty_control
       Content-Type: application/json
     payload: '{"kid": "{{ kid }}", "chore": "{{ chore }}"}'
-  daytime_ninja_approve:
+  den_duty_approve:
     url: http://YOUR_SERVER:8080/api/homes/YOUR_HOME_ID/ha/approve
     method: POST
     headers:
-      Authorization: !secret daytime_ninja_control
+      Authorization: !secret den_duty_control
       Content-Type: application/json
     payload: '{"kid": "{{ kid }}", "chore": "{{ chore }}"}'
-  daytime_ninja_quick_reward:
+  den_duty_quick_reward:
     url: http://YOUR_SERVER:8080/api/homes/YOUR_HOME_ID/ha/quick-reward
     method: POST
     headers:
-      Authorization: !secret daytime_ninja_control
+      Authorization: !secret den_duty_control
       Content-Type: application/json
     payload: '{"kid": "{{ kid }}", "reward": "{{ reward }}"}'
-  daytime_ninja_penalty:
+  den_duty_penalty:
     url: http://YOUR_SERVER:8080/api/homes/YOUR_HOME_ID/ha/penalty
     method: POST
     headers:
-      Authorization: !secret daytime_ninja_control
+      Authorization: !secret den_duty_control
       Content-Type: application/json
     payload: '{"kid": "{{ kid }}", "points": {{ points }}, "reason": "{{ reason }}"}'
 ```
@@ -122,7 +122,7 @@ automation:
       - trigger: tag
         tag_id: dog-bowl
     actions:
-      - action: rest_command.daytime_ninja_complete
+      - action: rest_command.den_duty_complete
         data:
           kid: Ava
           chore: Feed the dog
@@ -130,16 +130,16 @@ automation:
 
 ## 5. Events
 
-Daytime Ninja records an event when a chore is marked done (`chore_submitted`) or approved (`chore_approved`), when points are given or taken outside chores (`points_changed`), and when a goal is reached (`goal_reached`) or redeemed (`goal_redeemed`).
+Den Duty records an event when a chore is marked done (`chore_submitted`) or approved (`chore_approved`), when points are given or taken outside chores (`points_changed`), and when a goal is reached (`goal_reached`) or redeemed (`goal_redeemed`).
 
 **Webhook (instant).** Create an automation with a webhook trigger, then paste its URL into **Settings → Home Assistant → Webhook for events**:
 
 ```yaml
 automation:
-  - alias: Daytime Ninja events
+  - alias: Den Duty events
     triggers:
       - trigger: webhook
-        webhook_id: daytime-ninja
+        webhook_id: den-duty
         allowed_methods: [POST]
         local_only: true
     actions:
@@ -160,7 +160,7 @@ automation:
                   message: "Woohoo! {{ trigger.json.kid }} reached {{ trigger.json.goal }}!"
 ```
 
-The webhook URL is `http://homeassistant.local:8123/api/webhook/daytime-ninja`. Every event carries `event`, `kid`, `kid_id`, `at`, plus details such as `chore`, `points`, `balance`, `goal`, `reward` and `by`.
+The webhook URL is `http://homeassistant.local:8123/api/webhook/den-duty`. Every event carries `event`, `kid`, `kid_id`, `at`, plus details such as `chore`, `points`, `balance`, `goal`, `reward` and `by`.
 
 **Polling.** `GET /api/homes/{id}/ha/events?after={last id}` returns the newest 50 events, if you'd rather poll.
 

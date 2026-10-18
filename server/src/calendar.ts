@@ -50,7 +50,7 @@ export function calendarFor(db: DatabaseSync, token: string): string | null {
       if (!items.length) continue;
       const done = items.filter((i) => i.status === 'approved').length;
       events.push({
-        uid: `chores-${k.id}-${day.date}@daytime-ninja`,
+        uid: `chores-${k.id}-${day.date}@den-duty`,
         summary: `${kid ? '' : `${k.name}: `}${items.length} chore${items.length === 1 ? '' : 's'}${day.date <= today ? ` (${done} done)` : ''}`,
         description: items.map((i) => `${i.status === 'approved' ? '✅' : i.status === 'submitted' ? '⏳' : '▫️'} ${i.icon} ${i.title} (+${i.points} ${info.pointsName})`).join('\n'),
         date: day.date,
@@ -67,7 +67,7 @@ export function calendarFor(db: DatabaseSync, token: string): string | null {
       if (!appointmentOn(a.kind as string, areasOff.get(a.member_id as string) ?? [])) continue;
       const [date, time] = (a.starts_at as string).split('T');
       events.push({
-        uid: `appt-${a.id}@daytime-ninja`, date, time, durationMinutes: (a.duration_minutes as number | null) ?? 60,
+        uid: `appt-${a.id}@den-duty`, date, time, durationMinutes: (a.duration_minutes as number | null) ?? 60,
         summary: `${kid ? '' : `${a.kid_name}: `}${a.title}${a.provider ? ` with ${a.provider}` : ''}`,
         description: [a.location, a.notes].filter(Boolean).join('\n') || null,
       });
