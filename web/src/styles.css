@@ -383,8 +383,9 @@ a.agenda-ext.duty { text-decoration: none; color: var(--text); border-left-color
 }
 
 /* Family wall: the family tablet's home page, read from across the room */
-.wall { min-height: 100vh; background: var(--bg); color: var(--text); overflow: hidden; transition: filter 1s; }
-.wall.dim { filter: brightness(0.42) saturate(0.7); background: #000; }
+.wall { min-height: 100vh; background: var(--bg); color: var(--text); overflow-x: hidden; transition: filter 1s; }
+.wall.dim { --bg: #000; --surface: #101114; --surface-2: #17181c; --text: #c9cdd2; --muted: #7d838a; --border: #26282d; filter: brightness(0.7) saturate(0.6); }
+.wall.dim .wall-kid { background: #101114; color: var(--text); box-shadow: none; }
 .wall-inner { display: flex; flex-direction: column; gap: clamp(10px, 1.6vh, 18px); padding: clamp(12px, 2vw, 28px); min-height: 100vh; transition: transform 2s ease; }
 .wall-head { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
 .wall-clock { font-size: clamp(2.6rem, 6vw, 4.6rem); font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
@@ -393,7 +394,10 @@ a.agenda-ext.duty { text-decoration: none; color: var(--text); border-left-color
 .wall-sub { font-size: 0.9rem; }
 .wall-parents { min-height: 40px; font-size: 0.9rem; opacity: 0.75; }
 .wall-kids { display: grid; grid-template-columns: repeat(var(--cols, 3), minmax(0, 1fr)); gap: clamp(10px, 1.4vw, 18px); flex: 1; }
-@media (orientation: portrait) { .wall-kids { grid-template-columns: repeat(var(--cols-p, 2), minmax(0, 1fr)); } }
+@media (orientation: portrait) {
+  .wall-kids { grid-template-columns: repeat(var(--cols-p, 2), minmax(0, 1fr)); }
+  .wall-kid:last-child:nth-child(odd):not(:only-child) { grid-column: 1 / -1; }
+}
 .wall-kid {
   display: flex; flex-direction: column; align-items: stretch; gap: 10px; text-align: left; justify-content: flex-start; padding: 14px 16px;
   border-radius: 24px; border: none; border-top: 10px solid var(--kid); background: var(--surface); color: var(--text); font-weight: 500;
