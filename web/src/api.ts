@@ -143,7 +143,8 @@ export type HomeTimeout = Timeout & { kid: { name: string; avatar: string; color
 
 export interface HelpRequest {
   id: string; memberId: string; kind: string; icon: string; label: string; text: string | null; dueDate: string | null;
-  status: 'waiting' | 'yes' | 'doing' | 'done' | 'no' | 'cancelled'; note: string | null; dutyId: string | null; createdAt: string; decidedAt: string | null;
+  status: 'waiting' | 'yes' | 'doing' | 'done' | 'no' | 'cancelled' | 'closed'; note: string | null; dutyId: string | null; createdAt: string; decidedAt: string | null;
+  closedAt: string | null; closeNote: string | null; closedByKid: boolean;
 }
 export type HomeHelpRequest = HelpRequest & { kid: { name: string; avatar: string; color: string } };
 

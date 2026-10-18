@@ -538,6 +538,12 @@ export const MIGRATIONS: string[] = [
   CREATE INDEX helpdesk_member ON helpdesk_requests(member_id, status);
   ALTER TABLE homes ADD COLUMN helpdesk_max_open INTEGER NOT NULL DEFAULT 3;
   `,
+  // Closing Helpdesk tickets at any stage (by a parent, or the kid's "All set, thanks!"). Closed ones move to history.
+  `
+  ALTER TABLE helpdesk_requests ADD COLUMN closed_at TEXT;
+  ALTER TABLE helpdesk_requests ADD COLUMN close_note TEXT;
+  ALTER TABLE helpdesk_requests ADD COLUMN closed_by_kid INTEGER NOT NULL DEFAULT 0;
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

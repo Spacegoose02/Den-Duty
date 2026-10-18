@@ -80,3 +80,50 @@ test('helpdesk: with Parent Duty off for the kid, a yes goes on the general list
   const general = (await call(mom, 'GET', `${base}/parent-duty?kid=general`)).body;
   assert.equal(general[0].title, 'For Benedict: Fix something: my bike');
 });
+
+test('helpdesk: closing tickets at any stage, kids closing their own, and clearing closed history', async () => {
+  const { call, mom, base, ava, ben, tablet, asKid } = await family();
+  await asKid(ava);
+  const ask = async (kind: string, text?: string) => (await call(tablet, 'POST', `${base}/kids/${ava.id}/helpdesk`, { kind, text })).body;
+  const waiting = await ask('fix', 'bike');
+  const approved = await ask('project', 'volcano');
+  const kidOwn = await ask('buy', 'markers');
+  await call(mom, 'POST', `${base}/helpdesk/${approved.id}/approve`);
+  await call(mom, 'POST', `${base}/helpdesk/${kidOwn.id}/approve`);
+
+  // A parent closes a waiting one (it leaves the waiting list and frees a slot) and an approved one (card done by default).
+  const c1 = (await call(mom, 'POST', `${base}/helpdesk/${waiting.id}/close`, { note: 'Fixed it this morning' })).body;
+  assert.equal(c1.status, 'closed');
+  assert.equal(c1.closeNote, 'Fixed it this morning');
+  assert.equal((await call(mom, 'GET', `${base}/helpdesk`)).body.length, 0);
+  await call(mom, 'POST', `${base}/helpdesk/${approved.id}/close`, {});
+  let cards = (await call(mom, 'GET', `${base}/parent-duty?kid=${ava.id}`)).body as { title: string; status: string; notes: string | null }[];
+  assert.equal(cards.find((c) => c.title.includes('volcano'))!.status, 'done');
+  assert.equal((await call(mom, 'POST', `${base}/helpdesk/${approved.id}/close`, {})).status, 400, 'once');
+
+  // Ben can't close Ava's; Ava closes her own: "All set, thanks!", and the card is finished with a note saying so.
+  await asKid(ben);
+  assert.equal((await call(tablet, 'POST', `${base}/helpdesk/${kidOwn.id}/close`, {})).status, 403);
+  await asKid(ava);
+  const c3 = (await call(tablet, 'POST', `${base}/helpdesk/${kidOwn.id}/close`, {})).body;
+  assert.equal(c3.closeNote, 'All set, thanks!');
+  assert.equal(c3.closedByKid, true);
+  cards = (await call(mom, 'GET', `${base}/parent-duty?kid=${ava.id}`)).body;
+  const markers = cards.find((c) => c.title.includes('markers'))!;
+  assert.equal(markers.status, 'done');
+  assert.match(markers.notes!, /Avaleigh closed it: “All set, thanks!”/);
+
+  // A parent can keep the card open when closing.
+  const keep = await ask('ride', 'to soccer');
+  await call(mom, 'POST', `${base}/helpdesk/${keep.id}/approve`);
+  await call(mom, 'POST', `${base}/helpdesk/${keep.id}/close`, { finishCard: false });
+  cards = (await call(mom, 'GET', `${base}/parent-duty?kid=${ava.id}`)).body;
+  assert.equal(cards.find((c) => c.title.includes('soccer'))!.status, 'todo');
+
+  // History shows closed ones; a parent clears them (kids can't).
+  const mine = (await call(tablet, 'GET', `${base}/kids/${ava.id}/helpdesk`)).body as { status: string }[];
+  assert.equal(mine.filter((r) => r.status === 'closed').length, 4);
+  assert.equal((await call(tablet, 'DELETE', `${base}/kids/${ava.id}/helpdesk/closed`)).status, 403);
+  assert.equal((await call(mom, 'DELETE', `${base}/kids/${ava.id}/helpdesk/closed`)).body.cleared, 4);
+  assert.equal((await call(tablet, 'GET', `${base}/kids/${ava.id}/helpdesk`)).body.length, 0);
+});
