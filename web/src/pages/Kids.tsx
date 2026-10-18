@@ -8,7 +8,7 @@ import { AVATARS, AVATAR_LABELS, KID_COLORS } from '../../../shared/catalog.ts';
 import { ThemePicker } from '../components/ThemePicker.tsx';
 import { IdeasButton } from '../components/Ideas.tsx';
 
-interface KidDraft { name: string; avatar: string; color: string; pin: string; theme: string | null }
+interface KidDraft { name: string; avatar: string; color: string; pin: string; theme: string | null; birthdate: string; pictureMode: 'auto' | 'on' | 'off' }
 
 /** Name, raccoon, color and PIN. Used to add a kid and to edit one. */
 function KidForm({ initial, onSubmit, submitLabel, hasPin, onClearPin }: {
@@ -38,6 +38,19 @@ function KidForm({ initial, onSubmit, submitLabel, hasPin, onClearPin }: {
           <button key={c} type="button" className={`swatch${d.color === c ? ' on' : ''}`} style={{ background: c }} onClick={() => setD({ ...d, color: c })} aria-label={`Color ${c}`} />
         ))}
       </div>
+      <div className="row">
+        <label className="field" style={{ flex: '0 0 auto' }}>Birthday (optional)
+          <input type="date" value={d.birthdate} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setD({ ...d, birthdate: e.target.value })} style={{ width: 200 }} />
+        </label>
+        <label className="field" style={{ flex: 1, minWidth: 220 }}>Tablet screen
+          <div className="chips">
+            {([['auto', 'By age'], ['on', '🖼️ Pictures first'], ['off', '🔤 Words']] as const).map(([v, l]) => (
+              <button key={v} type="button" className={`chip${d.pictureMode === v ? ' on' : ''}`} onClick={() => setD({ ...d, pictureMode: v })}>{l}</button>
+            ))}
+          </div>
+        </label>
+      </div>
+      <p className="small muted" style={{ margin: 0 }}>The age tailors chore ideas and AI suggestions (only the age is ever sent, never the name). “By age” shows big pictures for kids under 6.</p>
       <label className="field">Their theme on the tablet
         <ThemePicker value={d.theme} onPick={(theme) => setD({ ...d, theme })} inherit={{ label: 'Same as the home', theme: homeTheme }} />
       </label>
@@ -74,7 +87,7 @@ function KidCard({ kid, onChange }: { kid: Kid; onChange: () => Promise<void> })
         <RaccoonAvatar variant={kid.avatar} size={64} />
         <div style={{ flex: 1 }}>
           <h2 style={{ margin: 0 }}>{kid.name}</h2>
-          <span className="muted">{kid.balance} {icon} {home?.pointsName}{kid.hasPin && ' · 🔒 PIN'}</span>
+          <span className="muted">{kid.age != null && `Age ${kid.age} · `}{kid.balance} {icon} {home?.pointsName}{kid.hasPin && ' · 🔒 PIN'}{kid.pictureMode && ' · 🖼️ pictures'}</span>
         </div>
         <Link className="btn" to={`/kids/${kid.id}`}>Board</Link>
         <button onClick={() => setEditing(true)}>Edit</button>
@@ -136,10 +149,10 @@ function KidCard({ kid, onChange }: { kid: Kid; onChange: () => Promise<void> })
         <Modal onClose={() => setEditing(false)}>
           <div className="stack">
             <h2 style={{ margin: 0 }}>Edit {kid.name}</h2>
-            <KidForm initial={{ name: kid.name, avatar: kid.avatar, color: kid.color, pin: '', theme: kid.theme }} hasPin={kid.hasPin} submitLabel="Save"
+            <KidForm initial={{ name: kid.name, avatar: kid.avatar, color: kid.color, pin: '', theme: kid.theme, birthdate: kid.birthdate ?? '', pictureMode: kid.pictureModeSetting }} hasPin={kid.hasPin} submitLabel="Save"
               onClearPin={() => void run(() => api(`${base}/kids/${kid.id}`, { method: 'PATCH', body: { pin: null } }), 'PIN removed').then(() => setEditing(false))}
               onSubmit={async (d) => {
-                await api(`${base}/kids/${kid.id}`, { method: 'PATCH', body: { name: d.name, avatar: d.avatar, color: d.color, theme: d.theme, ...(d.pin ? { pin: d.pin } : {}) } });
+                await api(`${base}/kids/${kid.id}`, { method: 'PATCH', body: { name: d.name, avatar: d.avatar, color: d.color, theme: d.theme, birthdate: d.birthdate, pictureMode: d.pictureMode, ...(d.pin ? { pin: d.pin } : {}) } });
                 setEditing(false);
                 toast('Saved');
                 await refreshAll();
@@ -179,7 +192,7 @@ export function Kids() {
         <Modal onClose={() => setAdding(false)}>
           <div className="stack">
             <h2 style={{ margin: 0 }}>Add a kid</h2>
-            <KidForm initial={{ name: '', avatar: AVATARS[count % AVATARS.length], color: KID_COLORS[count % KID_COLORS.length], pin: '', theme: null }} submitLabel="Add"
+            <KidForm initial={{ name: '', avatar: AVATARS[count % AVATARS.length], color: KID_COLORS[count % KID_COLORS.length], pin: '', theme: null, birthdate: '', pictureMode: 'auto' }} submitLabel="Add"
               onSubmit={async (d) => {
                 await api(`${base}/kids`, { body: { ...d, pin: d.pin || null } });
                 setAdding(false);

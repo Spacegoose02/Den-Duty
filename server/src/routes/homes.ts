@@ -5,9 +5,10 @@ import { tx, type Row } from '../db.ts';
 import { config } from '../config.ts';
 import { HttpError, newId, randomToken, readableCode, requireStr, sha256, str } from '../util.ts';
 import { hashPassword } from '../security.ts';
-import { balance } from '../chores.ts';
+import { balance, homeInfo, homeToday } from '../chores.ts';
+import { ageOn, pictureMode } from '../../../shared/ages.ts';
 import { AVATARS, isAvatar, isKidColor, KID_COLORS, POINT_ICONS } from '../../../shared/catalog.ts';
-import { isTimeZone } from '../../../shared/schedule.ts';
+import { isIsoDate, isTimeZone } from '../../../shared/schedule.ts';
 import { isThemeId } from '../../../shared/themes.ts';
 
 export const STARTER_QUICK_REWARDS = [
@@ -48,10 +49,27 @@ function cleanPin(v: unknown): string {
 
 /** What kids look like to anyone in the home: no PIN, just whether there is one. */
 export function kidView(db: DatabaseSync, r: Row) {
+  const birthdate = (r.birthdate as string | null) ?? null;
+  const age = birthdate ? ageOn(birthdate, homeToday(homeInfo(db, r.home_id as string))) : null;
+  const setting = (r.picture_mode as string | null) ?? 'auto';
   return {
     id: r.id as string, name: r.name as string, avatar: r.avatar as string, color: r.color as string,
     theme: (r.theme as string | null) ?? null, hasPin: !!r.pin_hash, balance: balance(db, r.id as string),
+    birthdate, age, pictureModeSetting: setting, pictureMode: pictureMode(setting, age),
   };
+}
+
+/** Birthdate ('' clears it) and picture mode ('auto' follows the age), shared by add and edit. */
+function applyKidProfile(db: DatabaseSync, id: string, b: Row, today: string): void {
+  if ('birthdate' in b) {
+    const v = b.birthdate == null || b.birthdate === '' ? null : String(b.birthdate);
+    if (v && (!isIsoDate(v) || v > today)) throw new HttpError(400, 'Birthdays look like 2019-05-14 and can\'t be in the future');
+    db.prepare('UPDATE members SET birthdate = ? WHERE id = ?').run(v, id);
+  }
+  if ('pictureMode' in b) {
+    if (!['auto', 'on', 'off'].includes(String(b.pictureMode))) throw new HttpError(400, 'pictureMode must be auto, on or off');
+    db.prepare('UPDATE members SET picture_mode = ? WHERE id = ?').run(String(b.pictureMode), id);
+  }
 }
 
 export function listKids(db: DatabaseSync, homeId: string) {
@@ -170,6 +188,7 @@ export function homeRoutes(app: FastifyInstance, db: DatabaseSync): void {
     db.prepare("INSERT INTO members (id, home_id, role, name, avatar, color, pin_hash, position, theme) VALUES (?, ?, 'kid', ?, ?, ?, ?, ?, ?)")
       .run(id, ctx.homeId, name, isAvatar(b.avatar) ? b.avatar : AVATARS[count % 8],
         isKidColor(b.color) ? b.color : KID_COLORS[count % KID_COLORS.length], pin, count, isThemeId(b.theme) ? b.theme : null);
+    applyKidProfile(db, id, b, homeToday(homeInfo(db, ctx.homeId)));
     return kidView(db, getKid(db, ctx, id));
   });
 
@@ -191,6 +210,7 @@ export function homeRoutes(app: FastifyInstance, db: DatabaseSync): void {
       db.prepare('UPDATE members SET pin_hash = ? WHERE id = ?').run(hash, kid.id as string);
     }
     if (Number.isInteger(b.position)) db.prepare('UPDATE members SET position = ? WHERE id = ?').run(b.position as number, kid.id as string);
+    applyKidProfile(db, kid.id as string, b, homeToday(homeInfo(db, ctx.homeId)));
     return kidView(db, getKid(db, ctx, kid.id as string));
   });
 

@@ -7,6 +7,7 @@ import { Modal } from '../components/Bits.tsx';
 import { CHORE_ICONS } from '../../../shared/catalog.ts';
 import { WEEKDAY_SHORT, type ScheduleKind } from '../../../shared/schedule.ts';
 import { IdeasButton } from '../components/Ideas.tsx';
+import { choresForAge } from '../../../shared/ages.ts';
 
 interface Draft { id?: string; title: string; icon: string; points: number; schedule: ScheduleKind; weekdays: number[]; dueDate: string; memberIds: string[]; bonus: boolean; claimLimit: 'each' | 'one' }
 
@@ -20,6 +21,9 @@ function ChoreEditor({ draft, onClose, onSaved }: { draft: Draft; onClose: () =>
   const [d, setD] = useState(draft);
   const [error, setError] = useState<string | null>(null);
   const set = (patch: Partial<Draft>) => setD({ ...d, ...patch });
+  // The youngest picked kid with a known age sets the ideas, so everyone picked can do the chore.
+  const youngest = home?.kids.filter((k) => d.memberIds.includes(k.id) && k.age != null).sort((a, b) => a.age! - b.age!)[0];
+  const ageIdeas = youngest && !d.id ? choresForAge(youngest.age).slice(0, 10) : [];
   const toggle = <T,>(list: T[], v: T) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
 
   async function save() {
@@ -43,7 +47,15 @@ function ChoreEditor({ draft, onClose, onSaved }: { draft: Draft; onClose: () =>
           <span className="big-icon" aria-hidden>{d.icon}</span>
           <input value={d.title} onChange={(e) => set({ title: e.target.value })} placeholder="What needs doing? e.g. Make your bed" style={{ flex: 1 }} autoFocus />
         </div>
-        <IdeasButton kind="chore" onPick={(i) => set({ title: i.title, points: i.points })} />
+        {ageIdeas.length > 0 && (
+          <div className="stack" style={{ gap: 6 }}>
+            <span className="small muted">Good for {youngest!.name} (age {youngest!.age}):</span>
+            <div className="chips">
+              {ageIdeas.map((c) => <button key={c.title} type="button" className="chip" onClick={() => set({ title: c.title, icon: c.icon, points: c.points })}>{c.icon} {c.title}</button>)}
+            </div>
+          </div>
+        )}
+        <IdeasButton kind="chore" kidId={youngest?.id} onPick={(i) => set({ title: i.title, points: i.points })} />
         <div className="chips">
           {CHORE_ICONS.map((i) => (
             <button key={i} type="button" className={`chip icon-chip${d.icon === i ? ' on' : ''}`} onClick={() => set({ icon: i })}>{i}</button>

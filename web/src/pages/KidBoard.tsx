@@ -104,7 +104,7 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
   const decided = polls?.filter((p) => p.status === 'closed').slice(0, 2) ?? [];
 
   return (
-    <div className={`stack board${asParent && kid.theme ? ' themed' : ''}`} data-theme={asParent ? kid.theme ?? undefined : undefined} style={{ ['--kid' as string]: kid.color }}>
+    <div className={`stack board${asParent && kid.theme ? ' themed' : ''}${kid.pictureMode ? ' picture' : ''}`} data-theme={asParent ? kid.theme ?? undefined : undefined} style={{ ['--kid' as string]: kid.color }}>
       <header className="board-head">
         <button className="avatar-button" onClick={() => setPicking(true)} aria-label="Change raccoon">
           <RaccoonAvatar variant={kid.avatar} size={92} />

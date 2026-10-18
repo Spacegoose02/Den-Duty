@@ -5,7 +5,7 @@ import type { Row } from '../db.ts';
 import { HttpError, num, str } from '../util.ts';
 import { earnedBetween, homeInfo, homeToday } from '../chores.ts';
 import { aiSettings, sealKey, suggest, type IdeaKind } from '../ai.ts';
-import { getKid, listKids } from './homes.ts';
+import { getKid, kidView, listKids } from './homes.ts';
 import { rateLimit } from '../security.ts';
 import { addDays } from '../../../shared/schedule.ts';
 
@@ -53,7 +53,8 @@ export function aiRoutes(app: FastifyInstance, db: DatabaseSync): void {
       : kind === 'chore'
         ? (db.prepare('SELECT title FROM chores WHERE home_id = ? AND active = 1').all(ctx.homeId) as Row[]).map((r) => r.title as string)
         : [];
-    const age = num(b.age);
+    const kidAge = b.kidId ? kidView(db, getKid(db, ctx, String(b.kidId))).age : null;
+    const age = num(b.age) ?? kidAge;
     return {
       ideas: await suggest(db, ctx.homeId, {
         kind, pointsName: home.pointsName, weeklyPoints: weekly || 20, existing,

@@ -381,6 +381,11 @@ const MIGRATIONS: string[] = [
   ALTER TABLE homes ADD COLUMN ai_key TEXT;
   ALTER TABLE homes ADD COLUMN ai_model TEXT;
   `,
+  // Ages: a birthdate per kid (age updates itself) and picture-first screens for kids who don't read yet.
+  `
+  ALTER TABLE members ADD COLUMN birthdate TEXT;
+  ALTER TABLE members ADD COLUMN picture_mode TEXT NOT NULL DEFAULT 'auto' CHECK (picture_mode IN ('auto', 'on', 'off'));
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

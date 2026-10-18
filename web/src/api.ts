@@ -41,7 +41,10 @@ export interface Whoami {
   kid: { id: string; name: string; avatar: string; color: string; theme: string | null } | null;
 }
 
-export interface Kid { id: string; name: string; avatar: string; color: string; theme: string | null; hasPin: boolean; balance: number }
+export interface Kid {
+  id: string; name: string; avatar: string; color: string; theme: string | null; hasPin: boolean; balance: number;
+  birthdate: string | null; age: number | null; pictureModeSetting: 'auto' | 'on' | 'off'; pictureMode: boolean;
+}
 
 export interface HomeDetail {
   id: string; name: string; pointsName: string; pointsIcon: string; theme: string; timezone: string; weekStart: 0 | 1; allowNegative?: boolean;
