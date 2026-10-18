@@ -2,8 +2,9 @@
 // chore_instances and points_ledger, so nothing here can drift out of sync with what actually happened.
 import type { DatabaseSync } from 'node:sqlite';
 import type { Row } from './db.ts';
-import { materialize, type HomeInfo } from './chores.ts';
+import { goalsFor, materialize, type HomeInfo } from './chores.ts';
 import { addDays, dateRange, startOfWeek } from '../../shared/schedule.ts';
+import { appointmentOn, goalAreaOn } from '../../shared/pages.ts';
 import { achievementsFor, GOAL_LEVEL_BONUS, levelFor, type Achievement, type LevelInfo } from '../../shared/progress.ts';
 
 const num = (v: unknown): number => Number(v ?? 0);
@@ -104,5 +105,70 @@ export function kidStats(db: DatabaseSync, home: HomeInfo, memberId: string, tod
     streak: streaks(db, memberId, today),
     level: levelOf(db, memberId),
     lifetime: lifetimeEarned(db, memberId),
+  };
+}
+
+// ---------- Doctors and Goals panels ----------
+
+const weekStarts = (from: string, today: string, weekStart: number) => [...new Set(dateRange(from, today).map((d) => startOfWeek(d, weekStart)))];
+
+/**
+ * The Doctors panel: practices per week by goal area, goal progress, goals reached, appointments kept and coming up,
+ * and the practice streak (days in a row with at least one practice). Only sections turned on for the kid count.
+ */
+export function doctorsStats(db: DatabaseSync, home: HomeInfo, memberId: string, from: string, today: string, off: readonly string[]) {
+  const goals = (db.prepare('SELECT * FROM therapy_goals WHERE member_id = ? ORDER BY created_at').all(memberId) as Row[]).filter((g) => goalAreaOn(g.area as string, off));
+  const goalArea = new Map(goals.map((g) => [g.id as string, g.area as string]));
+  // A practice is a ticked-off scheduled practice or a progress/practice note on a goal.
+  const notes = (db.prepare('SELECT goal_id, date FROM therapy_notes WHERE member_id = ? AND goal_id IS NOT NULL AND date <= ?').all(memberId, today) as Row[])
+    .filter((n) => goalArea.has(n.goal_id as string));
+  const weeks = weekStarts(from, today, home.weekStart);
+  const areas = [...new Set(notes.filter((n) => (n.date as string) >= from).map((n) => goalArea.get(n.goal_id as string)!))].sort();
+  const perWeek = areas.map((area) => ({
+    area, values: weeks.map((w) => notes.filter((n) => goalArea.get(n.goal_id as string) === area && startOfWeek(n.date as string, home.weekStart) === w).length),
+  }));
+  const days = new Set(notes.map((n) => n.date as string));
+  let streak = 0;
+  for (let d = days.has(today) ? today : addDays(today, -1); days.has(d); d = addDays(d, -1)) streak++;
+  const appts = (db.prepare('SELECT kind, status, starts_at FROM therapy_appointments WHERE member_id = ?').all(memberId) as Row[]).filter((a) => appointmentOn(a.kind as string, off));
+  return {
+    weeks, perWeek, streak, practicesInRange: notes.filter((n) => (n.date as string) >= from).length,
+    goals: goals.filter((g) => g.status !== 'met' || (g.met_at as string) >= from).map((g) => ({
+      id: g.id as string, title: g.title as string, area: g.area as string, progress: g.progress as number, status: g.status as string,
+    })),
+    goalsReached: goals.filter((g) => g.status === 'met').length,
+    goalsReachedInRange: goals.filter((g) => g.status === 'met' && String(g.met_at ?? '').slice(0, 10) >= from).length,
+    appointments: {
+      attended: appts.filter((a) => a.status === 'done' && (a.starts_at as string).slice(0, 10) >= from).length,
+      missed: appts.filter((a) => a.status === 'missed' && (a.starts_at as string).slice(0, 10) >= from).length,
+      upcoming: appts.filter((a) => a.status === 'scheduled' && (a.starts_at as string).slice(0, 10) >= today).length,
+    },
+  };
+}
+
+/** The Goals panel: points goals' progress, goals reached and redeemed per week, and how long goals take to reach. */
+export function goalsStats(db: DatabaseSync, home: HomeInfo, memberId: string, from: string, today: string) {
+  const rows = db.prepare('SELECT * FROM goals WHERE member_id = ? ORDER BY created_at').all(memberId) as Row[];
+  // When each goal was first reached, from the goal_reached events (redeeming counts as reached if that's all we have).
+  const reachedAt = new Map<string, string>();
+  for (const e of db.prepare("SELECT data, created_at FROM events WHERE member_id = ? AND type = 'goal_reached' ORDER BY id").all(memberId) as Row[]) {
+    const id = (JSON.parse(e.data as string) as { goal_id?: string }).goal_id;
+    if (id && !reachedAt.has(id)) reachedAt.set(id, (e.created_at as string).slice(0, 10));
+  }
+  for (const g of rows) if (g.redeemed_at && !reachedAt.has(g.id as string)) reachedAt.set(g.id as string, (g.redeemed_at as string).slice(0, 10));
+  const weeks = weekStarts(from, today, home.weekStart);
+  const inWeek = (d: string | undefined, w: string) => !!d && d >= from && startOfWeek(d, home.weekStart) === w;
+  const took = rows.filter((g) => reachedAt.has(g.id as string)).map((g) => ({
+    title: g.title as string, days: Math.max(0, Math.round((Date.parse(reachedAt.get(g.id as string)!) - Date.parse((g.created_at as string).slice(0, 10))) / 86400000)),
+  }));
+  return {
+    active: goalsFor(db, memberId).map((g) => ({ id: g.id, title: g.title, target: g.targetPoints, progress: g.progress, percent: g.percent, reached: g.reached })),
+    weeks,
+    reachedPerWeek: weeks.map((w) => rows.filter((g) => inWeek(reachedAt.get(g.id as string), w)).length),
+    redeemedPerWeek: weeks.map((w) => rows.filter((g) => inWeek((g.redeemed_at as string | null)?.slice(0, 10), w)).length),
+    reachedTotal: reachedAt.size,
+    redeemedTotal: rows.filter((g) => g.status === 'redeemed').length,
+    averageDays: took.length ? Math.round(took.reduce((s, t) => s + t.days, 0) / took.length) : null,
+    recent: took.slice(-5).reverse(),
   };
 }

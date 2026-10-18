@@ -142,7 +142,7 @@ export async function suggest(db: DatabaseSync, homeId: string, ctx: IdeaContext
 
 // ---------- speech and occupational therapy helpers ----------
 
-export type HelperArea = 'speech' | 'ot';
+export type HelperArea = 'speech' | 'ot' | 'anger';
 
 export const THERAPY_DISCLAIMER = "General ideas to talk over with your child's therapist or doctor. Not medical advice.";
 
@@ -188,11 +188,17 @@ never contradict a professional, and frame ideas as things to try and talk over 
 sensory play and calming routines, and self-care practice (dressing, buttons, brushing teeth, using utensils) built into everyday life.
 Use warm, plain words and no jargon. You are not the child's therapist: never diagnose, never promise outcomes, never contradict a
 professional, keep everything safe for the child's age, and frame ideas as things to try and talk over with the child's occupational therapist.`,
+  anger: `You give parents simple, play-based ideas to practice handling big feelings, especially anger, at home while everyone is calm:
+naming feelings, calm-down breathing games (smell the flower, blow out the candle), feelings check-ins, a calm corner, stories and role play
+about what to do when mad, and noticing calm choices. Use warm, plain words and no jargon. Be positive and gentle: never shaming, scaring or
+harsh punishment. You are not the child's therapist or doctor: never diagnose, never promise outcomes, and frame ideas as things to try and
+talk over with the child's doctor or therapist. If something sounds unsafe, suggest talking to their doctor.`,
 };
 
 /** Only the age, the area and the goal text are sent. Never names, notes or appointments. */
 export function helperPrompt(area: HelperArea, age: number | null, goals: string[], date: string): string {
-  const what = area === 'speech' ? 'speech and language' : 'occupational therapy (fine motor, sensory, self-care)';
+  const what = area === 'speech' ? 'speech and language' : area === 'anger' ? 'feelings and anger-regulation'
+    : 'occupational therapy (fine motor, sensory, self-care)';
   return [
     `Give one short daily activity for ${what} practice at home, and 3 goal ideas.`,
     age != null ? `The child is ${age} years old.` : 'The child\'s age is unknown; keep it suitable for young children.',

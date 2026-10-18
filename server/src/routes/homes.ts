@@ -7,7 +7,7 @@ import { HttpError, newId, randomToken, readableCode, requireStr, sha256, str } 
 import { hashPassword } from '../security.ts';
 import { balance, homeInfo, homeToday } from '../chores.ts';
 import { ageOn, pictureMode } from '../../../shared/ages.ts';
-import { DOCTOR_AREA_IDS, KID_PAGE_IDS, offList, type DoctorArea, type KidPage } from '../../../shared/pages.ts';
+import { DOCTOR_AREA_IDS, IDEAS_OFF_DEFAULT, KID_PAGE_IDS, offList, PRACTICE_IDEA_IDS, type DoctorArea, type KidPage, type PracticeIdea } from '../../../shared/pages.ts';
 import { AVATARS, isAvatar, isKidColor, KID_COLORS, POINT_ICONS } from '../../../shared/catalog.ts';
 import { isIsoDate, isTimeZone } from '../../../shared/schedule.ts';
 import { isThemeId } from '../../../shared/themes.ts';
@@ -58,6 +58,7 @@ export function kidView(db: DatabaseSync, r: Row) {
     theme: (r.theme as string | null) ?? null, hasPin: !!r.pin_hash, balance: balance(db, r.id as string),
     birthdate, age, pictureModeSetting: setting, pictureMode: pictureMode(setting, age),
     pagesOff: offList(r.pages_off, KID_PAGE_IDS), doctorAreasOff: offList(r.doctor_areas_off, DOCTOR_AREA_IDS),
+    ideasOff: r.ideas_off == null ? IDEAS_OFF_DEFAULT : offList(r.ideas_off, PRACTICE_IDEA_IDS),
   };
 }
 
@@ -71,6 +72,7 @@ function applyKidProfile(db: DatabaseSync, id: string, b: Row, today: string): v
   // Page and Doctors-section switches: lists of what's turned off for this kid. Off hides, it never deletes.
   if ('pagesOff' in b) db.prepare('UPDATE members SET pages_off = ? WHERE id = ?').run(JSON.stringify(offList(b.pagesOff, KID_PAGE_IDS)), id);
   if ('doctorAreasOff' in b) db.prepare('UPDATE members SET doctor_areas_off = ? WHERE id = ?').run(JSON.stringify(offList(b.doctorAreasOff, DOCTOR_AREA_IDS)), id);
+  if ('ideasOff' in b) db.prepare('UPDATE members SET ideas_off = ? WHERE id = ?').run(JSON.stringify(offList(b.ideasOff, PRACTICE_IDEA_IDS)), id);
   if ('pictureMode' in b) {
     if (!['auto', 'on', 'off'].includes(String(b.pictureMode))) throw new HttpError(400, 'pictureMode must be auto, on or off');
     db.prepare('UPDATE members SET picture_mode = ? WHERE id = ?').run(String(b.pictureMode), id);
@@ -322,4 +324,10 @@ export function pageOn(db: DatabaseSync, memberId: string, page: KidPage): boole
 export function doctorAreasOff(db: DatabaseSync, memberId: string): DoctorArea[] {
   const r = db.prepare('SELECT doctor_areas_off FROM members WHERE id = ?').get(memberId) as Row | undefined;
   return offList(r?.doctor_areas_off, DOCTOR_AREA_IDS);
+}
+
+/** Daily practice ideas switched off for this kid. */
+export function ideasOff(db: DatabaseSync, memberId: string): PracticeIdea[] {
+  const r = db.prepare('SELECT ideas_off FROM members WHERE id = ?').get(memberId) as Row | undefined;
+  return r?.ideas_off == null ? IDEAS_OFF_DEFAULT : offList(r.ideas_off, PRACTICE_IDEA_IDS);
 }

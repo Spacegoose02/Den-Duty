@@ -9,12 +9,12 @@ import { BEHAVIOR_TOPICS, DOCTOR_AREAS, DOCTOR_NAME, GOAL_AREA_SECTION } from '.
 import { newId } from '../util.ts';
 import { OT_AREAS } from './therapy.ts';
 import type { HomeCtx } from '../auth.ts';
-import { doctorAreasOff, getKid, kidView, listKids, pageOn } from './homes.ts';
+import { doctorAreasOff, getKid, ideasOff, kidView, listKids, pageOn } from './homes.ts';
 import { goalAreaOn } from '../../../shared/pages.ts';
 import { rateLimit } from '../security.ts';
 import { addDays } from '../../../shared/schedule.ts';
 
-const helperAreas = (area: HelperArea) => (area === 'speech' ? ['speech'] : OT_AREAS);
+const helperAreas = (area: HelperArea) => (area === 'speech' ? ['speech'] : area === 'anger' ? ['behavioral'] : OT_AREAS);
 
 function activeGoals(db: DatabaseSync, memberId: string, area: HelperArea): string[] {
   const off = doctorAreasOff(db, memberId);
@@ -24,9 +24,9 @@ function activeGoals(db: DatabaseSync, memberId: string, area: HelperArea): stri
     .all(memberId, ...areas) as Row[]).map((r) => r.title as string);
 }
 
-/** Is this helper's area turned on for the kid (Doctors page on, and its section(s) on)? */
+/** Is this helper turned on for the kid (Doctors page on, its section(s) on, and the idea itself not switched off)? */
 function helperOn(db: DatabaseSync, memberId: string, area: HelperArea): boolean {
-  if (!pageOn(db, memberId, 'doctors')) return false;
+  if (!pageOn(db, memberId, 'doctors') || ideasOff(db, memberId).includes(area)) return false;
   const off = doctorAreasOff(db, memberId);
   return helperAreas(area).some((a) => goalAreaOn(a, off));
 }
@@ -103,16 +103,17 @@ export function aiRoutes(app: FastifyInstance, db: DatabaseSync): void {
   app.get('/api/homes/:homeId/kids/:memberId/therapy/helper/:area', async (req) => {
     const ctx = homeCtx(db, req, 'parent');
     const { memberId, area } = req.params as { memberId: string; area: string };
-    if (area !== 'speech' && area !== 'ot') throw new HttpError(400, 'area must be speech or ot');
+    if (area !== 'speech' && area !== 'ot' && area !== 'anger') throw new HttpError(400, 'area must be speech, ot or anger');
     return dailyTip(db, ctx, memberId, area, (req.query as { refresh?: string }).refresh === '1');
   });
 
-  // Today's tips for the parents' home screen: one per kid per area they have active goals in. Off when AI is off.
+  // Today's tips for the parents' home screen: speech and OT when the kid has goals there, anger whenever it's switched on.
+  // Off when AI is off.
   app.get('/api/homes/:homeId/therapy/tips', async (req) => {
     const ctx = homeCtx(db, req, 'parent');
     if (!aiSettings(db, ctx.homeId).enabled) return [];
-    const wanted = listKids(db, ctx.homeId).flatMap((k) => (['speech', 'ot'] as HelperArea[])
-      .filter((area) => helperOn(db, k.id, area) && activeGoals(db, k.id, area).length > 0).map((area) => ({ kid: k, area })));
+    const wanted = listKids(db, ctx.homeId).flatMap((k) => (['speech', 'ot', 'anger'] as HelperArea[])
+      .filter((area) => helperOn(db, k.id, area) && (area === 'anger' || activeGoals(db, k.id, area).length > 0)).map((area) => ({ kid: k, area })));
     return Promise.all(wanted.map(async ({ kid, area }) => {
       try {
         return { kidId: kid.id, kidName: kid.name, kidAvatar: kid.avatar, ...(await dailyTip(db, ctx, kid.id, area, false)) };

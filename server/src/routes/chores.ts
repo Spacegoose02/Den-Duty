@@ -5,15 +5,15 @@ import { tx, type Row } from '../db.ts';
 import { HttpError, newId, num, requireStr, str } from '../util.ts';
 import {
   agenda, approveInstance, bonusOffers, kidsWithPageOff, claimBonus, getInstance, goalsFor, homeInfo, homeToday, kidWeek, ledger, rejectInstance,
-  reviewQueue, setStarted, submitInstance, syncChore, todayList, unapproveInstance, unclaimBonus, unsubmitInstance, type By,
+  reviewQueue, setStarted, submitInstance, syncChore, todayList, unapproveInstance, unclaimBonus, unsubmitInstance, type By, type HomeInfo,
 } from '../chores.ts';
-import { achievements, kidStats, levelOf, streaks } from '../progress.ts';
-import { kidTherapyView } from './therapy.ts';
+import { achievements, doctorsStats, goalsStats, kidStats, levelOf, streaks } from '../progress.ts';
+import { kidTherapyView, withDoctors } from './therapy.ts';
 import { dutyDue } from './parentduty.ts';
 import { homeTimeouts, kidTimeouts } from './timeouts.ts';
 import { roomMessage } from '../roommessage.ts';
 import { externalBetween, refreshStale } from '../calendar.ts';
-import { cleanIcon, getKid, kidView, listKids, pageOn } from './homes.ts';
+import { cleanIcon, doctorAreasOff, getKid, kidView, listKids, pageOn } from './homes.ts';
 import type { KidPage } from '../../../shared/pages.ts';
 import { addDays, cleanWeekdays, describeSchedule, isIsoDate, startOfWeek, type ScheduleKind } from '../../../shared/schedule.ts';
 
@@ -96,6 +96,13 @@ function agendaKids(db: DatabaseSync, ctx: HomeCtx, kid: string | undefined): st
   return listKids(db, ctx.homeId).map((k) => k.id).filter((id) => !off.has(id));
 }
 
+/** Kids whose practices and appointments go on a calendar (Chores being off doesn't hide them). */
+function doctorKids(db: DatabaseSync, ctx: HomeCtx, kid: string | undefined): string[] {
+  if (ctx.actor.kind === 'kid') return [ctx.actor.memberId];
+  if (kid) return [getKid(db, ctx, kid).id as string];
+  return listKids(db, ctx.homeId).map((k) => k.id);
+}
+
 function startParam(v: unknown, fallback: string): string {
   if (v == null || v === '') return fallback;
   if (!isIsoDate(v)) throw new HttpError(400, 'Dates look like 2026-10-17');
@@ -165,8 +172,10 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const today = homeToday(home);
     const q = req.query as { start?: string; days?: string; kid?: string };
     const start = startParam(q.start, startOfWeek(today, home.weekStart));
-    const days = Math.min(Math.max(Number(q.days) || 7, 1), 31);
-    const withExt = await withFeeds(db, ctx, agenda(db, ctx.homeId, agendaKids(db, ctx, q.kid), start, days, today));
+    const days = Math.min(Math.max(Number(q.days) || 7, 1), 42);
+    const kidIds = agendaKids(db, ctx, q.kid);
+    // Scheduled practices and appointments: parents see them; kids only when Doctors is shared with them.
+    const withExt = withDoctors(db, await withFeeds(db, ctx, agenda(db, ctx.homeId, kidIds, start, days, today)), doctorKids(db, ctx, q.kid), ctx.actor.kind !== 'parent');
     if (ctx.actor.kind !== 'parent' || q.kid) return { today, start, days: withExt };
     const duty = dutyDue(db, ctx.homeId, start, addDays(start, days - 1));
     return { today, start, days: withExt.map((d) => ({ ...d, duty: duty.filter((x) => x.dueDate === d.date) })) };
@@ -190,7 +199,7 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
       kid: kidView(db, kid),
       stats: kidWeek(db, home, memberId, today),
       todayItems: on('chores') ? todayList(db, ctx.homeId, memberId, today) : [],
-      week: await withFeeds(db, ctx, on('chores') ? agenda(db, ctx.homeId, [memberId], start, 7, today) : agenda(db, ctx.homeId, [], start, 7, today), memberId),
+      week: withDoctors(db, await withFeeds(db, ctx, on('chores') ? agenda(db, ctx.homeId, [memberId], start, 7, today) : agenda(db, ctx.homeId, [], start, 7, today), memberId), [memberId], ctx.actor.kind !== 'parent'),
       goals: on('goals') ? goalsFor(db, memberId) : [],
       bonus: on('chores') ? bonusOffers(db, ctx.homeId, memberId, today) : [],
       level: levelOf(db, memberId),
@@ -241,13 +250,21 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
   });
 
   // ---------- stats and charts ----------
+  // The Doctors panel (parents only, Doctors on) and the Goals panel (Goals on), over the same weeks as the charts.
+  const panels = (memberId: string, home: HomeInfo, today: string, weeks: number, parent: boolean) => {
+    const from = startOfWeek(addDays(today, -7 * (weeks - 1)), home.weekStart);
+    return {
+      doctors: parent && pageOn(db, memberId, 'doctors') ? doctorsStats(db, home, memberId, from, today, doctorAreasOff(db, memberId)) : null,
+      goalStats: pageOn(db, memberId, 'goals') ? goalsStats(db, home, memberId, from, today) : null,
+    };
+  };
   app.get('/api/homes/:homeId/stats', async (req) => {
     const ctx = homeCtx(db, req, 'parent');
     const home = homeInfo(db, ctx.homeId);
     const today = homeToday(home);
     const weeks = Math.min(Math.max(Number((req.query as { weeks?: string }).weeks) || 12, 2), 52);
     const off = kidsWithPageOff(db, ctx.homeId, 'stats');
-    return { today, weeks, kids: listKids(db, ctx.homeId).filter((k) => !off.has(k.id)).map((k) => ({ ...k, ...kidStats(db, home, k.id, today, weeks) })) };
+    return { today, weeks, kids: listKids(db, ctx.homeId).filter((k) => !off.has(k.id)).map((k) => ({ ...k, ...kidStats(db, home, k.id, today, weeks), ...panels(k.id, home, today, weeks, true) })) };
   });
 
   app.get('/api/homes/:homeId/kids/:memberId/stats', async (req) => {
@@ -258,7 +275,7 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const home = homeInfo(db, ctx.homeId);
     const today = homeToday(home);
     const weeks = Math.min(Math.max(Number((req.query as { weeks?: string }).weeks) || 12, 2), 52);
-    return { today, weeks, kid: { ...kid, ...kidStats(db, home, memberId, today, weeks) }, achievements: achievements(db, memberId, today) };
+    return { today, weeks, kid: { ...kid, ...kidStats(db, home, memberId, today, weeks), ...panels(memberId, home, today, weeks, ctx.actor.kind === 'parent') }, achievements: achievements(db, memberId, today) };
   });
 
   // ---------- doing chores ----------

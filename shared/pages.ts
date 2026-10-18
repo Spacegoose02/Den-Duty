@@ -77,3 +77,13 @@ export const BEHAVIOR_TOPICS = [
   { id: 'fears', icon: '👻', label: 'Fears', ask: 'How can I help my child with fears, like the dark or new places?' },
   { id: 'kindness', icon: '🤝', label: 'Being kind', ask: 'How can I encourage kindness, sharing and saying sorry?' },
 ] as const;
+
+/** Daily AI practice ideas in Doctors and on the parent home, each switchable per kid. Anger starts off. */
+export const PRACTICE_IDEAS = [
+  { id: 'speech', label: 'Speech practice idea', icon: '🗣️', section: 'speech' },
+  { id: 'ot', label: 'OT practice idea', icon: '✋', section: 'ot' },
+  { id: 'anger', label: 'Anger practice idea', icon: '🌋', section: 'behavioral' },
+] as const;
+export type PracticeIdea = (typeof PRACTICE_IDEAS)[number]['id'];
+export const PRACTICE_IDEA_IDS = PRACTICE_IDEAS.map((p) => p.id) as PracticeIdea[];
+export const IDEAS_OFF_DEFAULT: PracticeIdea[] = ['anger'];

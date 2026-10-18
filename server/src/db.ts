@@ -486,6 +486,30 @@ export const MIGRATIONS: string[] = [
     PRIMARY KEY (member_id, date)
   );
   `,
+  // Doctors goals can have a practice schedule (weekdays with an optional time, or one date). Ticking a scheduled
+  // practice off writes a practice note for that day. Daily practice ideas (speech, OT, anger) can be switched off per
+  // kid; the anger idea starts off. The tips cache learns the new 'anger' area (SQLite can't change a CHECK in place).
+  `
+  ALTER TABLE therapy_goals ADD COLUMN practice_schedule TEXT CHECK (practice_schedule IN ('weekly', 'once'));
+  ALTER TABLE therapy_goals ADD COLUMN practice_weekdays TEXT NOT NULL DEFAULT '[]';
+  ALTER TABLE therapy_goals ADD COLUMN practice_date TEXT;
+  ALTER TABLE therapy_goals ADD COLUMN practice_time TEXT;
+  ALTER TABLE therapy_notes ADD COLUMN practice INTEGER NOT NULL DEFAULT 0;
+  CREATE INDEX therapy_notes_goal ON therapy_notes(goal_id, date);
+  ALTER TABLE members ADD COLUMN ideas_off TEXT NOT NULL DEFAULT '["anger"]';
+  CREATE TABLE ai_tips_v2 (
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    area TEXT NOT NULL CHECK (area IN ('speech', 'ot', 'anger')),
+    date TEXT NOT NULL,
+    data TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (member_id, area, date)
+  );
+  INSERT INTO ai_tips_v2 SELECT member_id, home_id, area, date, data, created_at FROM ai_tips;
+  DROP TABLE ai_tips;
+  ALTER TABLE ai_tips_v2 RENAME TO ai_tips;
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

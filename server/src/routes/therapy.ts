@@ -4,12 +4,12 @@ import type { FastifyInstance } from 'fastify';
 import type { DatabaseSync } from 'node:sqlite';
 import { homeCtx, type HomeCtx } from '../auth.ts';
 import { tx, type Row } from '../db.ts';
-import { HttpError, newId, num, requireStr, str } from '../util.ts';
+import { HttpError, newId, num, parseJson, requireStr, str } from '../util.ts';
 import { homeInfo, homeToday, writeLedger } from '../chores.ts';
 import { byOf } from './chores.ts';
 import { doctorAreasOff, getKid, pageOn } from './homes.ts';
 import { appointmentOn, goalAreaOn } from '../../../shared/pages.ts';
-import { isIsoDate } from '../../../shared/schedule.ts';
+import { cleanWeekdays, dateRange, isIsoDate, weekdayOf } from '../../../shared/schedule.ts';
 
 export const APPOINTMENT_KINDS = ['doctor', 'speech', 'feeding', 'occupational', 'physical', 'behavioral', 'dental', 'other'] as const;
 export const GOAL_AREAS = ['development', 'speech', 'feeding', 'doctor', 'motor', 'sensory', 'selfcare', 'physical', 'behavioral', 'dental', 'social', 'other'] as const;
@@ -61,7 +61,26 @@ function goalView(db: DatabaseSync, r: Row) {
     targetDate: r.target_date as string | null, status: r.status as string, progress: r.progress as number,
     createdAt: r.created_at as string, metAt: r.met_at as string | null, history,
     rewardStep: (r.reward_step as number) ?? 0, rewardMet: (r.reward_met as number) ?? 0, rewardMetPaid: !!r.reward_met_paid,
+    practice: r.practice_schedule ? {
+      schedule: r.practice_schedule as 'weekly' | 'once', weekdays: cleanWeekdays(parseJson(r.practice_weekdays, [])),
+      date: r.practice_date as string | null, time: r.practice_time as string | null,
+    } : null,
   };
+}
+
+/** Practice schedule from a goal form: none, some weekdays (optionally at a time), or one date. */
+function applyPractice(db: DatabaseSync, id: string, b: Row): void {
+  if (!('practiceSchedule' in b)) return;
+  const kind = b.practiceSchedule == null || b.practiceSchedule === 'none' || b.practiceSchedule === '' ? null : String(b.practiceSchedule);
+  if (kind && kind !== 'weekly' && kind !== 'once') throw new HttpError(400, 'Practice schedule is none, weekly or once');
+  const weekdays = kind === 'weekly' ? cleanWeekdays(b.practiceWeekdays) : [];
+  if (kind === 'weekly' && !weekdays.length) throw new HttpError(400, 'Pick at least one practice day');
+  const date = kind === 'once' ? b.practiceDate : null;
+  if (kind === 'once' && !isIsoDate(date)) throw new HttpError(400, 'Pick a practice date');
+  const time = kind && b.practiceTime ? String(b.practiceTime) : null;
+  if (time && !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) throw new HttpError(400, 'Practice times look like 16:30');
+  db.prepare('UPDATE therapy_goals SET practice_schedule = ?, practice_weekdays = ?, practice_date = ?, practice_time = ? WHERE id = ?')
+    .run(kind, JSON.stringify(weekdays), date as string | null, time, id);
 }
 
 function ownRow(db: DatabaseSync, table: 'therapy_appointments' | 'therapy_goals' | 'therapy_notes', ctx: HomeCtx, id: string): Row {
@@ -182,6 +201,7 @@ export function therapyRoutes(app: FastifyInstance, db: DatabaseSync): void {
       .run(id, ctx.homeId, kid.id as string, oneOf(GOAL_AREAS, b.area, 'Area', 'development'), requireStr(b.title, 'Goal', 120), str(b.description, 2000),
         (b.targetDate as string) || null, b.progress == null ? 0 : progressValue(b.progress), ctx.user?.id ?? null,
         rewardPoints(b.rewardStep), rewardPoints(b.rewardMet));
+    applyPractice(db, id, b);
     return goalView(db, ownRow(db, 'therapy_goals', ctx, id));
   });
 
@@ -202,6 +222,7 @@ export function therapyRoutes(app: FastifyInstance, db: DatabaseSync): void {
       status, cur.id as string);
     if ('rewardStep' in b) db.prepare('UPDATE therapy_goals SET reward_step = ? WHERE id = ?').run(rewardPoints(b.rewardStep), cur.id as string);
     if ('rewardMet' in b) db.prepare('UPDATE therapy_goals SET reward_met = ? WHERE id = ?').run(rewardPoints(b.rewardMet), cur.id as string);
+    applyPractice(db, cur.id as string, b);
     // Reaching the goal pays its bonus once, even if it's later reopened and met again.
     const after = ownRow(db, 'therapy_goals', ctx, cur.id as string);
     if (after.status === 'met' && !after.reward_met_paid && (after.reward_met as number) > 0) {
@@ -259,9 +280,119 @@ export function therapyRoutes(app: FastifyInstance, db: DatabaseSync): void {
     return { id, awarded };
   });
 
+  // Tick a scheduled practice off on the calendar (today or earlier): writes a practice note for that day, with the goal's
+  // step points if it pays them. Unticking removes the note and takes those points back with a reversal.
+  app.post('/api/homes/:homeId/therapy/goals/:id/practice', async (req) => {
+    const ctx = homeCtx(db, req, 'parent');
+    const g = ownRow(db, 'therapy_goals', ctx, (req.params as { id: string }).id);
+    const today = homeToday(homeInfo(db, ctx.homeId));
+    const date = (req.body as Row | undefined)?.date;
+    if (!isIsoDate(date)) throw new HttpError(400, 'Which day?');
+    if (date > today) throw new HttpError(400, "That day hasn't happened yet");
+    if (g.status !== 'active' || !practiceOn(g, date)) throw new HttpError(400, "There's no practice scheduled that day");
+    if (db.prepare('SELECT 1 FROM therapy_notes WHERE goal_id = ? AND date = ? AND practice = 1').get(g.id as string, date)) throw new HttpError(400, 'Already ticked off');
+    const id = newId();
+    let awarded = 0;
+    tx(db, () => {
+      db.prepare(`INSERT INTO therapy_notes (id, home_id, member_id, goal_id, body, date, by_name, created_by, practice) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`)
+        .run(id, ctx.homeId, g.member_id as string, g.id as string, '✅ Practiced', date, ctx.user?.name ?? null, ctx.user?.id ?? null);
+      const pts = g.reward_step as number;
+      if (pts > 0) {
+        writeLedger(db, {
+          homeId: ctx.homeId, memberId: g.member_id as string, amount: pts, kind: 'bonus',
+          reason: rewardReason(db, g.member_id as string, g.title as string, false), date: today, by: byOf(ctx),
+        });
+        db.prepare('UPDATE therapy_notes SET awarded = ? WHERE id = ?').run(pts, id);
+        awarded = pts;
+      }
+    });
+    return { id, awarded };
+  });
+
+  app.delete('/api/homes/:homeId/therapy/goals/:id/practice', async (req) => {
+    const ctx = homeCtx(db, req, 'parent');
+    const g = ownRow(db, 'therapy_goals', ctx, (req.params as { id: string }).id);
+    const date = (req.query as { date?: string }).date;
+    const n = db.prepare('SELECT * FROM therapy_notes WHERE goal_id = ? AND date = ? AND practice = 1').get(g.id as string, date ?? '') as Row | undefined;
+    if (!n) throw new HttpError(404, "That practice wasn't ticked off");
+    tx(db, () => {
+      db.prepare('DELETE FROM therapy_notes WHERE id = ?').run(n.id as string);
+      if ((n.awarded as number) > 0) {
+        writeLedger(db, {
+          homeId: ctx.homeId, memberId: g.member_id as string, amount: -(n.awarded as number), kind: 'reversal',
+          reason: 'Practice unticked', date: homeToday(homeInfo(db, ctx.homeId)), by: byOf(ctx),
+        });
+      }
+    });
+    return { ok: true, reversed: n.awarded as number };
+  });
+
   app.delete('/api/homes/:homeId/therapy/notes/:id', async (req) => {
     const ctx = homeCtx(db, req, 'parent');
     db.prepare('DELETE FROM therapy_notes WHERE id = ? AND home_id = ?').run((req.params as { id: string }).id, ctx.homeId);
     return { ok: true };
   });
+}
+
+// ---------- practices and appointments on the calendars ----------
+
+export interface PracticeItem { goalId: string; memberId: string; title: string; area: string; time: string | null; done: boolean; points: number }
+export interface AppointmentItem { id: string; memberId: string; kind: string; title: string; provider: string | null; time: string; status: string }
+export interface DoctorsDay { practices: PracticeItem[]; appointments: AppointmentItem[] }
+
+/** Is a goal's practice scheduled on this date? */
+export function practiceOn(g: Row, date: string): boolean {
+  if (g.practice_schedule === 'once') return g.practice_date === date;
+  if (g.practice_schedule !== 'weekly') return false;
+  if (date < String(g.created_at).slice(0, 10)) return false;
+  return cleanWeekdays(parseJson(g.practice_weekdays, [])).includes(weekdayOf(date));
+}
+
+/**
+ * Scheduled practices and appointments per date for some kids. Parents see them whenever Doctors (and the section)
+ * is on; kids only when a parent shares Doctors with them.
+ */
+export function doctorsCalendar(db: DatabaseSync, memberIds: string[], from: string, to: string, forKid: boolean): Map<string, DoctorsDay> {
+  const out = new Map<string, DoctorsDay>();
+  const day = (d: string) => { let v = out.get(d); if (!v) { v = { practices: [], appointments: [] }; out.set(d, v); } return v; };
+  for (const id of memberIds) {
+    if (!pageOn(db, id, 'doctors')) continue;
+    if (forKid && !(db.prepare('SELECT therapy_kid_visible FROM members WHERE id = ?').get(id) as Row | undefined)?.therapy_kid_visible) continue;
+    const off = doctorAreasOff(db, id);
+    const goals = (db.prepare("SELECT * FROM therapy_goals WHERE member_id = ? AND status = 'active' AND practice_schedule IS NOT NULL").all(id) as Row[])
+      .filter((g) => goalAreaOn(g.area as string, off));
+    if (goals.length) {
+      const done = new Set((db.prepare(`SELECT goal_id, date FROM therapy_notes WHERE member_id = ? AND practice = 1 AND date BETWEEN ? AND ?`).all(id, from, to) as Row[])
+        .map((n) => `${n.goal_id}|${n.date}`));
+      for (const d of dateRange(from, to)) {
+        for (const g of goals) {
+          if (!practiceOn(g, d)) continue;
+          day(d).practices.push({
+            goalId: g.id as string, memberId: id, title: g.title as string, area: g.area as string, time: (g.practice_time as string | null) ?? null,
+            done: done.has(`${g.id}|${d}`), points: g.reward_step as number,
+          });
+        }
+      }
+    }
+    for (const a of db.prepare(`SELECT * FROM therapy_appointments WHERE member_id = ? AND status != 'cancelled' AND substr(starts_at, 1, 10) BETWEEN ? AND ?
+      ORDER BY starts_at`).all(id, from, to) as Row[]) {
+      if (!appointmentOn(a.kind as string, off)) continue;
+      const [d, time] = (a.starts_at as string).split('T');
+      day(d).appointments.push({
+        id: a.id as string, memberId: id, kind: a.kind as string, title: a.title as string, provider: a.provider as string | null, time, status: a.status as string,
+      });
+    }
+  }
+  for (const v of out.values()) {
+    v.practices.sort((x, y) => (x.time ?? '99').localeCompare(y.time ?? '99'));
+    v.appointments.sort((x, y) => x.time.localeCompare(y.time));
+  }
+  return out;
+}
+
+/** Adds each day's practices and appointments to agenda days. */
+export function withDoctors<D extends { date: string }>(db: DatabaseSync, days: D[], memberIds: string[], forKid: boolean): (D & DoctorsDay)[] {
+  if (!days.length) return [];
+  const cal = doctorsCalendar(db, memberIds, days[0].date, days[days.length - 1].date, forKid);
+  return days.map((d) => ({ ...d, practices: cal.get(d.date)?.practices ?? [], appointments: cal.get(d.date)?.appointments ?? [] }));
 }
