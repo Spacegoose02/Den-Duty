@@ -149,3 +149,42 @@ test('per-kid AI switch: on by default; off means no AI requests about that kid 
   assert.equal((await call(mom, 'GET', `${base}/kids/${ben.id}/room-message`)).body.source, 'ai');
   setAiFetch(undefined);
 });
+
+test('editing from the calendar: appointments (kids see no notes), practice dates, Parent Duty due dates, all in the feed', async () => {
+  const { call, mom, base, ava, tablet, asKid, today } = await family();
+  const t = `${base}/kids/${ava.id}/therapy`;
+  const day = addDays(today, 2);
+  const { body: appt } = await call(mom, 'POST', `${t}/appointments`, { kind: 'speech', title: 'Speech', startsAt: `${day}T09:00`, notes: 'Ask about lisp', location: 'Clinic' });
+  const parentDay = (await call(mom, 'GET', `${base}/agenda?start=${day}&days=1`)).body.days[0];
+  assert.equal(parentDay.appointments[0].notes, 'Ask about lisp');
+  assert.equal(parentDay.appointments[0].location, 'Clinic');
+  await call(mom, 'PATCH', t, { kidVisible: true });
+  await asKid(ava);
+  const kidDay = (await call(tablet, 'GET', `${base}/agenda?start=${day}&days=1`)).body.days[0];
+  assert.equal(kidDay.appointments[0].title, 'Speech');
+  assert.ok(!('notes' in kidDay.appointments[0]), 'kids never get notes');
+  assert.equal((await call(tablet, 'PATCH', `${base}/therapy/appointments/${appt.id}`, { title: 'x' })).status, 403, 'kids cannot edit');
+
+  // Move it and rename it: the feed follows.
+  const later = addDays(today, 4);
+  await call(mom, 'PATCH', `${base}/therapy/appointments/${appt.id}`, { title: 'Speech with Ms. Lee', startsAt: `${later}T10:30` });
+  const cals = (await call(mom, 'GET', `${base}/calendars`)).body;
+  let ics = String((await call({}, 'GET', cals.home)).body);
+  assert.ok(ics.includes('Speech with Ms. Lee') && ics.includes(`${later.replace(/-/g, '')}T103000`));
+  await call(mom, 'PATCH', `${base}/therapy/appointments/${appt.id}`, { status: 'cancelled' });
+  ics = String((await call({}, 'GET', cals.home)).body);
+  assert.ok(!ics.includes('Speech with Ms. Lee'), 'cancelled ones leave the feed');
+
+  // A one-off practice date moves; the goal can be read back for the editor.
+  const { body: g } = await call(mom, 'POST', `${t}/goals`, { area: 'speech', title: 'S sounds', practiceSchedule: 'once', practiceDate: day });
+  await call(mom, 'PATCH', `${base}/therapy/goals/${g.id}`, { practiceSchedule: 'once', practiceDate: later });
+  assert.equal((await call(mom, 'GET', `${base}/therapy/goals/${g.id}`)).body.practice.date, later);
+  assert.equal((await call(mom, 'GET', `${base}/agenda?start=${later}&days=1`)).body.days[0].practices[0].title, 'S sounds');
+
+  // Parent Duty due date moves on the calendar and in the feed.
+  const { body: card } = await call(mom, 'POST', `${base}/parent-duty`, { title: 'Sign permission slip', kidId: ava.id, dueDate: day });
+  await call(mom, 'PATCH', `${base}/parent-duty/${card.id}`, { dueDate: later });
+  assert.equal((await call(mom, 'GET', `${base}/agenda?start=${later}&days=1`)).body.days[0].duty[0].title, 'Sign permission slip');
+  ics = String((await call({}, 'GET', cals.home)).body);
+  assert.ok(ics.includes('Sign permission slip'));
+});

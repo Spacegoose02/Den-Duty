@@ -205,6 +205,11 @@ export function therapyRoutes(app: FastifyInstance, db: DatabaseSync): void {
     return goalView(db, ownRow(db, 'therapy_goals', ctx, id));
   });
 
+  app.get('/api/homes/:homeId/therapy/goals/:id', async (req) => {
+    const ctx = homeCtx(db, req, 'parent');
+    return goalView(db, ownRow(db, 'therapy_goals', ctx, (req.params as { id: string }).id));
+  });
+
   app.patch('/api/homes/:homeId/therapy/goals/:id', async (req) => {
     const ctx = homeCtx(db, req, 'parent');
     const cur = ownRow(db, 'therapy_goals', ctx, (req.params as { id: string }).id);
@@ -337,7 +342,11 @@ export function therapyRoutes(app: FastifyInstance, db: DatabaseSync): void {
 // ---------- practices and appointments on the calendars ----------
 
 export interface PracticeItem { goalId: string; memberId: string; title: string; area: string; time: string | null; done: boolean; points: number }
-export interface AppointmentItem { id: string; memberId: string; kind: string; title: string; provider: string | null; time: string; status: string }
+export interface AppointmentItem {
+  id: string; memberId: string; kind: string; title: string; provider: string | null; time: string; status: string;
+  /** Parents only (for editing from the calendar). */
+  location?: string | null; durationMinutes?: number | null; notes?: string | null;
+}
 export interface DoctorsDay { practices: PracticeItem[]; appointments: AppointmentItem[] }
 
 /** Is a goal's practice scheduled on this date? */
@@ -380,6 +389,7 @@ export function doctorsCalendar(db: DatabaseSync, memberIds: string[], from: str
       const [d, time] = (a.starts_at as string).split('T');
       day(d).appointments.push({
         id: a.id as string, memberId: id, kind: a.kind as string, title: a.title as string, provider: a.provider as string | null, time, status: a.status as string,
+        ...(forKid ? {} : { location: a.location as string | null, durationMinutes: a.duration_minutes as number | null, notes: a.notes as string | null }),
       });
     }
   }

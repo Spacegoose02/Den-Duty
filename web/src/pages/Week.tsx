@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, type AgendaItem, type AppointmentItem, type Day, type Kid, type PracticeItem } from '../api.ts';
+import { api, type AgendaItem, type AppointmentItem, type Day, type DutyItem, type Kid, type PracticeItem } from '../api.ts';
 import { useApp, useLoad } from '../state.tsx';
 import { RaccoonAvatar } from '../components/Raccoon.tsx';
 import { dayName, shortDate, STATUS_LABEL } from '../components/Bits.tsx';
 import { FEED_ICONS } from './Calendars.tsx';
-import { AREA_ICONS, KIND_ICONS, timeText } from './Doctors.tsx';
+import { AREA_ICONS, AppointmentForm, KIND_ICONS, NO_PRACTICE, PracticeFields, practiceReady, timeText, type PracticeForm } from './Doctors.tsx';
+import { Modal } from '../components/Bits.tsx';
 import { addDays, startOfWeek } from '../../../shared/schedule.ts';
 
 const mark = (i: AgendaItem) => (i.status === 'approved' ? '✅' : i.status === 'submitted' ? '⏳' : i.status === 'rejected' ? '🔁' : '');
@@ -47,8 +48,8 @@ export function ChoreGroup({ name, avatar, color, items, past, label, onTap }: {
 }
 
 /** One kid's scheduled Doctors practices on a day, as one line; parents tick each one off (today or earlier). */
-function PracticeGroup({ kid, practices, label, canTick, onTick }: {
-  kid?: Kid; practices: PracticeItem[]; label: string; canTick: boolean; onTick?: (p: PracticeItem) => void;
+function PracticeGroup({ kid, practices, label, canTick, onTick, onEdit }: {
+  kid?: Kid; practices: PracticeItem[]; label: string; canTick: boolean; onTick?: (p: PracticeItem) => void; onEdit?: (p: PracticeItem) => void;
 }) {
   const [open, setOpen] = useState(false);
   const done = practices.filter((p) => p.done).length;
@@ -68,27 +69,40 @@ function PracticeGroup({ kid, practices, label, canTick, onTick }: {
             <span className="agenda-mark">{p.done ? '✅' : p.points ? <span className="small muted">+{p.points}</span> : ''}</span>
           </>
         );
-        return onTick
-          ? <button key={p.goalId} className={`agenda-item ${p.done ? 'approved' : ''}`} disabled={!canTick} onClick={() => onTick(p)}
-            title={canTick ? (p.done ? 'Tap to untick' : 'Tap when practiced') : 'Coming up'}>{inner}</button>
-          : <div key={p.goalId} className={`agenda-item ${p.done ? 'approved' : ''}`}>{inner}</div>;
+        const row = onTick
+          ? <button className={`agenda-item ${p.done ? 'approved' : ''}`} disabled={!canTick} onClick={() => onTick(p)}
+            title={canTick ? (p.done ? 'Tap to untick' : 'Tap when practiced') : 'Coming up'} style={{ flex: 1 }}>{inner}</button>
+          : <div className={`agenda-item ${p.done ? 'approved' : ''}`} style={{ flex: 1 }}>{inner}</div>;
+        return (
+          <div key={p.goalId} className="row" style={{ gap: 4, flexWrap: 'nowrap' }}>
+            {row}
+            {onEdit && <button className="icon edit-btn" onClick={() => onEdit(p)} aria-label={`Change practice days for ${p.title}`} title="Change practice days">✏️</button>}
+          </div>
+        );
       })}
     </div>
   );
 }
 
-function AppointmentLine({ a, kid, withName }: { a: AppointmentItem; kid?: Kid; withName: boolean }) {
-  return (
-    <div className={`agenda-ext appt${a.status === 'done' ? ' done' : ''}`} style={{ borderLeftColor: kid?.color }} title={a.provider ?? undefined}>
+function AppointmentLine({ a, kid, withName, onEdit }: { a: AppointmentItem; kid?: Kid; withName: boolean; onEdit?: (a: AppointmentItem) => void }) {
+  const inner = (
+    <>
       <span aria-hidden>{KIND_ICONS[a.kind] ?? '📌'}</span>
-      <span><strong>{timeText(a.time)} </strong>{withName && kid ? `${kid.name}: ` : ''}{a.title}{a.status === 'done' && ' ✓'}</span>
-    </div>
+      <span style={{ flex: 1 }}><strong>{timeText(a.time)} </strong>{withName && kid ? `${kid.name}: ` : ''}{a.title}{a.status === 'done' && ' ✓'}{a.status === 'missed' && ' (missed)'}</span>
+      {onEdit && <span aria-hidden className="small">✏️</span>}
+    </>
   );
+  const cls = `agenda-ext appt${a.status === 'done' ? ' done' : ''}`;
+  return onEdit
+    ? <button className={`${cls} as-button`} style={{ borderLeftColor: kid?.color }} onClick={() => onEdit(a)} title="Edit appointment">{inner}</button>
+    : <div className={cls} style={{ borderLeftColor: kid?.color }} title={a.provider ?? undefined}>{inner}</div>;
 }
 
 /** Everything on one day, grouped per kid: chores, practices, appointments; then Parent Duty and subscribed feeds. */
-function DayDetail({ d, kids, today, parent, solo, onTap, onTick }: {
-  d: Day; kids: Kid[]; today: string; parent: boolean; solo: boolean; onTap?: (i: AgendaItem) => void; onTick?: (p: PracticeItem) => void;
+interface Edits { appt: (a: AppointmentItem) => void; practice: (p: PracticeItem) => void; duty: (d: DutyItem) => void }
+
+function DayDetail({ d, kids, today, parent, solo, onTap, onTick, edit }: {
+  d: Day; kids: Kid[]; today: string; parent: boolean; solo: boolean; onTap?: (i: AgendaItem) => void; onTick?: (p: PracticeItem) => void; edit?: Edits;
 }) {
   const past = d.date <= today;
   const empty = !d.items.length && !d.external?.length && !d.duty?.length && !d.practices?.length && !d.appointments?.length;
@@ -102,16 +116,17 @@ function DayDetail({ d, kids, today, parent, solo, onTap, onTick }: {
         return (
           <div key={k.id} className="stack" style={{ gap: 4 }}>
             {items.length > 0 && <ChoreGroup name={k.name} avatar={k.avatar} color={k.color} items={items} past={past} label={`${who} ${plural(items.length, 'chore')}`} onTap={onTap} />}
-            {practices.length > 0 && <PracticeGroup kid={k} practices={practices} label={`${solo && !parent ? 'You have' : `${k.name}:`} ${plural(practices.length, 'practice')}`} canTick={past} onTick={onTick} />}
-            {appts.map((a) => <AppointmentLine key={a.id} a={a} kid={k} withName={!solo} />)}
+            {practices.length > 0 && <PracticeGroup kid={k} practices={practices} label={`${solo && !parent ? 'You have' : `${k.name}:`} ${plural(practices.length, 'practice')}`} canTick={past} onTick={onTick} onEdit={edit?.practice} />}
+            {appts.map((a) => <AppointmentLine key={a.id} a={a} kid={k} withName={!solo} onEdit={edit?.appt} />)}
           </div>
         );
       })}
       {d.duty?.map((x) => (
-        <Link key={x.id} to="/parent-duty" className="agenda-ext duty" title="Parent Duty">
+        <button key={x.id} className="agenda-ext duty as-button" title="Change the due date" onClick={() => edit?.duty(x)} disabled={!edit}>
           <span aria-hidden>📝</span>
-          <span>{x.kidName ? `For ${x.kidName}: ` : ''}{x.title}</span>
-        </Link>
+          <span style={{ flex: 1 }}>{x.kidName ? `For ${x.kidName}: ` : ''}{x.title}</span>
+          {edit && <span aria-hidden className="small">✏️</span>}
+        </button>
       ))}
       {d.external?.map((x, n) => (
         <div key={`x-${n}`} className="agenda-ext" title={x.feed}>
@@ -180,6 +195,10 @@ export function Calendar({ kidId, title = 'Calendar' }: { kidId?: string; title?
   const step = (n: number) => setAnchor(month ? addMonths(month, n) : addDays(start, 7 * n));
   const label = month ? MONTH_FMT.format(new Date(`${month}T00:00:00Z`)) : `${shortDate(start)} – ${shortDate(addDays(start, 6))}`;
   const pickedDay = data?.days.find((d) => d.date === picked);
+  const [editing, setEditing] = useState<{ appt?: AppointmentItem; practice?: PracticeItem; duty?: DutyItem } | null>(null);
+  // Parents edit straight from the calendar; kids only look.
+  const edits: Edits | undefined = parent ? { appt: (a) => setEditing({ appt: a }), practice: (p) => setEditing({ practice: p }), duty: (d) => setEditing({ duty: d }) } : undefined;
+  const done = async () => { setEditing(null); await reload(); };
 
   return (
     <div className="stack calendar">
@@ -199,7 +218,7 @@ export function Calendar({ kidId, title = 'Calendar' }: { kidId?: string; title?
           {data?.days.map((d) => (
             <div key={d.date} className={`agenda-day${d.date === realToday ? ' today' : ''}${d.date < realToday ? ' past' : ''}`}>
               <div className="agenda-date"><strong>{dayName(d.date)}</strong> <span className="small muted">{shortDate(d.date)}</span></div>
-              <DayDetail d={d} kids={kids} today={realToday} parent={parent} solo={!!kidId} onTap={parent ? (i) => void tap(i) : undefined} onTick={parent ? tick(d.date) : undefined} />
+              <DayDetail d={d} kids={kids} today={realToday} parent={parent} solo={!!kidId} onTap={parent ? (i) => void tap(i) : undefined} onTick={parent ? tick(d.date) : undefined} edit={edits} />
             </div>
           ))}
         </div>
@@ -242,12 +261,80 @@ export function Calendar({ kidId, title = 'Calendar' }: { kidId?: string; title?
                 <strong style={{ flex: 1 }}>{dayName(pickedDay.date)} {shortDate(pickedDay.date)}</strong>
                 <button className="ghost" onClick={() => setPicked(null)} aria-label="Close day">✕</button>
               </div>
-              <DayDetail d={pickedDay} kids={kids} today={realToday} parent={parent} solo={!!kidId} onTap={parent ? (i) => void tap(i) : undefined} onTick={parent ? tick(pickedDay.date) : undefined} />
+              <DayDetail d={pickedDay} kids={kids} today={realToday} parent={parent} solo={!!kidId} onTap={parent ? (i) => void tap(i) : undefined} onTick={parent ? tick(pickedDay.date) : undefined} edit={edits} />
             </div>
           )}
         </>
       )}
+
+      {editing?.appt && (
+        <AppointmentForm
+          areasOff={(home?.kids.find((k) => k.id === editing.appt!.memberId)?.doctorAreasOff ?? []).filter((x) => x !== 'appointments')}
+          initial={{
+            kind: editing.appt.kind, title: editing.appt.title, provider: editing.appt.provider ?? '', location: editing.appt.location ?? '',
+            startsAt: `${data?.days.find((d) => d.appointments?.some((a) => a.id === editing.appt!.id))?.date}T${editing.appt.time}`,
+            durationMinutes: editing.appt.durationMinutes ?? 45, notes: editing.appt.notes ?? '', status: editing.appt.status,
+          }}
+          onClose={() => setEditing(null)}
+          onSave={async (a) => {
+            try { await api(`${base}/therapy/appointments/${editing.appt!.id}`, { method: 'PATCH', body: a }); toast('Appointment saved'); await done(); } catch (e) { toast((e as Error).message); }
+          }}
+          onDelete={async () => {
+            try { await api(`${base}/therapy/appointments/${editing.appt!.id}`, { method: 'DELETE' }); toast('Appointment deleted'); await done(); } catch (e) { toast((e as Error).message); }
+          }}
+        />
+      )}
+      {editing?.practice && <PracticeEdit goalId={editing.practice.goalId} title={editing.practice.title} onClose={() => setEditing(null)} onDone={() => void done()} />}
+      {editing?.duty && <DutyDueEdit item={editing.duty} onClose={() => setEditing(null)} onDone={() => void done()} />}
     </div>
+  );
+}
+
+/** Change a goal's practice days (or its one practice date) from the calendar. */
+function PracticeEdit({ goalId, title, onClose, onDone }: { goalId: string; title: string; onClose: () => void; onDone: () => void }) {
+  const { base, toast } = useApp();
+  const [goal] = useLoad<{ practice: { schedule: 'weekly' | 'once'; weekdays: number[]; date: string | null; time: string | null } | null }>(`${base}/therapy/goals/${goalId}`, [goalId]);
+  const [f, setF] = useState<PracticeForm | null>(null);
+  const p = goal?.practice;
+  const form = f ?? (goal ? (p ? { practiceSchedule: p.schedule, practiceWeekdays: p.weekdays, practiceDate: p.date ?? '', practiceTime: p.time ?? '' } : NO_PRACTICE) : null);
+  return (
+    <Modal onClose={onClose}>
+      <form className="stack" onSubmit={async (e) => {
+        e.preventDefault();
+        try { await api(`${base}/therapy/goals/${goalId}`, { method: 'PATCH', body: form }); toast('Practice days saved'); onDone(); } catch (err) { toast((err as Error).message); }
+      }}>
+        <h2 style={{ margin: 0 }}>📅 Practice: {title}</h2>
+        {form ? <PracticeFields value={form} onChange={setF} /> : <p className="muted">Loading…</p>}
+        <p className="small muted" style={{ margin: 0 }}>Moves every upcoming practice for this goal. Practices already ticked off stay logged.</p>
+        <div className="row"><span className="spacer" /><button type="button" className="ghost" onClick={onClose}>Cancel</button><button className="primary" disabled={!form || !practiceReady(form)}>Save</button></div>
+      </form>
+    </Modal>
+  );
+}
+
+/** Change (or clear) a Parent Duty card's due date from the calendar. */
+function DutyDueEdit({ item, onClose, onDone }: { item: DutyItem; onClose: () => void; onDone: () => void }) {
+  const { base, toast } = useApp();
+  const [due, setDue] = useState(item.dueDate ?? '');
+  const save = async (dueDate: string | null) => {
+    try { await api(`${base}/parent-duty/${item.id}`, { method: 'PATCH', body: { dueDate } }); toast(dueDate ? 'Due date moved' : 'Due date cleared'); onDone(); } catch (e) { toast((e as Error).message); }
+  };
+  return (
+    <Modal onClose={onClose}>
+      <form className="stack" onSubmit={(e) => { e.preventDefault(); void save(due || null); }}>
+        <h2 style={{ margin: 0 }}>📝 {item.kidName ? `For ${item.kidName}: ` : ''}{item.title}</h2>
+        <label className="field">Due
+          <input type="date" value={due} onChange={(e) => setDue(e.target.value)} style={{ maxWidth: 220 }} autoFocus />
+        </label>
+        <div className="row">
+          <Link to="/parent-duty" className="btn ghost">Open Parent Duty</Link>
+          <button type="button" className="ghost" onClick={() => void save(null)}>No due date</button>
+          <span className="spacer" />
+          <button type="button" className="ghost" onClick={onClose}>Cancel</button>
+          <button className="primary" disabled={!due}>Save</button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 

@@ -41,12 +41,17 @@ function nowLocal(): string {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 }
 
-function AppointmentForm({ onSave, onClose, areasOff }: { onSave: (a: object) => Promise<void>; onClose: () => void; areasOff: DoctorArea[] }) {
-  const [a, setA] = useState({ kind: 'speech', title: '', provider: '', location: '', startsAt: nowLocal(), durationMinutes: 45, notes: '' });
+export interface AppointmentDraft { kind: string; title: string; provider: string; location: string; startsAt: string; durationMinutes: number; notes: string; status?: string }
+
+/** New appointment, or edit one (with status and delete) when `initial` is given. Also used from the calendar. */
+export function AppointmentForm({ onSave, onClose, areasOff, initial, onDelete }: {
+  onSave: (a: AppointmentDraft) => Promise<void>; onClose: () => void; areasOff: DoctorArea[]; initial?: AppointmentDraft; onDelete?: () => Promise<void>;
+}) {
+  const [a, setA] = useState<AppointmentDraft>(initial ?? { kind: 'speech', title: '', provider: '', location: '', startsAt: nowLocal(), durationMinutes: 45, notes: '' });
   return (
     <Modal onClose={onClose}>
       <form className="stack" onSubmit={(e) => { e.preventDefault(); void onSave(a); }}>
-        <h2 style={{ margin: 0 }}>New appointment</h2>
+        <h2 style={{ margin: 0 }}>{initial ? 'Edit appointment' : 'New appointment'}</h2>
         <div className="chips">
           {Object.keys(KIND_ICONS).filter((k) => appointmentOn(k, areasOff.filter((a) => a !== 'appointments'))).map((k) => (
             <button key={k} type="button" className={`chip${a.kind === k ? ' on' : ''}`} onClick={() => setA({ ...a, kind: k, title: a.title || KIND_LABELS[k] })}>{KIND_ICONS[k]} {KIND_LABELS[k]}</button>
@@ -61,7 +66,18 @@ function AppointmentForm({ onSave, onClose, areasOff }: { onSave: (a: object) =>
         <input placeholder="Provider (optional), e.g. Ms. Lee" value={a.provider} onChange={(e) => setA({ ...a, provider: e.target.value })} />
         <input placeholder="Where (optional)" value={a.location} onChange={(e) => setA({ ...a, location: e.target.value })} />
         <textarea placeholder="Notes or questions to ask (optional)" value={a.notes} onChange={(e) => setA({ ...a, notes: e.target.value })} style={{ minHeight: 80 }} />
-        <div className="row"><span className="spacer" /><button type="button" className="ghost" onClick={onClose}>Cancel</button><button className="primary" disabled={!a.title.trim() || !a.startsAt}>Save</button></div>
+        {initial && (
+          <div className="chips">
+            {(['scheduled', 'done', 'missed', 'cancelled'] as const).map((s) => (
+              <button key={s} type="button" className={`chip${a.status === s ? ' on' : ''}`} onClick={() => setA({ ...a, status: s })}>
+                {{ scheduled: '📅 Scheduled', done: '✓ Done', missed: '⚠️ Missed', cancelled: '✕ Cancelled' }[s]}
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="row">
+          {onDelete && <button type="button" className="ghost danger" onClick={() => { if (confirm('Delete this appointment?')) void onDelete(); }}>Delete</button>}
+          <span className="spacer" /><button type="button" className="ghost" onClick={onClose}>Cancel</button><button className="primary" disabled={!a.title.trim() || !a.startsAt}>Save</button></div>
       </form>
     </Modal>
   );

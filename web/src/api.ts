@@ -79,7 +79,10 @@ export interface ExternalItem { date: string; time: string | null; title: string
 export interface DutyItem { id: string; title: string; kidId: string | null; kidName: string | null; dueDate: string | null; status: string }
 
 export interface PracticeItem { goalId: string; memberId: string; title: string; area: string; time: string | null; done: boolean; points: number }
-export interface AppointmentItem { id: string; memberId: string; kind: string; title: string; provider: string | null; time: string; status: string }
+export interface AppointmentItem {
+  id: string; memberId: string; kind: string; title: string; provider: string | null; time: string; status: string;
+  location?: string | null; durationMinutes?: number | null; notes?: string | null;
+}
 export interface Day { date: string; items: AgendaItem[]; external?: ExternalItem[]; duty?: DutyItem[]; practices?: PracticeItem[]; appointments?: AppointmentItem[] }
 
 export interface Goal {
