@@ -20,8 +20,8 @@ function localToday(): string {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 }
 
-/** The parents' own kanban: house projects, errands, goals. Drag cards on a computer, or use the arrows on a tablet. */
-export function HoneyDo() {
+/** The parents' own kanban (house projects, errands, goals), shown as a tab of Den Duty. Drag cards on a computer, or use the arrows. */
+export function HoneyDo({ embedded = false }: { embedded?: boolean }) {
   const { base, home, toast } = useApp();
   const [cards, reload] = useLoad<Card[]>(`${base}/honeydo`);
   const [draft, setDraft] = useState({ title: '', assigneeId: '', dueDate: '' });
@@ -36,7 +36,8 @@ export function HoneyDo() {
 
   return (
     <div className="stack">
-      <div className="topbar"><h1>Honey-do</h1><span className="pill">🔒 Parents only</span></div>
+      {!embedded && <div className="topbar"><h1>Parents' list</h1><span className="pill">🔒 Parents only</span></div>}
+      {embedded && <p className="small muted" style={{ margin: 0 }}>🔒 Only parents see this list: house projects, errands, your own goals.</p>}
       <form className="row card" onSubmit={async (e) => {
         e.preventDefault();
         try {

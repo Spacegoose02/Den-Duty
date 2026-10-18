@@ -48,3 +48,19 @@ export const CHORE_ICONS = [
 
 /** Icons for the home's points currency. */
 export const POINT_ICONS = ['✨', '⭐', '🪙', '💎', '🍪', '🌰', '🐚', '🏅'] as const;
+
+/** Den Duty: ready-made cards for a kid's room (a raccoon's den). */
+export const ROOM_TEMPLATES = [
+  { title: 'Make your bed', icon: '🛏️' },
+  { title: 'Toys away', icon: '🧸' },
+  { title: 'Laundry in the hamper', icon: '🧺' },
+  { title: 'Books on the shelf', icon: '📚' },
+  { title: 'Shoes in the closet', icon: '👟' },
+  { title: 'Clear the floor', icon: '🧹' },
+  { title: 'Tidy the desk', icon: '✏️' },
+  { title: 'Open the curtains', icon: '🪟' },
+  { title: 'Cups back to the kitchen', icon: '🥤' },
+  { title: 'Trash in the bin', icon: '🗑️' },
+  { title: 'Water your plant', icon: '🌱' },
+  { title: 'Lights off when you leave', icon: '💡' },
+] as const;

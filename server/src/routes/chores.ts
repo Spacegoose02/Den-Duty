@@ -9,6 +9,7 @@ import {
 } from '../chores.ts';
 import { achievements, kidStats, levelOf, streaks } from '../progress.ts';
 import { kidTherapyView } from './therapy.ts';
+import { denFor } from './den.ts';
 import { externalBetween, refreshStale } from '../calendar.ts';
 import { cleanIcon, getKid, kidView, listKids } from './homes.ts';
 import { addDays, cleanWeekdays, describeSchedule, isIsoDate, startOfWeek, type ScheduleKind } from '../../../shared/schedule.ts';
@@ -187,6 +188,7 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
       recent: ledger(db, memberId, 8),
       // Only when a parent chose to share it; parents see the full therapy section on its own page.
       therapy: kidTherapyView(db, memberId, today),
+      den: denFor(db, ctx.homeId, memberId, today),
     };
   });
 

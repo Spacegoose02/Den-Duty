@@ -149,3 +149,38 @@ test('speech and OT helpers: off unless AI is on, cached per day, and only age, 
   assert.equal((await call(tablet, 'GET', `${t}/helper/speech`)).status, 403, 'kids never see the helper');
   setAiFetch(undefined);
 });
+
+test('Den Duty: room boards per kid, kids move their own cards, parents check them off (paid once a day)', async () => {
+  const { db, call, mom, base, ava, ben, tablet, asKid } = await family();
+  const bed = (await call(mom, 'POST', `${base}/den`, { kidId: ava.id, title: 'Make your bed', icon: '🛏️', points: 2 })).body;
+  assert.deepEqual([bed.kidId, bed.repeatDaily, bed.points, bed.status], [ava.id, true, 2, 'todo']);
+  const toys = (await call(mom, 'POST', `${base}/den`, { kidId: ben.id, title: 'Toys away', icon: '🧸' })).body;
+  const parentTodo = (await call(mom, 'POST', `${base}/den`, { title: 'Fix the closet door' })).body;
+  assert.equal(parentTodo.kidId, null);
+
+  await asKid(ava);
+  const mine = (await call(tablet, 'GET', `${base}/den`)).body as { id: string }[];
+  assert.deepEqual(mine.map((c) => c.id), [bed.id], 'kids only see their own room');
+  assert.equal((await call(tablet, 'GET', `${base}/kids/${ava.id}/board`)).body.den.length, 1);
+  assert.equal((await call(tablet, 'PATCH', `${base}/den/${toys.id}`, { status: 'done' })).status, 403, "not a sibling's card");
+  assert.equal((await call(tablet, 'PATCH', `${base}/den/${bed.id}`, { points: 99 })).status, 403, 'kids can only move cards');
+  assert.equal((await call(tablet, 'POST', `${base}/den/${bed.id}/check`, {})).status, 403);
+  assert.equal((await call(tablet, 'PATCH', `${base}/den/${bed.id}`, { status: 'done' })).body.status, 'done');
+
+  const check = await call(mom, 'POST', `${base}/den/${bed.id}/check`, {});
+  assert.equal(check.body.awarded, 2);
+  assert.equal((await call(mom, 'POST', `${base}/den/${bed.id}/check`, {})).body.awarded, 0, 'no double pay');
+  assert.equal((await call(mom, 'GET', `${base}/kids/${ava.id}/ledger`)).body.entries[0].reason, '🦝 Den Duty: Make your bed');
+
+  // Tomorrow the daily card is back on the board and can earn again.
+  db.prepare("UPDATE honeydo SET done_date = '2000-01-01' WHERE id = ?").run(bed.id);
+  const again = (await call(tablet, 'GET', `${base}/den`)).body[0];
+  assert.deepEqual([again.status, again.checked], ['todo', false]);
+
+  // Parents can filter boards; the old honey-do list is the parents' cards.
+  assert.equal((await call(mom, 'GET', `${base}/den?kid=parents`)).body.length, 1);
+  assert.equal((await call(mom, 'GET', `${base}/den?kid=${ben.id}`)).body[0].title, 'Toys away');
+  assert.deepEqual((await call(mom, 'GET', `${base}/honeydo`)).body.map((c: { title: string }) => c.title), ['Fix the closet door']);
+  await call(tablet, 'POST', '/api/kiosk/kid/logout', {});
+  assert.equal((await call(tablet, 'GET', `${base}/den`)).status, 403, 'the tablet alone shows no boards');
+});

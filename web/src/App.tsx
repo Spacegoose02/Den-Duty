@@ -1,4 +1,4 @@
-import { NavLink, Route, Routes, useLocation } from 'react-router-dom';
+import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { useApp } from './state.tsx';
 import { RaccoonAvatar } from './components/Raccoon.tsx';
 import { Login } from './pages/Login.tsx';
@@ -11,7 +11,7 @@ import { Settings } from './pages/Settings.tsx';
 import { Rewards } from './pages/Rewards.tsx';
 import { Stats } from './pages/Stats.tsx';
 import { Therapy } from './pages/Therapy.tsx';
-import { HoneyDo } from './pages/HoneyDo.tsx';
+import { DenDuty } from './pages/DenDuty.tsx';
 import { KidPicker } from './pages/KidPicker.tsx';
 import { KidBoard, ParentKidBoard } from './pages/KidBoard.tsx';
 
@@ -23,7 +23,7 @@ const NAV = [
   { to: '/rewards', ico: '🎁', label: 'Rewards' },
   { to: '/stats', ico: '📊', label: 'Stats' },
   { to: '/therapy', ico: '🩺', label: 'Therapy' },
-  { to: '/honeydo', ico: '📝', label: 'Honey-do' },
+  { to: '/den', ico: '🛏️', label: 'Den Duty' },
   { to: '/settings', ico: '⚙️', label: 'Settings' },
 ];
 
@@ -75,7 +75,8 @@ export function App() {
           <Route path="/rewards" element={<Rewards />} />
           <Route path="/stats" element={<Stats />} />
           <Route path="/therapy" element={<Therapy />} />
-          <Route path="/honeydo" element={<HoneyDo />} />
+          <Route path="/den" element={<DenDuty />} />
+          <Route path="/honeydo" element={<Navigate to="/den" replace />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/home/new" element={<HomeSetup inline />} />
           <Route path="*" element={<div className="card">That page wandered off. <NavLink to="/">Go home</NavLink></div>} />

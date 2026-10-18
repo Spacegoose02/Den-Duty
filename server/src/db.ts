@@ -405,6 +405,17 @@ const MIGRATIONS: string[] = [
     PRIMARY KEY (member_id, area, date)
   );
   `,
+  // Den Duty: the honey-do board becomes room boards, one per kid (a raccoon's den is their room). Cards without a kid
+  // stay as the parents' own to-do list, so existing honey-do cards keep working.
+  `
+  ALTER TABLE honeydo ADD COLUMN kid_id TEXT REFERENCES members(id) ON DELETE CASCADE;
+  ALTER TABLE honeydo ADD COLUMN icon TEXT;
+  ALTER TABLE honeydo ADD COLUMN points INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE honeydo ADD COLUMN repeat_daily INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE honeydo ADD COLUMN done_date TEXT;
+  ALTER TABLE honeydo ADD COLUMN paid_at TEXT;
+  CREATE INDEX honeydo_kid ON honeydo(kid_id, status);
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {
