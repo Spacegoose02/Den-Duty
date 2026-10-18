@@ -8,9 +8,11 @@ import { seriesColor } from '../../../shared/catalog.ts';
 import { TherapyHelperCard } from '../components/TherapyHelper.tsx';
 import { AskDoctorCard } from '../components/AskDoctor.tsx';
 import { appointmentOn, goalAreaOn, type DoctorArea } from '../../../shared/pages.ts';
+import { WEEKDAY_SHORT } from '../../../shared/schedule.ts';
 
 interface Appointment { id: string; kind: string; title: string; provider: string | null; location: string | null; startsAt: string; durationMinutes: number | null; status: string; notes: string | null }
-interface TGoal { id: string; area: string; title: string; description: string | null; targetDate: string | null; status: string; progress: number; metAt: string | null; history: { date: string; progress: number }[]; rewardStep: number; rewardMet: number; rewardMetPaid: boolean }
+interface TGoal { id: string; area: string; title: string; description: string | null; targetDate: string | null; status: string; progress: number; metAt: string | null; history: { date: string; progress: number }[]; rewardStep: number; rewardMet: number; rewardMetPaid: boolean;
+  practice: { schedule: 'weekly' | 'once'; weekdays: number[]; date: string | null; time: string | null } | null }
 interface TNote { id: string; goalId: string | null; goalTitle: string | null; body: string; progress: number | null; date: string; by: string | null }
 interface TherapyData { kidVisible: boolean; appointments: Appointment[]; goals: TGoal[]; notes: TNote[] }
 
@@ -23,7 +25,7 @@ const KIND_LABELS: Record<string, string> = {
 export const AREA_ICONS: Record<string, string> = {
   development: '🌱', speech: '🗣️', feeding: '🥄', doctor: '🩺', motor: '✋', sensory: '🌀', selfcare: '🪥', physical: '🏃', behavioral: '🧩', dental: '🦷', social: '🤝', other: '📌',
 };
-const AREA_LABELS: Record<string, string> = {
+export const AREA_LABELS: Record<string, string> = {
   development: 'Development', speech: 'Speech', feeding: 'Feeding', doctor: 'Doctor / health', motor: 'Fine / gross motor', sensory: 'Sensory',
   selfcare: 'Self-care', physical: 'Physical therapy', behavioral: 'Behavioral', dental: 'Dental', social: 'Social', other: 'Other',
 };
@@ -84,6 +86,7 @@ function GoalCard({ goal, color, onChange, base }: { goal: TGoal; color: string;
       </div>
       {goal.description && <p className="small" style={{ margin: 0 }}>{goal.description}</p>}
       <RewardEditor goal={goal} onSaved={onChange} goalUrl={goalUrl(base, goal.id)} />
+      <PracticeEditor goal={goal} onSaved={onChange} goalUrl={goalUrl(base, goal.id)} />
       <ProgressBar percent={goal.progress} color={goal.status === 'met' ? 'var(--ok)' : color} />
       {goal.history.length >= 2 && (
         <LineChart height={150} unit="%" labels={history.map((h) => shortDate(h.date))} series={[{ id: goal.id, name: 'Progress', color, values: history.map((h) => h.progress) }]} />
@@ -115,6 +118,68 @@ function GoalCard({ goal, color, onChange, base }: { goal: TGoal; color: string;
         <button className="ghost danger" onClick={() => { if (confirm(`Delete “${goal.title}” and its notes?`)) void run(() => api(goalUrl(base, goal.id), { method: 'DELETE' })); }}>Delete</button>
       </div>
     </div>
+  );
+}
+
+export interface PracticeForm { practiceSchedule: 'none' | 'weekly' | 'once'; practiceWeekdays: number[]; practiceDate: string; practiceTime: string }
+export const NO_PRACTICE: PracticeForm = { practiceSchedule: 'none', practiceWeekdays: [], practiceDate: '', practiceTime: '' };
+
+const TIME_FMT = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' });
+export const timeText = (t: string) => TIME_FMT.format(new Date(`2000-01-01T${t}:00Z`));
+
+export function practiceText(p: TGoal['practice']): string {
+  if (!p) return '';
+  const at = p.time ? ` at ${timeText(p.time)}` : '';
+  if (p.schedule === 'once') return `${p.date ? shortDate(p.date) : ''}${at}`;
+  return `${p.weekdays.length === 7 ? 'Every day' : p.weekdays.map((d) => WEEKDAY_SHORT[d]).join(', ')}${at}`;
+}
+
+/** Practice schedule fields: none, some weekdays (with an optional time), or one date. */
+export function PracticeFields({ value, onChange }: { value: PracticeForm; onChange: (v: PracticeForm) => void }) {
+  const set = (p: Partial<PracticeForm>) => onChange({ ...value, ...p });
+  return (
+    <div className="stack" style={{ gap: 6 }}>
+      <div className="chips">
+        {([['none', 'No schedule'], ['weekly', 'On some days'], ['once', 'One day']] as const).map(([k, l]) => (
+          <button key={k} type="button" className={`chip${value.practiceSchedule === k ? ' on' : ''}`} onClick={() => set({ practiceSchedule: k })}>{l}</button>
+        ))}
+      </div>
+      {value.practiceSchedule === 'weekly' && (
+        <div className="chips">
+          {WEEKDAY_SHORT.map((d, i) => {
+            const on = value.practiceWeekdays.includes(i);
+            return <button key={d} type="button" className={`chip${on ? ' on' : ''}`} onClick={() => set({ practiceWeekdays: on ? value.practiceWeekdays.filter((x) => x !== i) : [...value.practiceWeekdays, i].sort() })}>{d}</button>;
+          })}
+          <button type="button" className="chip" onClick={() => set({ practiceWeekdays: [0, 1, 2, 3, 4, 5, 6] })}>Every day</button>
+        </div>
+      )}
+      {value.practiceSchedule === 'once' && <input type="date" value={value.practiceDate} onChange={(e) => set({ practiceDate: e.target.value })} style={{ maxWidth: 220 }} />}
+      {value.practiceSchedule !== 'none' && (
+        <label className="row small">At (optional) <input type="time" value={value.practiceTime} onChange={(e) => set({ practiceTime: e.target.value })} style={{ maxWidth: 160 }} /></label>
+      )}
+    </div>
+  );
+}
+
+export const practiceReady = (p: PracticeForm) => p.practiceSchedule === 'none' || (p.practiceSchedule === 'weekly' ? p.practiceWeekdays.length > 0 : !!p.practiceDate);
+
+function PracticeEditor({ goal, goalUrl, onSaved }: { goal: TGoal; goalUrl: string; onSaved: () => Promise<void> }) {
+  const { toast } = useApp();
+  const [open, setOpen] = useState(false);
+  const p = goal.practice;
+  const [f, setF] = useState<PracticeForm>(p ? { practiceSchedule: p.schedule, practiceWeekdays: p.weekdays, practiceDate: p.date ?? '', practiceTime: p.time ?? '' } : NO_PRACTICE);
+  if (!open) {
+    return <button className="ghost small" style={{ alignSelf: 'flex-start' }} onClick={() => setOpen(true)}>📅 {p ? `Practice: ${practiceText(p)}` : 'Add a practice schedule'}</button>;
+  }
+  return (
+    <form className="stack" onSubmit={async (e) => {
+      e.preventDefault();
+      try { await api(goalUrl, { method: 'PATCH', body: f }); toast('Practice schedule saved'); setOpen(false); await onSaved(); } catch (err) { toast((err as Error).message); }
+    }}>
+      <PracticeFields value={f} onChange={setF} />
+      <p className="small muted" style={{ margin: 0 }}>Scheduled practices show on the calendar; tick them off there.</p>
+      <div className="row"><span className="spacer" /><button type="button" className="ghost" onClick={() => setOpen(false)}>Cancel</button><button className="primary" disabled={!practiceReady(f)}>Save</button></div>
+    </form>
   );
 }
 
@@ -155,7 +220,7 @@ export function Doctors() {
   const tBase = kid ? `${base}/kids/${kid.id}/therapy` : null;
   const [data, reload] = useLoad<TherapyData>(tBase, [tBase]);
   const [adding, setAdding] = useState<'appointment' | 'goal' | null>(null);
-  const [goal, setGoal] = useState({ area: 'speech', title: '', description: '', targetDate: '', rewardStep: 0, rewardMet: 0 });
+  const [goal, setGoal] = useState({ area: 'speech', title: '', description: '', targetDate: '', rewardStep: 0, rewardMet: 0, ...NO_PRACTICE });
   const [note, setNote] = useState('');
   const [showPast, setShowPast] = useState(false);
   if (!home) return null;
@@ -222,8 +287,9 @@ export function Doctors() {
           </section>
 
           <div className="grid-2">
-            {!areasOff.includes('speech') && <TherapyHelperCard key={`speech-${kid.id}`} kidId={kid.id} area="speech" goals={data.goals} onChange={reload} />}
-            {['ot', 'sensory', 'selfcare'].some((a) => !areasOff.includes(a as DoctorArea)) && <TherapyHelperCard key={`ot-${kid.id}`} kidId={kid.id} area="ot" goals={data.goals} onChange={reload} />}
+            {!areasOff.includes('speech') && !kid.ideasOff.includes('speech') && <TherapyHelperCard key={`speech-${kid.id}`} kidId={kid.id} area="speech" goals={data.goals} onChange={reload} />}
+            {['ot', 'sensory', 'selfcare'].some((a) => !areasOff.includes(a as DoctorArea)) && !kid.ideasOff.includes('ot') && <TherapyHelperCard key={`ot-${kid.id}`} kidId={kid.id} area="ot" goals={data.goals} onChange={reload} />}
+            {!areasOff.includes('behavioral') && !kid.ideasOff.includes('anger') && <TherapyHelperCard key={`anger-${kid.id}`} kidId={kid.id} area="anger" goals={data.goals} onChange={reload} />}
           </div>
 
           <AskDoctorCard key={`ask-${kid.id}`} kidId={kid.id} kidName={kid.name} />
@@ -265,7 +331,7 @@ export function Doctors() {
         <Modal onClose={() => setAdding(null)}>
           <form className="stack" onSubmit={(e) => {
             e.preventDefault();
-            void run(async () => { await api(`${tBase}/goals`, { body: goal }); setAdding(null); setGoal({ area: 'speech', title: '', description: '', targetDate: '', rewardStep: 0, rewardMet: 0 }); }, 'Goal added');
+            void run(async () => { await api(`${tBase}/goals`, { body: goal }); setAdding(null); setGoal({ area: 'speech', title: '', description: '', targetDate: '', rewardStep: 0, rewardMet: 0, ...NO_PRACTICE }); }, 'Goal added');
           }}>
             <h2 style={{ margin: 0 }}>New goal for {kid?.name}</h2>
             <div className="chips">
@@ -282,10 +348,12 @@ export function Doctors() {
               </label>
             </div>
             <p className="small muted" style={{ margin: 0 }}>Optional. Each progress note pays the practice {home?.pointsName}; reaching the goal pays the bonus once. Kids see “Great practice!” (with the goal's name only if you share Doctors with them).</p>
+            <strong className="small">📅 Practice schedule (shows on the calendar)</strong>
+            <PracticeFields value={goal} onChange={(p) => setGoal({ ...goal, ...p })} />
             <label className="field">Aiming for (optional)
               <input type="date" value={goal.targetDate} onChange={(e) => setGoal({ ...goal, targetDate: e.target.value })} style={{ maxWidth: 220 }} />
             </label>
-            <div className="row"><span className="spacer" /><button type="button" className="ghost" onClick={() => setAdding(null)}>Cancel</button><button className="primary" disabled={!goal.title.trim()}>Save</button></div>
+            <div className="row"><span className="spacer" /><button type="button" className="ghost" onClick={() => setAdding(null)}>Cancel</button><button className="primary" disabled={!goal.title.trim() || !practiceReady(goal)}>Save</button></div>
           </form>
         </Modal>
       )}

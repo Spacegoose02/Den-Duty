@@ -7,11 +7,11 @@ import { Modal, ProgressBar, shortDate } from '../components/Bits.tsx';
 import { AVATARS, AVATAR_LABELS, KID_COLORS } from '../../../shared/catalog.ts';
 import { ThemePicker } from '../components/ThemePicker.tsx';
 import { IdeasButton } from '../components/Ideas.tsx';
-import { DOCTOR_AREAS, KID_PAGES, type DoctorArea, type KidPage } from '../../../shared/pages.ts';
+import { DOCTOR_AREAS, IDEAS_OFF_DEFAULT, KID_PAGES, PRACTICE_IDEAS, type DoctorArea, type KidPage, type PracticeIdea } from '../../../shared/pages.ts';
 
 interface KidDraft {
   name: string; avatar: string; color: string; pin: string; theme: string | null; birthdate: string; pictureMode: 'auto' | 'on' | 'off';
-  pagesOff: KidPage[]; doctorAreasOff: DoctorArea[];
+  pagesOff: KidPage[]; doctorAreasOff: DoctorArea[]; ideasOff: PracticeIdea[];
 }
 
 /** Name, raccoon, color and PIN. Used to add a kid and to edit one. */
@@ -81,6 +81,20 @@ function KidForm({ initial, onSubmit, submitLabel, hasPin, onClearPin }: {
                 <button key={a.id} type="button" className={`chip${on ? ' on' : ''}`} aria-pressed={on}
                   onClick={() => setD((cur) => ({ ...cur, doctorAreasOff: on ? [...cur.doctorAreasOff, a.id] : cur.doctorAreasOff.filter((x) => x !== a.id) }))}>
                   {a.icon} {a.label}
+                </button>
+              );
+            })}
+          </div>
+          <span>Daily practice ideas <span className="small muted" style={{ fontWeight: 400 }}>(with AI ideas on)</span></span>
+          <div className="chips">
+            {PRACTICE_IDEAS.map((p) => {
+              const on = !d.ideasOff.includes(p.id);
+              const sectionOff = d.doctorAreasOff.includes(p.section);
+              return (
+                <button key={p.id} type="button" className={`chip${on && !sectionOff ? ' on' : ''}`} aria-pressed={on} disabled={sectionOff}
+                  title={sectionOff ? 'Turn its Doctors section on first' : undefined}
+                  onClick={() => setD((cur) => ({ ...cur, ideasOff: on ? [...cur.ideasOff, p.id] : cur.ideasOff.filter((x) => x !== p.id) }))}>
+                  {p.icon} {p.label}
                 </button>
               );
             })}
@@ -188,10 +202,10 @@ function KidCard({ kid, onChange }: { kid: Kid; onChange: () => Promise<void> })
         <Modal onClose={() => setEditing(false)}>
           <div className="stack">
             <h2 style={{ margin: 0 }}>Edit {kid.name}</h2>
-            <KidForm initial={{ name: kid.name, avatar: kid.avatar, color: kid.color, pin: '', theme: kid.theme, birthdate: kid.birthdate ?? '', pictureMode: kid.pictureModeSetting, pagesOff: kid.pagesOff, doctorAreasOff: kid.doctorAreasOff }} hasPin={kid.hasPin} submitLabel="Save"
+            <KidForm initial={{ name: kid.name, avatar: kid.avatar, color: kid.color, pin: '', theme: kid.theme, birthdate: kid.birthdate ?? '', pictureMode: kid.pictureModeSetting, pagesOff: kid.pagesOff, doctorAreasOff: kid.doctorAreasOff, ideasOff: kid.ideasOff }} hasPin={kid.hasPin} submitLabel="Save"
               onClearPin={() => void run(() => api(`${base}/kids/${kid.id}`, { method: 'PATCH', body: { pin: null } }), 'PIN removed').then(() => setEditing(false))}
               onSubmit={async (d) => {
-                await api(`${base}/kids/${kid.id}`, { method: 'PATCH', body: { name: d.name, avatar: d.avatar, color: d.color, theme: d.theme, birthdate: d.birthdate, pictureMode: d.pictureMode, pagesOff: d.pagesOff, doctorAreasOff: d.doctorAreasOff, ...(d.pin ? { pin: d.pin } : {}) } });
+                await api(`${base}/kids/${kid.id}`, { method: 'PATCH', body: { name: d.name, avatar: d.avatar, color: d.color, theme: d.theme, birthdate: d.birthdate, pictureMode: d.pictureMode, pagesOff: d.pagesOff, doctorAreasOff: d.doctorAreasOff, ideasOff: d.ideasOff, ...(d.pin ? { pin: d.pin } : {}) } });
                 setEditing(false);
                 toast('Saved');
                 await refreshAll();
@@ -231,7 +245,7 @@ export function Kids() {
         <Modal onClose={() => setAdding(false)}>
           <div className="stack">
             <h2 style={{ margin: 0 }}>Add a kid</h2>
-            <KidForm initial={{ name: '', avatar: AVATARS[count % AVATARS.length], color: KID_COLORS[count % KID_COLORS.length], pin: '', theme: null, birthdate: '', pictureMode: 'auto', pagesOff: [], doctorAreasOff: [] }} submitLabel="Add"
+            <KidForm initial={{ name: '', avatar: AVATARS[count % AVATARS.length], color: KID_COLORS[count % KID_COLORS.length], pin: '', theme: null, birthdate: '', pictureMode: 'auto', pagesOff: [], doctorAreasOff: [], ideasOff: IDEAS_OFF_DEFAULT }} submitLabel="Add"
               onSubmit={async (d) => {
                 await api(`${base}/kids`, { body: { ...d, pin: d.pin || null } });
                 setAdding(false);

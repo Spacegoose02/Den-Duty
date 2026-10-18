@@ -5,20 +5,23 @@ import { useApp, useLoad } from '../state.tsx';
 import { RaccoonAvatar } from './Raccoon.tsx';
 
 export interface Tip {
-  date: string; area: 'speech' | 'ot'; disclaimer: string; cached: boolean;
+  date: string; area: 'speech' | 'ot' | 'anger'; disclaimer: string; cached: boolean;
   tip: { title: string; activity: string; minutes: number; why: string };
   goals: { title: string; why: string }[];
 }
 
-const AREA_TITLE = { speech: '🗣️ Speech practice idea', ot: '✋ OT practice idea' };
-const HELPER_AREA_GOALS = { speech: ['speech'], ot: ['motor', 'sensory', 'selfcare'] };
+const AREA_TITLE = { speech: '🗣️ Speech practice idea', ot: '✋ OT practice idea', anger: '🌋 Anger practice idea' };
+const AREA_SHORT = { speech: '🗣️ Speech', ot: '✋ OT', anger: '🌋 Feelings' };
+const HELPER_AREA_GOALS = { speech: ['speech'], ot: ['motor', 'sensory', 'selfcare'], anger: ['behavioral'] };
+const AREA_WORD = { speech: 'speech', ot: 'OT', anger: 'behavioral' };
+const GOAL_AREA = { speech: 'speech', ot: 'motor', anger: 'behavioral' };
 
 /**
  * Daily tip and goal ideas for one kid and area, on the Therapy page. Hidden unless AI ideas are on.
  * Parents can save the tip as a step on one of their goals, or turn a suggested goal into a real one.
  */
 export function TherapyHelperCard({ kidId, area, goals, onChange }: {
-  kidId: string; area: 'speech' | 'ot'; goals: { id: string; area: string; title: string; status: string }[]; onChange: () => Promise<void>;
+  kidId: string; area: 'speech' | 'ot' | 'anger'; goals: { id: string; area: string; title: string; status: string }[]; onChange: () => Promise<void>;
 }) {
   const { base, toast } = useApp();
   const [ai] = useLoad<{ enabled: boolean }>(`${base}/ai`);
@@ -44,7 +47,7 @@ export function TherapyHelperCard({ kidId, area, goals, onChange }: {
       </div>
       {!tip && !error && (
         <p className="small muted" style={{ margin: 0 }}>
-          {mine.length ? `Uses your ${mine.length} ${area === 'speech' ? 'speech' : 'OT'} goal${mine.length === 1 ? '' : 's'} and their age.` : 'No goals here yet; you\'ll get gentle starting points for their age.'}
+          {mine.length ? `Uses your ${mine.length} ${AREA_WORD[area]} goal${mine.length === 1 ? '' : 's'} and their age.` : 'No goals here yet; you\'ll get gentle starting points for their age.'}
         </p>
       )}
       {error && <p className="small" style={{ color: 'var(--danger)', margin: 0 }}>{error}</p>}
@@ -77,7 +80,7 @@ export function TherapyHelperCard({ kidId, area, goals, onChange }: {
                   <span style={{ flex: 1 }}><strong>{g.title}</strong> · <span className="muted">{g.why}</span></span>
                   <button className="ghost" onClick={async () => {
                     try {
-                      await api(`${t}/goals`, { body: { area: area === 'speech' ? 'speech' : 'motor', title: g.title, description: g.why } });
+                      await api(`${t}/goals`, { body: { area: GOAL_AREA[area], title: g.title, description: g.why } });
                       toast('Goal added');
                       await onChange();
                     } catch (e) { toast((e as Error).message); }
@@ -93,7 +96,7 @@ export function TherapyHelperCard({ kidId, area, goals, onChange }: {
   );
 }
 
-interface HomeTip extends Partial<Tip> { kidId: string; kidName: string; kidAvatar: string; area: 'speech' | 'ot'; error?: string }
+interface HomeTip extends Partial<Tip> { kidId: string; kidName: string; kidAvatar: string; area: 'speech' | 'ot' | 'anger'; error?: string }
 
 /** Parent home: today's practice idea per kid and area (only for areas with goals). Nothing shows while AI is off. */
 export function TodaysTipsCard() {
@@ -108,7 +111,7 @@ export function TodaysTipsCard() {
         <div key={`${t.kidId}-${t.area}`} className="row" style={{ alignItems: 'flex-start', flexWrap: 'nowrap' }}>
           <RaccoonAvatar variant={t.kidAvatar} size={36} />
           <div style={{ flex: 1 }}>
-            <strong>{t.kidName} · {t.area === 'speech' ? '🗣️ Speech' : '✋ OT'}: {t.tip!.title}</strong> <span className="small muted">~{t.tip!.minutes} min</span>
+            <strong>{t.kidName} · {AREA_SHORT[t.area]}: {t.tip!.title}</strong> <span className="small muted">~{t.tip!.minutes} min</span>
             <div className="small">{t.tip!.activity}</div>
           </div>
         </div>

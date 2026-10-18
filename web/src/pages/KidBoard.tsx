@@ -3,12 +3,10 @@ import { Link, useParams } from 'react-router-dom';
 import { api, type AgendaItem, type Board, type LedgerEntry, type Poll } from '../api.ts';
 import { useApp, useLoad } from '../state.tsx';
 import { RaccoonAvatar } from '../components/Raccoon.tsx';
-import { Modal, ProgressBar, dayName, shortDate, STATUS_LABEL } from '../components/Bits.tsx';
-import { addDays } from '../../../shared/schedule.ts';
+import { Modal, ProgressBar, dayName } from '../components/Bits.tsx';
 import { AVATARS, AVATAR_LABELS, AVATAR_UNLOCK_LEVEL, avatarUnlocked } from '../../../shared/catalog.ts';
 import { AREA_ICONS, KIND_ICONS, whenText } from './Doctors.tsx';
-import { FEED_ICONS } from './Calendars.tsx';
-import { ChoreGroup } from './Week.tsx';
+import { Calendar } from './Week.tsx';
 import { TimeoutCard, TimeoutForm } from '../components/Timeouts.tsx';
 
 const IDLE_MS = 3 * 60e3;
@@ -75,8 +73,7 @@ function recentLine(e: LedgerEntry, icon: string): { mark: string; text: string;
 
 function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent: boolean; onExit?: () => void }) {
   const { base, home, toast, refresh } = useApp();
-  const [weekStart, setWeekStart] = useState<string | null>(null);
-  const [board, reload] = useLoad<Board>(`${base}/kids/${memberId}/board${weekStart ? `?start=${weekStart}` : ''}`);
+  const [board, reload] = useLoad<Board>(`${base}/kids/${memberId}/board`);
   const [polls, reloadPolls] = useLoad<Poll[]>(`${base}/polls`);
   const [denNote] = useLoad<{ text: string; source: string } | null>(`${base}/kids/${memberId}/room-message`, [memberId]);
   const [busy, setBusy] = useState<string | null>(null);
@@ -101,7 +98,6 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
   });
 
   const left = board.todayItems.filter((i) => i.status === 'pending' || i.status === 'rejected').length;
-  const thisWeek = board.week.some((d) => d.date === board.today);
   const byColumn = (c: Column) => board.todayItems.filter((i) => columnOf(i) === c);
   const earned = board.achievements.filter((a) => a.earned);
   const openPolls = polls?.filter((p) => p.status === 'open') ?? [];
@@ -311,30 +307,7 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
       </section>
 
       <section className="pg-chores pg-calendar-week">
-        <div className="row">
-          <h2 style={{ margin: 0, flex: 1 }}>Week</h2>
-          <button className="icon" aria-label="Previous week" onClick={() => setWeekStart(addDays(board.weekStart, -7))}>◀</button>
-          {!thisWeek && <button onClick={() => setWeekStart(null)}>This week</button>}
-          <button className="icon" aria-label="Next week" onClick={() => setWeekStart(addDays(board.weekStart, 7))}>▶</button>
-        </div>
-        <div className="agenda">
-          {board.week.map((d) => (
-            <div key={d.date} className={`agenda-day${d.date === board.today ? ' today' : ''}${d.date < board.today ? ' past' : ''}`}>
-              <div className="agenda-date"><strong>{dayName(d.date)}</strong> <span className="small muted">{shortDate(d.date)}</span></div>
-              {d.items.length > 0 && (
-                <ChoreGroup key={`${d.date}-${board.weekStart}`} name={kid.name} avatar={kid.avatar} color={kid.color} items={d.items} past={d.date <= board.today}
-                  label={`${asParent ? `${kid.name} has` : 'You have'} ${d.items.length} chore${d.items.length === 1 ? '' : 's'}`} />
-              )}
-              {d.external?.map((x, n) => (
-                <div key={`x-${n}`} className="agenda-ext" title={x.feed}>
-                  <span aria-hidden>{FEED_ICONS[x.kind] ?? '📅'}</span>
-                  <span>{x.time && <strong>{x.time} </strong>}{x.title}</span>
-                </div>
-              ))}
-              {!d.items.length && !d.external?.length && <span className="small muted">Free day</span>}
-            </div>
-          ))}
-        </div>
+        <Calendar kidId={memberId} title={asParent ? `${kid.name}'s calendar` : 'My calendar'} />
       </section>
 
       {picking && (

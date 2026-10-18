@@ -1,6 +1,6 @@
 import type { ScheduleKind } from '../../shared/schedule.ts';
 import type { Achievement, LevelInfo } from '../../shared/progress.ts';
-import type { DoctorArea, KidPage } from '../../shared/pages.ts';
+import type { DoctorArea, KidPage, PracticeIdea } from '../../shared/pages.ts';
 
 export type { Achievement, LevelInfo };
 
@@ -47,6 +47,8 @@ export interface Kid {
   birthdate: string | null; age: number | null; pictureModeSetting: 'auto' | 'on' | 'off'; pictureMode: boolean;
   /** Pages and Doctors sections a parent switched off for this kid. */
   pagesOff: KidPage[]; doctorAreasOff: DoctorArea[];
+  /** Daily practice ideas switched off (anger starts off). */
+  ideasOff: PracticeIdea[];
 }
 
 export interface HomeDetail {
@@ -74,7 +76,9 @@ export interface ExternalItem { date: string; time: string | null; title: string
 
 export interface DutyItem { id: string; title: string; kidId: string | null; kidName: string | null; dueDate: string | null; status: string }
 
-export interface Day { date: string; items: AgendaItem[]; external?: ExternalItem[]; duty?: DutyItem[] }
+export interface PracticeItem { goalId: string; memberId: string; title: string; area: string; time: string | null; done: boolean; points: number }
+export interface AppointmentItem { id: string; memberId: string; kind: string; title: string; provider: string | null; time: string; status: string }
+export interface Day { date: string; items: AgendaItem[]; external?: ExternalItem[]; duty?: DutyItem[]; practices?: PracticeItem[]; appointments?: AppointmentItem[] }
 
 export interface Goal {
   id: string; memberId: string; title: string; targetPoints: number; reward: string | null; status: 'active' | 'redeemed';
@@ -108,6 +112,20 @@ export interface WeekStat { weekStart: string; points: number; done: number; due
 export interface KidStats {
   from: string; daily: DayStat[]; weekly: WeekStat[]; streak: Streak; level: LevelInfo; lifetime: number;
   byChore: { title: string; icon: string; due: number; done: number; points: number }[];
+  /** Parents only, when Doctors is on. */
+  doctors: DoctorsStats | null;
+  /** When Goals & rewards is on. */
+  goalStats: GoalStats | null;
+}
+export interface DoctorsStats {
+  weeks: string[]; perWeek: { area: string; values: number[] }[]; streak: number; practicesInRange: number;
+  goals: { id: string; title: string; area: string; progress: number; status: string }[];
+  goalsReached: number; goalsReachedInRange: number; appointments: { attended: number; missed: number; upcoming: number };
+}
+export interface GoalStats {
+  active: { id: string; title: string; target: number; progress: number; percent: number; reached: boolean }[];
+  weeks: string[]; reachedPerWeek: number[]; redeemedPerWeek: number[]; reachedTotal: number; redeemedTotal: number;
+  averageDays: number | null; recent: { title: string; days: number }[];
 }
 
 export interface ReviewItem extends AgendaItem { submittedAt: string; kid: { name: string; avatar: string; color: string } }

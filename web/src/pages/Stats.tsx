@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import type { Kid, KidStats } from '../api.ts';
+import type { DoctorsStats, GoalStats, Kid, KidStats } from '../api.ts';
 import { useApp, useLoad } from '../state.tsx';
 import { RaccoonAvatar } from '../components/Raccoon.tsx';
-import { BarList, ChartTable, ColumnChart, LineChart } from '../components/Charts.tsx';
+import { BarList, ChartTable, ColumnChart, Legend, LineChart } from '../components/Charts.tsx';
 import { ProgressBar, shortDate } from '../components/Bits.tsx';
 import { seriesColor } from '../../../shared/catalog.ts';
+import { AREA_ICONS, AREA_LABELS } from './Doctors.tsx';
 
 type StatsKid = Kid & KidStats;
 
@@ -80,6 +81,9 @@ function KidDetail({ kid, color, missedColor }: { kid: StatsKid; color: string; 
         </section>
       </div>
 
+      {kid.doctors && <DoctorsPanel s={kid.doctors} color={color} />}
+      {kid.goalStats && <GoalsPanel s={kid.goalStats} color={color} missedColor={missedColor} />}
+
       <section className="card stack">
         <h3 style={{ margin: 0 }}>Which chores get done</h3>
         <BarList color={color} rows={kid.byChore.map((c) => ({
@@ -89,6 +93,72 @@ function KidDetail({ kid, color, missedColor }: { kid: StatsKid; color: string; 
         {!kid.byChore.length && <p className="muted" style={{ margin: 0 }}>No chores yet in this range.</p>}
       </section>
     </div>
+  );
+}
+
+// Stable, distinguishable colors for goal areas in the stacked practice chart.
+const AREA_COLORS = ['#2f9e44', '#1c7ed6', '#e8590c', '#ae3ec9', '#0c8599', '#f08c00', '#c2255c', '#5c7cfa', '#66a80f', '#868e96', '#d6336c', '#495057'];
+
+function DoctorsPanel({ s, color }: { s: DoctorsStats; color: string }) {
+  const labels = s.weeks.map((w) => shortDate(w));
+  const series = s.perWeek.map((p, i) => ({ id: p.area, name: `${AREA_ICONS[p.area] ?? ''} ${AREA_LABELS[p.area] ?? p.area}`, color: AREA_COLORS[i % AREA_COLORS.length], values: p.values }));
+  return (
+    <section className="card stack">
+      <h2 style={{ margin: 0 }}>🩺 Doctors</h2>
+      <div className="tiles-row">
+        <div className="stat-tile"><span className="small muted">Practice streak</span><span className="big">🌈 {s.streak} day{s.streak === 1 ? '' : 's'}</span></div>
+        <div className="stat-tile"><span className="small muted">Practices logged</span><span className="big">{s.practicesInRange}</span><span className="small muted">in this range</span></div>
+        <div className="stat-tile"><span className="small muted">Goals reached</span><span className="big">🎉 {s.goalsReached}</span><span className="small muted">{s.goalsReachedInRange} in this range</span></div>
+        <div className="stat-tile"><span className="small muted">Appointments</span><span className="big">{s.appointments.attended} kept</span>
+          <span className="small muted">{s.appointments.missed} missed · {s.appointments.upcoming} coming up</span></div>
+      </div>
+      <h3 style={{ margin: 0 }}>Practices per week, by area</h3>
+      {series.length ? (
+        <>
+          <Legend series={series} />
+          <ColumnChart labels={labels} segments={series} />
+          <ChartTable labels={labels} series={series} />
+        </>
+      ) : <p className="muted" style={{ margin: 0 }}>No practices logged in this range. Tick scheduled practices off on the calendar, or add a progress note to a goal.</p>}
+      {s.goals.length > 0 && (
+        <>
+          <h3 style={{ margin: 0 }}>Goals progress</h3>
+          <BarList color={color} rows={s.goals.map((g) => ({
+            key: g.id, label: <span>{AREA_ICONS[g.area] ?? '📌'} {g.title}</span>, value: g.progress, max: 100,
+            note: g.status === 'met' ? '🎉 met' : g.status === 'paused' ? `${g.progress}% · paused` : `${g.progress}%`,
+          }))} />
+        </>
+      )}
+    </section>
+  );
+}
+
+function GoalsPanel({ s, color, missedColor }: { s: GoalStats; color: string; missedColor: string }) {
+  const { home } = useApp();
+  const labels = s.weeks.map((w) => shortDate(w));
+  const series = [
+    { id: 'reached', name: 'Reached', color, values: s.reachedPerWeek },
+    { id: 'redeemed', name: 'Redeemed', color: missedColor, values: s.redeemedPerWeek },
+  ];
+  return (
+    <section className="card stack">
+      <h2 style={{ margin: 0 }}>🎯 Goals</h2>
+      <div className="tiles-row">
+        <div className="stat-tile"><span className="small muted">Goals reached</span><span className="big">🏆 {s.reachedTotal}</span></div>
+        <div className="stat-tile"><span className="small muted">Rewards redeemed</span><span className="big">🎁 {s.redeemedTotal}</span></div>
+        <div className="stat-tile"><span className="small muted">Time to reach a goal</span><span className="big">{s.averageDays == null ? '–' : `${s.averageDays} day${s.averageDays === 1 ? '' : 's'}`}</span><span className="small muted">on average</span></div>
+      </div>
+      {s.active.length > 0 && (
+        <BarList color={color} rows={s.active.map((g) => ({
+          key: g.id, label: <span>{g.reached ? '🏆' : '🎯'} {g.title}</span>, value: g.percent, max: 100, note: `${g.progress}/${g.target} ${home?.pointsIcon ?? ''}`,
+        }))} />
+      )}
+      {!s.active.length && <p className="muted" style={{ margin: 0 }}>No goals right now.</p>}
+      <h3 style={{ margin: 0 }}>Reached and redeemed, by week</h3>
+      <LineChart labels={labels} series={series} height={180} />
+      <ChartTable labels={labels} series={series} />
+      {s.recent.length > 0 && <p className="small muted" style={{ margin: 0 }}>Recently: {s.recent.map((r) => `${r.title} (${r.days} day${r.days === 1 ? '' : 's'})`).join(' · ')}</p>}
+    </section>
   );
 }
 

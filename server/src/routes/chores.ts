@@ -175,7 +175,7 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const days = Math.min(Math.max(Number(q.days) || 7, 1), 42);
     const kidIds = agendaKids(db, ctx, q.kid);
     // Scheduled practices and appointments: parents see them; kids only when Doctors is shared with them.
-    const withExt = withDoctors(db, await withFeeds(db, ctx, agenda(db, ctx.homeId, kidIds, start, days, today)), doctorKids(db, ctx, q.kid), ctx.actor.kind !== 'parent');
+    const withExt = withDoctors(db, await withFeeds(db, ctx, agenda(db, ctx.homeId, kidIds, start, days, today), ctx.actor.kind === 'kid' ? ctx.actor.memberId : q.kid), doctorKids(db, ctx, q.kid), ctx.actor.kind !== 'parent');
     if (ctx.actor.kind !== 'parent' || q.kid) return { today, start, days: withExt };
     const duty = dutyDue(db, ctx.homeId, start, addDays(start, days - 1));
     return { today, start, days: withExt.map((d) => ({ ...d, duty: duty.filter((x) => x.dueDate === d.date) })) };

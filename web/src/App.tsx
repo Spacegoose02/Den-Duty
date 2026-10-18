@@ -18,7 +18,7 @@ import { KidBoard, ParentKidBoard } from './pages/KidBoard.tsx';
 
 const NAV = [
   { to: '/', ico: '🏠', label: 'Home', end: true },
-  { to: '/week', ico: '📅', label: 'Week' },
+  { to: '/calendar', ico: '📅', label: 'Calendar' },
   { to: '/chores', ico: '🧹', label: 'Chores' },
   { to: '/kids', ico: '🦝', label: 'Kids' },
   { to: '/rewards', ico: '🎁', label: 'Rewards' },
@@ -29,7 +29,7 @@ const NAV = [
 ];
 
 /** Which per-kid page each nav entry belongs to (see shared/pages.ts). */
-const NAV_PAGE: Record<string, KidPage> = { '/week': 'chores', '/chores': 'chores', '/parent-duty': 'parentduty', '/rewards': 'goals', '/stats': 'stats', '/doctors': 'doctors' };
+const NAV_PAGE: Record<string, KidPage> = { '/chores': 'chores', '/parent-duty': 'parentduty', '/rewards': 'goals', '/stats': 'stats', '/doctors': 'doctors' };
 
 function Nav({ className }: { className: string }) {
   const { who, home } = useApp();
@@ -74,7 +74,8 @@ export function App() {
       <main className="main">
         <Routes>
           <Route path="/" element={<Dashboard />} />
-          <Route path="/week" element={<Week />} />
+          <Route path="/calendar" element={<Week />} />
+          <Route path="/week" element={<Navigate to="/calendar" replace />} />
           <Route path="/chores" element={<Chores />} />
           <Route path="/kids" element={<Kids />} />
           <Route path="/kids/:memberId" element={<ParentKidBoard />} />
