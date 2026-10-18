@@ -1,0 +1,67 @@
+{
+  "name": "@daytime-ninja/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Daytime Ninja desktop app",
+  "author": "Daytime Ninja contributors",
+  "license": "MIT",
+  "repository": "github:Spacegoose02/Daytime-Ninja",
+  "main": "main.cjs",
+  "scripts": {
+    "copy-launcher": "node -e \"require('fs').cpSync('../launcher','launcher',{recursive:true})\"",
+    "start": "npm run copy-launcher && electron .",
+    "dist": "npm run copy-launcher && electron-builder --win --x64 --publish never",
+    "dist:linux": "npm run copy-launcher && electron-builder --linux AppImage --publish never",
+    "dist:mac": "npm run copy-launcher && electron-builder --mac dmg --publish never"
+  },
+  "devDependencies": {
+    "electron": "44.8.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "io.github.daytimeninja.desktop",
+    "productName": "Daytime Ninja",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.cjs",
+      "launcher/**",
+      "build/icon.png"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "DaytimeNinja-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "DaytimeNinja-Portable-${version}.${ext}"
+    },
+    "linux": {
+      "category": "Utility",
+      "icon": "build/icon.png"
+    },
+    "mac": {
+      "category": "public.app-category.lifestyle",
+      "icon": "build/icon.png"
+    }
+  }
+}

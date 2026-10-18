@@ -20,3 +20,5 @@ web/ios/
 *.jks
 *.pem
 *.p12
+apps/desktop/launcher/
+!apps/desktop/build/

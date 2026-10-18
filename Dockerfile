@@ -5,6 +5,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY server/package.json server/
 COPY web/package.json web/
+COPY apps/desktop/package.json apps/desktop/
 RUN npm ci --workspace web --include-workspace-root=false --ignore-scripts
 COPY shared shared
 COPY web web
@@ -23,6 +24,7 @@ RUN apk add --no-cache su-exec tzdata
 COPY package.json package-lock.json ./
 COPY server/package.json server/
 COPY web/package.json web/
+COPY apps/desktop/package.json apps/desktop/
 RUN npm ci --workspace server --include-workspace-root=false --omit=dev --ignore-scripts && npm cache clean --force
 COPY shared shared
 COPY server server

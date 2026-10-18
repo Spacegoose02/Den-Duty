@@ -1,0 +1,71 @@
+name: Release apps
+
+# Push a tag like v0.1.0 to build the Windows EXE and Android APK and attach them to a GitHub release.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run dist --workspace apps/desktop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: apps/desktop/release/*.exe
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci --ignore-scripts
+      - name: Create the Android project
+        working-directory: web
+        run: npx cap add android && npx cap sync android
+      # Icons and splash screens are pre-generated into web/android-res from web/assets with:
+      #   npm run icons && cd web && npx capacitor-assets generate --android --iconBackgroundColor "#e8590c" --splashBackgroundColor "#fff9ec" --splashBackgroundColorDark "#1c1f22"
+      - name: Add the raccoon app icon and splash screen
+        run: cp -r web/android-res/. web/android/app/src/main/res/
+      - name: Build APK
+        working-directory: web/android
+        run: ./gradlew assembleDebug
+      - run: mv web/android/app/build/outputs/apk/debug/app-debug.apk DaytimeNinja-${{ github.ref_name }}.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: DaytimeNinja-*.apk
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [windows, android]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

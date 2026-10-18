@@ -6,4 +6,6 @@ data
 .git
 web/android
 apps/desktop/release
+apps/desktop/launcher
+apps/desktop/release
 *.log
