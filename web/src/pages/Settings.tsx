@@ -268,12 +268,63 @@ function Admin() {
   );
 }
 
+interface WallSettings { landing: 'wall' | 'picker'; dim: { on: boolean; from: string; to: string }; show: { doctors: boolean; penalties: boolean; timeouts: boolean } }
+
+/** What the family tablet opens to, night dimming, and what the shared family wall may show. */
+function FamilyWallCard() {
+  const { base, toast } = useApp();
+  const [s, reload] = useLoad<WallSettings>(`${base}/wall`);
+  if (!s) return null;
+  const save = async (patch: Partial<WallSettings>) => {
+    try { await api(`${base}/wall`, { method: 'PATCH', body: patch }); await reload(); toast('Family wall updated'); } catch (e) { toast((e as Error).message); }
+  };
+  const Switch = ({ on, label, hint, onFlip }: { on: boolean; label: string; hint: string; onFlip: () => void }) => (
+    <button type="button" className={`switch${on ? ' on' : ''}`} aria-pressed={on} onClick={onFlip}>
+      <span className="switch-knob" aria-hidden />
+      <span><strong>{label}</strong><br /><span className="small muted">{hint}</span></span>
+    </button>
+  );
+  return (
+    <div className="card stack">
+      <h2 style={{ margin: 0 }}>🖼️ Family wall</h2>
+      <p className="small muted" style={{ margin: 0 }}>
+        The family tablet's home page: every kid at once with a clock, today's chores, points, goals and streaks, the den message,
+        today and tomorrow, school lunch and reward votes. Kids tap their card to sign in.
+      </p>
+      <div className="row">
+        <span>The tablet opens to</span>
+        <div className="seg" role="group" aria-label="Tablet landing page">
+          <button className={s.landing === 'wall' ? 'on' : ''} onClick={() => void save({ landing: 'wall' })}>Family wall</button>
+          <button className={s.landing === 'picker' ? 'on' : ''} onClick={() => void save({ landing: 'picker' })}>Raccoon picker</button>
+        </div>
+      </div>
+      <div className="switch-grid">
+        <Switch on={s.dim.on} label="🌙 Dim at night" hint={`From ${s.dim.from} to ${s.dim.to}, on the tablet's clock`} onFlip={() => void save({ dim: { ...s.dim, on: !s.dim.on } })} />
+      </div>
+      {s.dim.on && (
+        <div className="row small">
+          Dim from <input type="time" value={s.dim.from} onChange={(e) => e.target.value && void save({ dim: { ...s.dim, from: e.target.value } })} style={{ maxWidth: 140 }} />
+          to <input type="time" value={s.dim.to} onChange={(e) => e.target.value && void save({ dim: { ...s.dim, to: e.target.value } })} style={{ maxWidth: 140 }} />
+        </div>
+      )}
+      <strong className="small">Show on the family wall (off by default, since anyone walking by can see it)</strong>
+      <div className="switch-grid">
+        <Switch on={s.show.timeouts} label="⏳ Time-outs" hint="What's paused and the countdown" onFlip={() => void save({ show: { ...s.show, timeouts: !s.show.timeouts } })} />
+        <Switch on={s.show.penalties} label="🌱 Today's take-aways" hint="The reasons, worded gently" onFlip={() => void save({ show: { ...s.show, penalties: !s.show.penalties } })} />
+        <Switch on={s.show.doctors} label="🌈 Doctors goals and practices" hint="Only for kids you share Doctors with; notes never show" onFlip={() => void save({ show: { ...s.show, doctors: !s.show.doctors } })} />
+      </div>
+      <p className="small muted" style={{ margin: 0 }}>Appointments show only for kids you share Doctors with, under their own name. Parent Duty never shows.</p>
+    </div>
+  );
+}
+
 export function Settings() {
   const { who } = useApp();
   return (
     <div className="stack" style={{ maxWidth: 960 }}>
       <div className="topbar"><h1>Settings</h1></div>
       <FamilyTablets />
+      <FamilyWallCard />
       <HomeSettings />
       <CalendarsCard />
       <AiCard />

@@ -172,3 +172,19 @@ export function goalsStats(db: DatabaseSync, home: HomeInfo, memberId: string, f
     recent: took.slice(-5).reverse(),
   };
 }
+
+/** Badges as they stood at the end of a day (for "earned today": today's minus yesterday's). */
+export function achievementsOn(db: DatabaseSync, memberId: string, day: string): Achievement[] {
+  const chores = num((db.prepare("SELECT COUNT(*) AS n FROM chore_instances WHERE member_id = ? AND status = 'approved' AND date <= ?").get(memberId, day) as Row).n);
+  const bonus = num((db.prepare(`SELECT COUNT(*) AS n FROM chore_instances i JOIN chores c ON c.id = i.chore_id
+    WHERE i.member_id = ? AND i.status = 'approved' AND c.bonus = 1 AND i.date <= ?`).get(memberId, day) as Row).n);
+  const points = num((db.prepare("SELECT SUM(amount) AS n FROM points_ledger WHERE member_id = ? AND kind IN ('chore', 'bonus', 'reversal') AND date <= ?").get(memberId, day) as Row).n);
+  const goals = num((db.prepare("SELECT COUNT(*) AS n FROM goals WHERE member_id = ? AND status = 'redeemed' AND substr(redeemed_at, 1, 10) <= ?").get(memberId, day) as Row).n);
+  return achievementsFor({ chores, bonus, points: Math.max(0, points), goals, streak: streaks(db, memberId, day).best });
+}
+
+/** Badges earned today. */
+export function badgesToday(db: DatabaseSync, memberId: string, today: string): Achievement[] {
+  const before = new Set(achievementsOn(db, memberId, addDays(today, -1)).filter((a) => a.earned).map((a) => a.id));
+  return achievementsOn(db, memberId, today).filter((a) => a.earned && !before.has(a.id));
+}

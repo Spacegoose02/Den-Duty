@@ -17,6 +17,7 @@ import { rewardRoutes } from './routes/rewards.ts';
 import { therapyRoutes } from './routes/therapy.ts';
 import { parentDutyRoutes } from './routes/parentduty.ts';
 import { timeoutRoutes } from './routes/timeouts.ts';
+import { wallRoutes } from './routes/wall.ts';
 import { haRoutes } from './routes/ha.ts';
 import { calendarRoutes } from './routes/calendars.ts';
 import { aiRoutes } from './routes/ai.ts';
@@ -46,6 +47,7 @@ export async function buildApp(db: DatabaseSync, opts: { logger?: boolean; serve
   therapyRoutes(app, db);
   parentDutyRoutes(app, db);
   timeoutRoutes(app, db);
+  wallRoutes(app, db);
   haRoutes(app, db);
   calendarRoutes(app, db);
   aiRoutes(app, db);

@@ -510,6 +510,11 @@ export const MIGRATIONS: string[] = [
   DROP TABLE ai_tips;
   ALTER TABLE ai_tips_v2 RENAME TO ai_tips;
   `,
+  // The family wall: the family tablet's home page. Settings are one JSON blob per home (landing page, night dimming,
+  // and what a shared wall may show). Empty means the defaults in routes/wall.ts.
+  `
+  ALTER TABLE homes ADD COLUMN wall_settings TEXT NOT NULL DEFAULT '{}';
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

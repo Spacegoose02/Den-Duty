@@ -14,6 +14,7 @@ import { Stats } from './pages/Stats.tsx';
 import { Doctors } from './pages/Doctors.tsx';
 import { ParentDuty } from './pages/ParentDuty.tsx';
 import { KidPicker } from './pages/KidPicker.tsx';
+import { FamilyWall } from './pages/FamilyWall.tsx';
 import { KidBoard, ParentKidBoard } from './pages/KidBoard.tsx';
 
 const NAV = [
@@ -63,7 +64,9 @@ export function App() {
   // A family tablet with no parent signed in: kids pick their avatar. Parents can still sign in on top.
   if (!who?.user && who?.device) {
     if (loc.pathname === '/login') return <Login onTablet />;
-    return who.kid ? <KidBoard /> : <KidPicker />;
+    if (who.kid) return <KidBoard />;
+    // The family wall is the tablet's home page (a parent can switch it back to the picker); the picker stays at /picker.
+    return loc.pathname === '/picker' ? <KidPicker wallLink /> : <FamilyWall />;
   }
   if (!who?.user) return <Login />;
   if (!homeId) return <HomeSetup />;
