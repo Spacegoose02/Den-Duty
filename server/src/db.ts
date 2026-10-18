@@ -474,6 +474,18 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX timeout_requests_timeout ON timeout_requests(timeout_id, status);
   `,
+  // The daily "your den" message on each kid's screen, written once per kid per day. The text keeps a {name}
+  // placeholder: names are never sent to the AI, they're filled in here.
+  `
+  CREATE TABLE room_messages (
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    date TEXT NOT NULL,
+    text TEXT NOT NULL,
+    source TEXT NOT NULL CHECK (source IN ('ai', 'builtin')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (member_id, date)
+  );
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

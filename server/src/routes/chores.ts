@@ -11,6 +11,7 @@ import { achievements, kidStats, levelOf, streaks } from '../progress.ts';
 import { kidTherapyView } from './therapy.ts';
 import { dutyDue } from './parentduty.ts';
 import { homeTimeouts, kidTimeouts } from './timeouts.ts';
+import { roomMessage } from '../roommessage.ts';
 import { externalBetween, refreshStale } from '../calendar.ts';
 import { cleanIcon, getKid, kidView, listKids, pageOn } from './homes.ts';
 import type { KidPage } from '../../../shared/pages.ts';
@@ -200,6 +201,16 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
       therapy: on('doctors') ? kidTherapyView(db, memberId, today) : null,
       timeouts: on('timeout') ? kidTimeouts(db, memberId) : [],
     };
+  });
+
+  // The daily den message on the kid's screen (its own request, so the board never waits on the AI). Off with Chores.
+  app.get('/api/homes/:homeId/kids/:memberId/room-message', async (req) => {
+    const ctx = homeCtx(db, req);
+    const { memberId } = req.params as { memberId: string };
+    assertCanActFor(ctx, memberId);
+    const kid = kidView(db, getKid(db, ctx, memberId));
+    if (!pageOn(db, memberId, 'chores')) return null;
+    return roomMessage(db, ctx.homeId, kid, homeToday(homeInfo(db, ctx.homeId)));
   });
 
   // ---------- kanban and bonus chores ----------

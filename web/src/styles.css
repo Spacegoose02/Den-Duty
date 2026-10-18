@@ -341,3 +341,7 @@ td, th { text-align: left; padding: 8px; border-bottom: 1px solid var(--border);
 .timeout-what { font-size: 1.1rem; }
 .timeout-left { font-weight: 800; font-size: 1.25rem; color: var(--kid, var(--primary)); }
 .timeout-ask { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; background: var(--surface); }
+
+/* The daily den message on the kid's screen */
+.den-note { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 18px; font-size: 1.15rem; font-weight: 600;
+  background: color-mix(in srgb, var(--kid, var(--primary)) 14%, var(--surface)); border: 2px dashed color-mix(in srgb, var(--kid, var(--primary)) 45%, transparent); }

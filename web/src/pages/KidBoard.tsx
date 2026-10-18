@@ -77,6 +77,7 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
   const [weekStart, setWeekStart] = useState<string | null>(null);
   const [board, reload] = useLoad<Board>(`${base}/kids/${memberId}/board${weekStart ? `?start=${weekStart}` : ''}`);
   const [polls, reloadPolls] = useLoad<Poll[]>(`${base}/polls`);
+  const [denNote] = useLoad<{ text: string; source: string } | null>(`${base}/kids/${memberId}/room-message`, [memberId]);
   const [busy, setBusy] = useState<string | null>(null);
   const [cheer, setCheer] = useState<{ icon: string; text: string } | null>(null);
   const [picking, setPicking] = useState(false);
@@ -130,6 +131,13 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
         </div>
         {onExit && <button className="kid-exit" onClick={onExit}>👋 I'm done</button>}
       </header>
+
+      {denNote && (
+        <div className="den-note pg-chores" aria-live="polite">
+          <RaccoonAvatar variant={kid.avatar} size={44} />
+          <span>{denNote.text}</span>
+        </div>
+      )}
 
       {(board.timeouts.length > 0 || (asParent && !kid.pagesOff.includes('timeout'))) && (
         <section className="card stack pg-timeout">

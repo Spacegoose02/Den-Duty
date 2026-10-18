@@ -212,6 +212,32 @@ export async function therapyHelper(db: DatabaseSync, homeId: string, area: Help
   };
 }
 
+// ---------- the daily den message on a kid's screen ----------
+
+const ROOM_SCHEMA = {
+  type: 'object',
+  properties: { message: { type: 'string', description: 'One or two short, upbeat sentences that include {name} exactly once' } },
+  required: ['message'],
+  additionalProperties: false,
+};
+
+const ROOM_SYSTEM = `You write one short, warm, encouraging message a day for a child's chore app, about keeping their room tidy.
+The app's mascot is a raccoon, and a raccoon's home is a den, so playful den and raccoon touches are welcome. Be positive and specific
+(make the bed, toys in bins, clothes in the hamper, books on the shelf), never nagging, shaming or scary. Match the reading level to the age:
+very short and simple for little ones. Use {name} once where the child's name goes. At most 2 sentences and one emoji.`;
+
+/** Only the age and the date are sent. The name is a {name} placeholder filled in on the server. */
+export function roomPrompt(age: number | null, date: string): string {
+  return [age != null ? `The child is ${age} years old.` : "The child's age isn't known; keep it simple.", `Today is ${date}; make it different from other days.`].join('\n');
+}
+
+export async function roomMessageAi(db: DatabaseSync, homeId: string, age: number | null, date: string): Promise<string> {
+  const r = await askJson<{ message: string }>(db, homeId, ROOM_SYSTEM, roomPrompt(age, date), ROOM_SCHEMA);
+  const text = String(r.message ?? '').trim().slice(0, 300);
+  if (!text) throw new Error('empty');
+  return text.includes('{name}') ? text : `{name}, ${text.charAt(0).toLowerCase()}${text.slice(1)}`;
+}
+
 // ---------- "Ask Dr. Bandit" in Doctors ----------
 
 export const ASK_DISCLAIMER = "General information to talk over with your child's doctor or therapist. Not medical advice.";
