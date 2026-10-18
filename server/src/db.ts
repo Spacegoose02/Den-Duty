@@ -519,6 +519,25 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE members ADD COLUMN ai_off INTEGER NOT NULL DEFAULT 0;
   `,
+  // Helpdesk: a kid asks a grown-up for help. A yes becomes a card on that kid's Parent Duty board (duty_id).
+  `
+  CREATE TABLE helpdesk_requests (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    text TEXT,
+    due_date TEXT,
+    status TEXT NOT NULL DEFAULT 'waiting' CHECK (status IN ('waiting', 'approved', 'denied', 'cancelled')),
+    note TEXT,
+    duty_id TEXT REFERENCES honeydo(id) ON DELETE SET NULL,
+    decided_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    decided_at TEXT
+  );
+  CREATE INDEX helpdesk_member ON helpdesk_requests(member_id, status);
+  ALTER TABLE homes ADD COLUMN helpdesk_max_open INTEGER NOT NULL DEFAULT 3;
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

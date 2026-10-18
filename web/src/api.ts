@@ -54,7 +54,7 @@ export interface Kid {
 }
 
 export interface HomeDetail {
-  id: string; name: string; pointsName: string; pointsIcon: string; theme: string; timezone: string; weekStart: 0 | 1; allowNegative?: boolean;
+  id: string; name: string; pointsName: string; pointsIcon: string; theme: string; timezone: string; weekStart: 0 | 1; allowNegative?: boolean; helpdeskMaxOpen?: number;
   viewer: 'parent' | 'kid' | 'device' | 'token';
   kids: Kid[];
   joinCode?: string;
@@ -141,6 +141,12 @@ export interface Timeout {
 }
 export type HomeTimeout = Timeout & { kid: { name: string; avatar: string; color: string } };
 
-export interface Summary { today: string; weekStart: string; weekEnd: string; waiting: number; timeouts: HomeTimeout[]; kids: (Kid & KidWeek & { goals: Goal[]; streak: Streak; level: LevelInfo })[] }
+export interface HelpRequest {
+  id: string; memberId: string; kind: string; icon: string; label: string; text: string | null; dueDate: string | null;
+  status: 'waiting' | 'yes' | 'doing' | 'done' | 'no' | 'cancelled'; note: string | null; dutyId: string | null; createdAt: string; decidedAt: string | null;
+}
+export type HomeHelpRequest = HelpRequest & { kid: { name: string; avatar: string; color: string } };
+
+export interface Summary { today: string; weekStart: string; weekEnd: string; waiting: number; timeouts: HomeTimeout[]; helpdesk: HomeHelpRequest[]; kids: (Kid & KidWeek & { goals: Goal[]; streak: Streak; level: LevelInfo })[] }
 
 export interface LedgerEntry { id: number; amount: number; kind: string; reason: string; date: string; by: string | null; createdAt: string }

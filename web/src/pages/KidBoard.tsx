@@ -8,6 +8,7 @@ import { AVATARS, AVATAR_LABELS, AVATAR_UNLOCK_LEVEL, avatarUnlocked } from '../
 import { AREA_ICONS, KIND_ICONS, whenText } from './Doctors.tsx';
 import { Calendar } from './Week.tsx';
 import { TimeoutCard, TimeoutForm } from '../components/Timeouts.tsx';
+import { KidHelpdesk } from '../components/Helpdesk.tsx';
 
 const IDLE_MS = 3 * 60e3;
 
@@ -146,6 +147,8 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
           {!board.timeouts.length && <p className="small muted" style={{ margin: 0 }}>None right now.</p>}
         </section>
       )}
+      {!kid.pagesOff.includes('helpdesk') && <KidHelpdesk memberId={memberId} kidName={kid.name} picture={kid.pictureMode} asParent={asParent} />}
+
       {newTimeout && <TimeoutForm kidId={memberId} kidName={kid.name} onClose={() => setNewTimeout(false)} onDone={() => { setNewTimeout(false); void reload(); }} />}
 
       <section className="pg-chores">

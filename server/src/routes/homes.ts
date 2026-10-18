@@ -120,6 +120,7 @@ export function homeRoutes(app: FastifyInstance, db: DatabaseSync): void {
       timezone: home.timezone as string,
       weekStart: home.week_start as number,
       allowNegative: !!home.allow_negative,
+      helpdeskMaxOpen: (home.helpdesk_max_open as number) ?? 3,
       viewer: ctx.actor.kind,
       kids: listKids(db, ctx.homeId),
     };
@@ -150,6 +151,11 @@ export function homeRoutes(app: FastifyInstance, db: DatabaseSync): void {
       const url = str(b.haWebhookUrl, 500);
       if (url && !/^https?:\/\//i.test(url)) throw new HttpError(400, 'The webhook URL should start with http:// or https://');
       db.prepare('UPDATE homes SET ha_webhook_url = ? WHERE id = ?').run(url, ctx.homeId);
+    }
+    if ('helpdeskMaxOpen' in b) {
+      const n = Number(b.helpdeskMaxOpen);
+      if (!Number.isInteger(n) || n < 1 || n > 20) throw new HttpError(400, 'Open Helpdesk requests per kid: 1 to 20');
+      db.prepare('UPDATE homes SET helpdesk_max_open = ? WHERE id = ?').run(n, ctx.homeId);
     }
     if (typeof b.allowNegative === 'boolean') db.prepare('UPDATE homes SET allow_negative = ? WHERE id = ?').run(b.allowNegative ? 1 : 0, ctx.homeId);
     if (b.weekStart === 0 || b.weekStart === 1) db.prepare('UPDATE homes SET week_start = ? WHERE id = ?').run(b.weekStart, ctx.homeId);

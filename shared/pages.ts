@@ -5,6 +5,7 @@ export const KID_PAGES = [
   { id: 'chores', label: 'Chores', icon: '🧹', hint: 'Daily chores, bonus chores and the week' },
   { id: 'parentduty', label: 'Parent Duty', icon: '📝', hint: 'Your to-dos for this kid' },
   { id: 'timeout', label: 'Time-outs', icon: '⏳', hint: 'Time-outs and buying time back' },
+  { id: 'helpdesk', label: 'Helpdesk', icon: '🛎️', hint: 'Asking a grown-up for help' },
   { id: 'goals', label: 'Goals & rewards', icon: '🎁', hint: 'Goals, rewards and reward votes' },
   { id: 'stats', label: 'Stats & badges', icon: '📊', hint: 'Charts, streaks, levels and badges' },
   { id: 'doctors', label: 'Doctors', icon: '🩺', hint: 'Appointments, goals and notes' },
@@ -87,3 +88,17 @@ export const PRACTICE_IDEAS = [
 export type PracticeIdea = (typeof PRACTICE_IDEAS)[number]['id'];
 export const PRACTICE_IDEA_IDS = PRACTICE_IDEAS.map((p) => p.id) as PracticeIdea[];
 export const IDEAS_OFF_DEFAULT: PracticeIdea[] = ['anger'];
+
+/** Quick picks on a kid's Helpdesk: big buttons for the usual asks, plus "something else" with typed text. */
+export const HELP_PICKS = [
+  { id: 'homework', icon: '📚', label: 'Homework help' },
+  { id: 'project', icon: '🔬', label: 'School project' },
+  { id: 'fix', icon: '🔧', label: 'Fix something' },
+  { id: 'buy', icon: '🛒', label: 'Buy something' },
+  { id: 'clothes', icon: '👟', label: 'Clothes or shoes' },
+  { id: 'ride', icon: '🚗', label: 'A ride somewhere' },
+  { id: 'friend', icon: '🤝', label: 'See a friend' },
+  { id: 'talk', icon: '💬', label: 'Talk about something' },
+  { id: 'other', icon: '✋', label: 'Something else' },
+] as const;
+export type HelpPick = (typeof HELP_PICKS)[number]['id'];

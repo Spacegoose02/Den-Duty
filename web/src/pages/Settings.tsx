@@ -136,6 +136,15 @@ function HomeSettings() {
       </label>
       <p className="small muted" style={{ margin: 0 }}>Off by default: a penalty takes what's there and stops at zero.</p>
 
+      <h3>🛎️ Helpdesk</h3>
+      <label className="row" style={{ fontWeight: 600 }}>
+        Each kid can have up to
+        <input type="number" min={1} max={20} defaultValue={home.helpdeskMaxOpen ?? 3} style={{ width: 80 }}
+          onBlur={(e) => { const n = Number(e.target.value); if (n >= 1 && n <= 20 && n !== home.helpdeskMaxOpen) void patch({ helpdeskMaxOpen: n }); }} />
+        requests waiting at once
+      </label>
+      <p className="small muted" style={{ margin: 0 }}>Keeps the asks to a manageable number. They can ask again once you answer.</p>
+
       <h3>Home theme</h3>
       <p className="small muted" style={{ margin: 0 }}>Used on the family tablet and by anyone who hasn't picked their own. Each kid can have their own in Kids → Edit.</p>
       <ThemePicker value={home.theme} onPick={(t) => t && void patch({ theme: t }, 'Theme changed')} />

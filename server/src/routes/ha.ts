@@ -12,6 +12,7 @@ import { levelOf, streaks } from '../progress.ts';
 import { eventView } from '../events.ts';
 import { listKids } from './homes.ts';
 import { homeTimeouts } from './timeouts.ts';
+import { waitingRequests } from './helpdesk.ts';
 
 const slug = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'kid';
 
@@ -54,6 +55,7 @@ export function haRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const today = homeToday(home);
     const waiting = reviewQueue(db, ctx.homeId);
     const timeouts = homeTimeouts(db, ctx.homeId);
+    const helpdesk = waitingRequests(db, ctx.homeId);
     const kids = listKids(db, ctx.homeId).map((k) => {
       const off = new Set(k.pagesOff);
       const w = kidWeek(db, home, k.id, today);
@@ -83,11 +85,13 @@ export function haRoutes(app: FastifyInstance, db: DatabaseSync): void {
               buy_back_waiting: !!t.pending,
             })),
           }),
+        helpdesk_waiting: off.has('helpdesk') ? null : helpdesk.filter((h) => h.memberId === k.id).length,
         next_goal: off.has('goals') ? null : goal?.title ?? null, next_goal_percent: off.has('goals') ? null : goal?.percent ?? null,
       };
     });
     return {
       home: home.name, points_name: home.pointsName, points_icon: home.pointsIcon, today,
+      helpdesk_waiting: helpdesk.length,
       active_timeouts: timeouts.filter((t) => t.state === 'active').length,
       timeout_requests_waiting: timeouts.filter((t) => t.pending).length,
       waiting_for_review: waiting.filter((i) => !kids.find((k) => k.id === i.memberId)?.pages_off.includes('chores')).length, kids, kids_by_name: Object.fromEntries(kids.map((k) => [k.slug, k])),

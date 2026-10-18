@@ -11,6 +11,7 @@ import { achievements, doctorsStats, goalsStats, kidStats, levelOf, streaks } fr
 import { kidTherapyView, withDoctors } from './therapy.ts';
 import { dutyDue } from './parentduty.ts';
 import { homeTimeouts, kidTimeouts } from './timeouts.ts';
+import { waitingRequests } from './helpdesk.ts';
 import { roomMessage } from '../roommessage.ts';
 import { externalBetween, refreshStale } from '../calendar.ts';
 import { cleanIcon, doctorAreasOff, getKid, kidView, listKids, pageOn } from './homes.ts';
@@ -340,6 +341,7 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
       weekEnd: addDays(weekStart, 6),
       waiting: reviewQueue(db, ctx.homeId).length,
       timeouts: homeTimeouts(db, ctx.homeId),
+      helpdesk: waitingRequests(db, ctx.homeId),
       kids: listKids(db, ctx.homeId).map((k) => ({
         ...k, ...kidWeek(db, home, k.id, today), goals: goalsFor(db, k.id), streak: streaks(db, k.id, today), level: levelOf(db, k.id),
       })),

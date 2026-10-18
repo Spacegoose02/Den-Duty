@@ -8,6 +8,7 @@ import { KIND_ICONS, whenText } from './Doctors.tsx';
 import { IdeasButton } from '../components/Ideas.tsx';
 import { TodaysTipsCard } from '../components/TherapyHelper.tsx';
 import { TimeoutCard, TimeoutForm } from '../components/Timeouts.tsx';
+import { HelpdeskCard } from '../components/Helpdesk.tsx';
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -84,6 +85,8 @@ export function Dashboard() {
         ))}
         {queue && !queue.length && <p className="muted" style={{ margin: 0 }}>Nothing waiting. 🦝 The raccoons are on it.</p>}
       </section>
+
+      {summary && <HelpdeskCard items={summary.helpdesk} onChange={() => void reloadSummary()} />}
 
       {!!summary?.timeouts.length && (
         <section className="card stack">
