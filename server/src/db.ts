@@ -393,6 +393,18 @@ const MIGRATIONS: string[] = [
   ALTER TABLE therapy_goals ADD COLUMN reward_met_paid INTEGER NOT NULL DEFAULT 0;
   ALTER TABLE therapy_notes ADD COLUMN awarded INTEGER NOT NULL DEFAULT 0;
   `,
+  // AI therapy helpers: one daily tip per kid per area, cached so it isn't regenerated on every load.
+  `
+  CREATE TABLE ai_tips (
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    area TEXT NOT NULL CHECK (area IN ('speech', 'ot')),
+    date TEXT NOT NULL,
+    data TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (member_id, area, date)
+  );
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

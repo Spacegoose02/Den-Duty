@@ -107,3 +107,45 @@ test('therapy goals earn points through the ledger, worded kindly and privately'
   assert.equal(board.therapy.goals[0].rewardStep, 3);
   assert.equal(board.recent[0].reason, '🌈 Great practice: Try a new food');
 });
+
+test('speech and OT helpers: off unless AI is on, cached per day, and only age, area and goal text are sent', async () => {
+  const { call, mom, base, ava, ben, tablet, asKid } = await family();
+  const t = `${base}/kids/${ava.id}/therapy`;
+  await call(mom, 'POST', `${t}/goals`, { area: 'speech', title: 'Use 3-word sentences' });
+  await call(mom, 'POST', `${t}/goals`, { area: 'motor', title: 'Hold a crayon with a tripod grip' });
+  await call(mom, 'POST', `${t}/notes`, { body: 'Private: seemed tired after daycare' });
+  await call(mom, 'POST', `${base}/kids/${ben.id}/therapy/goals`, { area: 'feeding', title: 'Try crunchy foods' });
+
+  assert.equal((await call(mom, 'GET', `${t}/helper/speech`)).status, 403, 'off until AI is on');
+  assert.deepEqual((await call(mom, 'GET', `${base}/therapy/tips`)).body, []);
+
+  const sent: Sent[] = [];
+  fakeClaude(sent, () => ({
+    tip: { title: 'Bath-time narrating', activity: 'Talk about what you do in the bath. Pause so they can add a word.', minutes: 10, why: 'Builds longer phrases.' },
+    goals: [{ title: 'Two-word requests at snack time', why: 'A small step toward three words' }],
+  }));
+  await call(mom, 'PATCH', `${base}/ai`, { apiKey: 'sk-ant-api03-test-key-abcdefghijklmnop', enabled: true });
+
+  const tip = (await call(mom, 'GET', `${t}/helper/speech`)).body;
+  assert.equal(tip.tip.title, 'Bath-time narrating');
+  assert.match(tip.disclaimer, /not medical advice/i);
+  assert.equal(tip.cached, false);
+  const body = JSON.stringify(sent[0].body);
+  assert.ok(body.includes('4 years old') && body.includes('Use 3-word sentences'));
+  assert.ok(!body.includes('Avaleigh') && !body.includes('Private') && !body.includes('crayon'), 'no name, no notes, no other areas');
+  assert.match(String(sent[0].body.system), /talk over with the child's speech therapist/);
+
+  assert.equal((await call(mom, 'GET', `${t}/helper/speech`)).body.cached, true, 'the daily tip is cached');
+  assert.equal(sent.length, 1);
+
+  // The home screen gets a tip per kid per area with goals: Ava's OT (motor) tip is new, her speech tip is cached; Ben has neither.
+  const tips = (await call(mom, 'GET', `${base}/therapy/tips`)).body as { kidName: string; area: string; cached: boolean }[];
+  assert.deepEqual(tips.map((x) => `${x.kidName}:${x.area}:${x.cached}`).sort(), ['Avaleigh:ot:false', 'Avaleigh:speech:true']);
+  assert.match(JSON.stringify(sent[1].body), /Hold a crayon/);
+  assert.match(String(sent[1].body.system), /occupational therapist/);
+  assert.equal((await call(mom, 'GET', `${t}/helper/speech?refresh=1`)).body.cached, false, 'parents can ask for a new one');
+
+  await asKid(ava);
+  assert.equal((await call(tablet, 'GET', `${t}/helper/speech`)).status, 403, 'kids never see the helper');
+  setAiFetch(undefined);
+});

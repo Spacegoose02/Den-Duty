@@ -4,10 +4,33 @@ import { homeCtx } from '../auth.ts';
 import type { Row } from '../db.ts';
 import { HttpError, num, str } from '../util.ts';
 import { earnedBetween, homeInfo, homeToday } from '../chores.ts';
-import { aiSettings, sealKey, suggest, type IdeaKind } from '../ai.ts';
+import { aiSettings, sealKey, suggest, therapyHelper, THERAPY_DISCLAIMER, type HelperArea, type IdeaKind } from '../ai.ts';
+import { OT_AREAS } from './therapy.ts';
+import type { HomeCtx } from '../auth.ts';
 import { getKid, kidView, listKids } from './homes.ts';
 import { rateLimit } from '../security.ts';
 import { addDays } from '../../../shared/schedule.ts';
+
+const helperAreas = (area: HelperArea) => (area === 'speech' ? ['speech'] : OT_AREAS);
+
+function activeGoals(db: DatabaseSync, memberId: string, area: HelperArea): string[] {
+  const areas = helperAreas(area);
+  return (db.prepare(`SELECT title FROM therapy_goals WHERE member_id = ? AND status = 'active' AND area IN (${areas.map(() => '?').join(',')}) ORDER BY created_at`)
+    .all(memberId, ...areas) as Row[]).map((r) => r.title as string);
+}
+
+/** Today's tip for one kid and area: from the cache, or freshly made (and cached) when missing or refreshed. */
+async function dailyTip(db: DatabaseSync, ctx: HomeCtx, memberId: string, area: HelperArea, refresh: boolean) {
+  const kid = kidView(db, getKid(db, ctx, memberId));
+  const today = homeToday(homeInfo(db, ctx.homeId));
+  if (!aiSettings(db, ctx.homeId).enabled) throw new HttpError(403, 'AI ideas are turned off. A parent can turn them on in Settings.');
+  const cached = refresh ? undefined : db.prepare('SELECT data FROM ai_tips WHERE member_id = ? AND area = ? AND date = ?').get(memberId, area, today) as Row | undefined;
+  if (cached) return { date: today, area, disclaimer: THERAPY_DISCLAIMER, cached: true, ...JSON.parse(cached.data as string) };
+  rateLimit(`ai:${ctx.homeId}`, 40, 15 * 60e3);
+  const result = await therapyHelper(db, ctx.homeId, area, kid.age, activeGoals(db, memberId, area), today);
+  db.prepare('INSERT OR REPLACE INTO ai_tips (member_id, home_id, area, date, data) VALUES (?, ?, ?, ?, ?)').run(memberId, ctx.homeId, area, today, JSON.stringify(result));
+  return { date: today, area, disclaimer: THERAPY_DISCLAIMER, cached: false, ...result };
+}
 
 export function aiRoutes(app: FastifyInstance, db: DatabaseSync): void {
   app.get('/api/homes/:homeId/ai', async (req) => {
@@ -61,5 +84,28 @@ export function aiRoutes(app: FastifyInstance, db: DatabaseSync): void {
         age: age && age > 0 && age < 19 ? Math.round(age) : null, hint: str(b.hint, 300),
       }),
     };
+  });
+
+  // ----- speech and occupational therapy helpers (parents only) -----
+  app.get('/api/homes/:homeId/kids/:memberId/therapy/helper/:area', async (req) => {
+    const ctx = homeCtx(db, req, 'parent');
+    const { memberId, area } = req.params as { memberId: string; area: string };
+    if (area !== 'speech' && area !== 'ot') throw new HttpError(400, 'area must be speech or ot');
+    return dailyTip(db, ctx, memberId, area, (req.query as { refresh?: string }).refresh === '1');
+  });
+
+  // Today's tips for the parents' home screen: one per kid per area they have active goals in. Off when AI is off.
+  app.get('/api/homes/:homeId/therapy/tips', async (req) => {
+    const ctx = homeCtx(db, req, 'parent');
+    if (!aiSettings(db, ctx.homeId).enabled) return [];
+    const wanted = listKids(db, ctx.homeId).flatMap((k) => (['speech', 'ot'] as HelperArea[])
+      .filter((area) => activeGoals(db, k.id, area).length > 0).map((area) => ({ kid: k, area })));
+    return Promise.all(wanted.map(async ({ kid, area }) => {
+      try {
+        return { kidId: kid.id, kidName: kid.name, kidAvatar: kid.avatar, ...(await dailyTip(db, ctx, kid.id, area, false)) };
+      } catch (err) {
+        return { kidId: kid.id, kidName: kid.name, kidAvatar: kid.avatar, area, error: (err as Error).message };
+      }
+    }));
   });
 }

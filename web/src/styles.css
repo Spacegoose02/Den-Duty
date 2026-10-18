@@ -307,3 +307,7 @@ td, th { text-align: left; padding: 8px; border-bottom: 1px solid var(--border);
 .board.picture .kanban-actions button { min-height: 60px; min-width: 64px; font-size: 1.6rem; }
 .board.picture .chore-note { font-size: 1.4rem; }
 .board.picture .badge-icon { font-size: 2.6rem; }
+
+/* AI therapy helpers */
+.helper-card .tip { background: var(--surface-2); border-radius: 14px; padding: 12px; }
+.disclaimer { margin: 0; color: var(--muted); font-style: italic; }

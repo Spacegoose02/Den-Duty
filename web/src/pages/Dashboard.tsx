@@ -6,6 +6,7 @@ import { RaccoonAvatar } from '../components/Raccoon.tsx';
 import { Modal, ProgressBar, dayName, shortDate } from '../components/Bits.tsx';
 import { KIND_ICONS, whenText } from './Therapy.tsx';
 import { IdeasButton } from '../components/Ideas.tsx';
+import { TodaysTipsCard } from '../components/TherapyHelper.tsx';
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -95,6 +96,8 @@ export function Dashboard() {
           ))}
         </section>
       )}
+
+      <TodaysTipsCard />
 
       <div className="kid-summaries">
         {summary?.kids.map((k) => {

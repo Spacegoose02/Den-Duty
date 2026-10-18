@@ -5,6 +5,7 @@ import { RaccoonAvatar } from '../components/Raccoon.tsx';
 import { Modal, ProgressBar, shortDate } from '../components/Bits.tsx';
 import { LineChart } from '../components/Charts.tsx';
 import { seriesColor } from '../../../shared/catalog.ts';
+import { TherapyHelperCard } from '../components/TherapyHelper.tsx';
 
 interface Appointment { id: string; kind: string; title: string; provider: string | null; location: string | null; startsAt: string; durationMinutes: number | null; status: string; notes: string | null }
 interface TGoal { id: string; area: string; title: string; description: string | null; targetDate: string | null; status: string; progress: number; metAt: string | null; history: { date: string; progress: number }[]; rewardStep: number; rewardMet: number; rewardMetPaid: boolean }
@@ -214,6 +215,11 @@ export function Therapy() {
               </div>
             ))}
           </section>
+
+          <div className="grid-2">
+            <TherapyHelperCard key={`speech-${kid.id}`} kidId={kid.id} area="speech" goals={data.goals} onChange={reload} />
+            <TherapyHelperCard key={`ot-${kid.id}`} kidId={kid.id} area="ot" goals={data.goals} onChange={reload} />
+          </div>
 
           <section className="stack">
             <div className="row">
