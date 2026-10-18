@@ -39,7 +39,7 @@ export function Week() {
             {d.items.map((i, n) => {
               const kid = kids.get(i.memberId);
               return (
-                <button key={i.id ?? `${i.choreId}-${i.memberId}-${n}`} className={`agenda-item ${i.status}`} disabled={!i.id}
+                <button key={i.id ?? `${i.choreId}-${i.memberId}-${n}`} className={`agenda-item week-item ${i.status}`} disabled={!i.id}
                   onClick={() => void tap(i)} title={`${kid?.name}: ${STATUS_LABEL[i.status]}`} style={{ borderLeft: `4px solid ${kid?.color ?? 'transparent'}` }}>
                   <RaccoonAvatar variant={kid?.avatar} size={24} />
                   <span aria-hidden>{i.icon}</span>

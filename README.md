@@ -27,8 +27,8 @@ Daytime Ninja is the sibling of [Nighttime Ninja](https://github.com/Spacegoose0
 - **Honey-do board**: a kanban for the parents' own to-dos and goals, with assignees and due dates.
 - **21 themes**, from Sunny and Dino to Space and Volcano, plus two high-contrast ones. Pick one for the home, and each kid can have their own on their board.
 - **Strong sign-in** carried over from Nighttime Ninja: passwords (scrypt), **two-factor codes** with recovery codes, **passkeys**, **Google** (OIDC), any **OpenID Connect** provider, **forward-auth** from TinyAuth-style proxies, invite-only sign-up, rate limiting, signed-in device list, **pairing codes**, and name-only quick sign-in that only works on your home network.
-- **Home Assistant**: a token-based summary endpoint with each kid's points and chores left today.
-- **Runs everywhere**: Docker (with an Unraid template) and any browser. Android and Windows apps are planned (same approach as Nighttime Ninja).
+- **Home Assistant**: per-kid sensors (points, chores left, waiting for approval, streak, level), actions to mark chores done, approve them and give or take points, and events by webhook. See [docs/home-assistant.md](docs/home-assistant.md).
+- **Runs everywhere**: Docker (with an Unraid template), any browser, a Windows EXE and an Android APK.
 
 ## Quick start with Docker
 
@@ -86,6 +86,23 @@ All settings are environment variables. See [.env.example](.env.example).
 3. Parents should set a password and turn on two-factor or add a passkey in **Settings → Sign-in and security**. Quick sign-in keeps working at home but is refused from the internet. (The app tells home from internet by IP address, so always go through the reverse proxy. If you forward a port straight to the container, set `LOCAL_LOGIN=off`.)
 4. Family tablets use a long random device token, not a password. Unpair a lost tablet in **Settings → Family tablets**. Kid PINs are rate limited.
 
+## Apps
+
+- **Windows**: the installer or portable EXE from [Releases](../../releases). On first launch, enter your server's address. Change servers from the app menu.
+- **Android (phones and tablets)**: the APK from [Releases](../../releases). Enter your server's address, then either pair it as the family tablet (Settings → Family tablets → Get a tablet code) or sign yourself in (Settings → Pair a device).
+- **Any browser**: open your server and use “Add to Home screen”.
+
+Both apps are thin wrappers around your server's web app (`apps/launcher`, `apps/desktop`, `web/capacitor.config.ts`), so they always match the server version.
+
+Building them yourself:
+
+```bash
+npm run dist --workspace apps/desktop          # Windows installer + portable EXE in apps/desktop/release
+cd web && npx cap add android && cp -r android-res/. android/app/src/main/res/ && npx cap open android   # then Build → Build APK
+```
+
+Pushing a tag (`git tag v0.1.0 && git push --tags`) builds the Docker image, the EXE and the APK in GitHub Actions. `npm run icons` regenerates every icon from the logo drawing.
+
 ## Home Assistant
 
 Create a token in **Settings → Home Assistant and automations**, then add a REST sensor:
@@ -123,9 +140,12 @@ npm run typecheck
 | `server/src/chores.ts` | The core loop: schedules → instances → review → ledger → goals. |
 | `web/` | React + Vite app: parent screens and the family tablet screens. |
 | `shared/` | Schedules, date math in the home's time zone, avatars, icons. Used by both. |
+| `apps/launcher/` | The “pick your server” page used by the Android and Windows apps. |
+| `apps/desktop/` | Electron wrapper for the Windows EXE. |
+| `scripts/brand.mjs` | Draws the logo and renders every icon. |
+| `docs/` | Home Assistant, single sign-on, Google sign-in and branding notes. |
 | `unraid/` | Unraid Community Applications template. |
 
-The layout matches Nighttime Ninja on purpose, so its `apps/launcher`, `apps/desktop` (Electron) and Capacitor Android setup can be copied over when the native apps are added.
 
 ## Privacy
 
