@@ -1,5 +1,7 @@
 # Den Duty brand
 
+The finished logo files, icons, wordmarks and characters live in the top-level [brand/](../../brand/) folder. This folder keeps the design notes and the concepts it came from.
+
 <img src="den-duty-logo.svg" width="128" alt="Den Duty logo">
 
 **Idea:** the same masked raccoon as Nighttime Ninja, on the day shift. Where Nighttime Ninja wears a chef hat on a night-green tile, Den Duty has the sun rising behind its head on a sunny orange tile. The two apps sit together as a pair.

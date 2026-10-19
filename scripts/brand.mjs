@@ -1,6 +1,6 @@
 // Builds the Den Duty logo and every icon from one drawing.
 //   node scripts/brand.mjs concepts   -> docs/branding/concept-*.svg + concepts.png (side-by-side review)
-//   node scripts/brand.mjs            -> all icons (web, PWA, favicon, Android, Windows, Unraid)
+//   node scripts/brand.mjs            -> all icons (web, PWA, favicon, Android, Windows, Unraid) and the brand/ folder
 // The raccoon head matches Nighttime Ninja's mark on purpose; the daytime version trades the chef hat for a sun
 // and the night-green tile for a sunny orange one.
 import fs from 'node:fs';
@@ -129,7 +129,60 @@ async function icons() {
   // Brand masters.
   fs.writeFileSync(out('docs', 'branding', 'den-duty-logo.svg'), full);
   fs.writeFileSync(out('docs', 'branding', 'den-duty-logo-small.svg'), small);
+  await brandFolder({ full, fullSquare, small, foreground, background });
   console.log('icons written');
+}
+
+/** The top-level brand/ folder: every logo, icon, wordmark and character, ready to hand to anyone. */
+async function brandFolder({ full, fullSquare, small, foreground, background }) {
+  const b = (...p) => out('brand', ...p);
+  fs.rmSync(out('brand', 'logo'), { recursive: true, force: true });
+  fs.mkdirSync(b('logo', 'png'), { recursive: true });
+  fs.writeFileSync(b('logo', 'den-duty-logo.svg'), full);
+  fs.writeFileSync(b('logo', 'den-duty-logo-small.svg'), small);
+  fs.writeFileSync(b('logo', 'den-duty-logo-square.svg'), fullSquare);
+  for (const s of [16, 24, 32, 48, 64, 96, 128, 180, 192, 256, 512, 1024]) await png(s <= 32 ? small : full, s, b('logo', 'png', `den-duty-${s}.png`));
+  // favicon (16/32/48) and the Windows icon (16-256).
+  const icoOf = async (sizes) => pngToIco(await Promise.all(sizes.map((s) => sharp(Buffer.from(s <= 32 ? small : full), { density: Math.max(72, (72 * s * 2) / 512) }).resize(s, s).png().toBuffer())));
+  fs.writeFileSync(b('favicon.ico'), await icoOf([16, 32, 48]));
+  fs.mkdirSync(b('app-icons', 'windows'), { recursive: true });
+  fs.writeFileSync(b('app-icons', 'windows', 'den-duty.ico'), await icoOf([16, 24, 32, 48, 64, 128, 256]));
+  // Android adaptive icon (foreground on a solid background, 108dp safe zone) and legacy launcher icon.
+  await png(foreground, 1024, b('app-icons', 'android', 'adaptive-foreground.png'));
+  await png(background, 1024, b('app-icons', 'android', 'adaptive-background.png'));
+  await png(full, 512, b('app-icons', 'android', 'play-store-512.png'));
+  for (const [d, s] of [['mdpi', 48], ['hdpi', 72], ['xhdpi', 96], ['xxhdpi', 144], ['xxxhdpi', 192]]) await png(full, s, b('app-icons', 'android', `ic_launcher-${d}.png`));
+  // PWA (regular + maskable) and Apple touch icon.
+  await png(full, 192, b('app-icons', 'pwa', 'icon-192.png'));
+  await png(full, 512, b('app-icons', 'pwa', 'icon-512.png'));
+  await png(fullSquare, 512, b('app-icons', 'pwa', 'icon-maskable-512.png'));
+  await png(fullSquare, 180, b('app-icons', 'apple', 'apple-touch-icon-180.png'));
+  // Unraid (Community Applications shows it on a dark or light card; a rounded tile reads on both).
+  await png(full, 512, b('unraid', 'den-duty-unraid.png'));
+  // Wordmark and lockups, light (dark text) and dark (light text).
+  const inner = full.replace(/^<svg[^>]*>|<\/svg>$/g, '');
+  const font = `font-family="'Nunito', 'Segoe UI Rounded', 'Arial Rounded MT Bold', 'Segoe UI', Arial, sans-serif" font-weight="900"`;
+  const word = (ink, accent) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 260"><text x="0" y="200" ${font} font-size="200" fill="${ink}">Den <tspan fill="${accent}">Duty</tspan></text></svg>`;
+  const horizontal = (ink, accent) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 400"><svg x="0" y="0" width="400" height="400" viewBox="0 0 512 512">${inner}</svg><text x="460" y="268" ${font} font-size="200" fill="${ink}">Den <tspan fill="${accent}">Duty</tspan></text></svg>`;
+  const stacked = (ink, accent) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 900"><svg x="200" y="40" width="500" height="500" viewBox="0 0 512 512">${inner}</svg><text x="450" y="780" text-anchor="middle" ${font} font-size="190" fill="${ink}">Den <tspan fill="${accent}">Duty</tspan></text></svg>`;
+  const raster = async (svg, w, h, file, bg) => {
+    const img = sharp(Buffer.from(svg), { density: 300 }).resize(w, h, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } });
+    await (bg ? img.flatten({ background: bg }) : img).png().toFile(file);
+  };
+  fs.mkdirSync(b('wordmark'), { recursive: true });
+  for (const [mode, ink, accent, bg] of [['light', C.ink, C.tile, null], ['dark', '#ffffff', C.sun, null]]) {
+    for (const [name, svg, w, h] of [['wordmark', word(ink, accent), 1200, 260], ['lockup-horizontal', horizontal(ink, accent), 1600, 400], ['lockup-stacked', stacked(ink, accent), 900, 900]]) {
+      fs.writeFileSync(b('wordmark', `den-duty-${name}-${mode}.svg`), svg);
+      await raster(svg, w, h, b('wordmark', `den-duty-${name}-${mode}.png`), bg);
+    }
+  }
+  // Social / README banner on the sunny background.
+  const banner = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640"><rect width="1280" height="640" fill="#fff9ec"/><svg x="110" y="170" width="300" height="300" viewBox="0 0 512 512">${inner}</svg><text x="460" y="330" ${font} font-size="130" fill="${C.ink}">Den <tspan fill="${C.tile}">Duty</tspan></text><text x="464" y="400" font-family="'Segoe UI', Arial, sans-serif" font-size="34" fill="#5c636a">Chores, points and goals for the whole den</text></svg>`;
+  fs.writeFileSync(b('social-banner.svg'), banner);
+  await raster(banner, 1280, 640, b('social-banner.png'));
+  // Characters: the raccoon avatars and Dr. Bandit, rendered from the app's own components.
+  const { renderCharacters } = await import('./avatars.mjs');
+  await renderCharacters(b('characters'));
 }
 
 if (process.argv[2] === 'concepts') await concepts();

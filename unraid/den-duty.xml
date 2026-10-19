@@ -11,7 +11,7 @@
   <Category>HomeAutomation: Productivity: Tools:</Category>
   <WebUI>http://[IP]:[PORT:8080]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/Spacegoose02/Den-Duty/main/unraid/den-duty.xml</TemplateURL>
-  <Icon>https://raw.githubusercontent.com/Spacegoose02/Den-Duty/main/web/public/icon.png</Icon>
+  <Icon>https://raw.githubusercontent.com/Spacegoose02/Den-Duty/main/brand/unraid/den-duty-unraid.png</Icon>
   <ExtraParams>--restart unless-stopped</ExtraParams>
   <Requires>Optional: a Google OAuth client for Google sign-in.</Requires>
   <Config Name="Web UI port" Target="8080" Default="8080" Mode="tcp" Description="Port for the web app" Type="Port" Display="always" Required="true" Mask="false">8080</Config>

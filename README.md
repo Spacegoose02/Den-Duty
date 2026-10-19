@@ -110,7 +110,7 @@ npm run dist --workspace apps/desktop          # Windows installer + portable EX
 cd web && npx cap add android && cp -r android-res/. android/app/src/main/res/ && npx cap open android   # then Build → Build APK
 ```
 
-Pushing a tag (`git tag v0.1.0 && git push --tags`) builds the Docker image, the EXE and the APK in GitHub Actions. `npm run icons` regenerates every icon from the logo drawing.
+Pushing a tag (`git tag v0.1.0 && git push --tags`) builds the Docker image, the EXE and the APK in GitHub Actions. `npm run icons` regenerates every icon from the logo drawing, plus the [brand/](brand/) folder (logos, app icons, wordmarks, Dr. Bandit and the raccoon avatars).
 
 ## Home Assistant
 
@@ -151,7 +151,8 @@ npm run typecheck
 | `shared/` | Schedules, date math in the home's time zone, avatars, icons. Used by both. |
 | `apps/launcher/` | The “pick your server” page used by the Android and Windows apps. |
 | `apps/desktop/` | Electron wrapper for the Windows EXE. |
-| `scripts/brand.mjs` | Draws the logo and renders every icon. |
+| `scripts/brand.mjs` | Draws the logo and renders every icon and the brand/ folder. |
+| `brand/` | Logos, icons, wordmarks and character art, with a guide to which file goes where. |
 | `docs/` | Home Assistant, single sign-on, Google sign-in and branding notes. |
 | `unraid/` | Unraid Community Applications template. |
 
