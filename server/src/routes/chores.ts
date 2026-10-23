@@ -21,7 +21,7 @@ import { addDays, cleanWeekdays, describeSchedule, isIsoDate, startOfWeek, type 
 
 /** Who to credit in the ledger and review history. */
 export function byOf(ctx: HomeCtx): By {
-  return ctx.user ? { userId: ctx.user.id, name: ctx.user.name } : { userId: null, name: 'Automation' };
+  return ctx.user ? { userId: ctx.user.id, name: ctx.user.name } : { userId: null, name: ctx.tokenName ? `🔑 ${ctx.tokenName}` : 'Automation' };
 }
 
 function choreView(db: DatabaseSync, r: Row) {
