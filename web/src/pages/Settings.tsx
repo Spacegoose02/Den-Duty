@@ -187,11 +187,12 @@ function HomeSettings() {
         ))}
       </div>
 
-      <h3>Home Assistant and automations</h3>
+      <h3>Home Assistant, automations and the API</h3>
       <p className="small muted" style={{ margin: 0 }}>
         Home Assistant reads <code>{base}/ha/summary</code> for per-kid sensors ({home.pointsName}, chores left, waiting for review, streak, level).
         A <strong>read</strong> token can only look. A <strong>control</strong> token can also mark chores done, approve them, and give or take points.
         See <code>docs/home-assistant.md</code> for ready-to-paste YAML.
+        The same tokens work with the <a href="/api-docs">Den Duty API</a> (<code>/api/v1</code>) for your own apps and scripts.
       </p>
       <p className="small" style={{ margin: 0 }}>Home ID: <code>{home.id}</code></p>
       <form className="row" onSubmit={async (e) => {

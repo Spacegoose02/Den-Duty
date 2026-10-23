@@ -40,7 +40,8 @@ export type Role = 'parent' | 'kid';
 
 /** Who is acting in a home. */
 export type Actor =
-  | { kind: 'parent'; user: User; memberId: string | null } // memberId is null for a server admin who isn't in the home
+  // memberId is null for a server admin who isn't in the home; user is null for an API token on a /api/v1 route (see routes/v1.ts)
+  | { kind: 'parent'; user: User | null; memberId: string | null }
   | { kind: 'kid'; memberId: string }
   | { kind: 'device'; deviceId: string } // a family tablet with nobody picked yet
   | { kind: 'token'; scope: 'read' | 'control' }; // Home Assistant or another automation
@@ -50,6 +51,8 @@ export interface HomeCtx {
   actor: Actor;
   /** The signed-in parent, when the actor is one. */
   user: User | null;
+  /** The API token's name, when one is acting (for the ledger's "by"). */
+  tokenName?: string;
 }
 
 export interface DeviceAuth { id: string; homeId: string; name: string }
@@ -60,6 +63,7 @@ declare module 'fastify' {
     user: User | null;
     tokenHomeId: string | null;
     tokenScope: 'read' | 'control' | null;
+    tokenName: string | null;
     /** Hash of the current session id, for "this device" in the sessions list. */
     sessionHash: string | null;
     device: DeviceAuth | null;
@@ -234,6 +238,7 @@ export function installAuth(app: FastifyInstance, db: DatabaseSync): void {
   app.decorateRequest('user', null);
   app.decorateRequest('tokenHomeId', null);
   app.decorateRequest('tokenScope', null);
+  app.decorateRequest('tokenName', null);
   app.decorateRequest('sessionHash', null);
   app.decorateRequest('device', null);
   app.decorateRequest('kid', null);
@@ -241,6 +246,7 @@ export function installAuth(app: FastifyInstance, db: DatabaseSync): void {
     req.user = null;
     req.tokenHomeId = null;
     req.tokenScope = null;
+    req.tokenName = null;
     req.sessionHash = null;
     req.device = null;
     req.kid = null;
@@ -250,10 +256,11 @@ export function installAuth(app: FastifyInstance, db: DatabaseSync): void {
     if (!sessionId && authz?.startsWith('Bearer ')) {
       const token = authz.slice(7).trim();
       if (token.startsWith('dnk_')) {
-        const t = db.prepare('SELECT id, home_id, scope FROM api_tokens WHERE token_hash = ?').get(sha256(token)) as Row | undefined;
+        const t = db.prepare('SELECT id, home_id, scope, name FROM api_tokens WHERE token_hash = ?').get(sha256(token)) as Row | undefined;
         if (t) {
           req.tokenHomeId = t.home_id as string;
           req.tokenScope = t.scope === 'control' ? 'control' : 'read';
+          req.tokenName = t.name as string;
           db.prepare("UPDATE api_tokens SET last_used_at = datetime('now') WHERE id = ?").run(t.id as string);
         }
         return;
@@ -346,11 +353,18 @@ export function homeCtxFor(db: DatabaseSync, req: FastifyRequest, homeId: string
   else if (req.device?.homeId === homeId) actor = { kind: 'device', deviceId: req.device.id };
   else if (req.tokenHomeId) {
     if (req.tokenHomeId !== homeId) throw new HttpError(403, 'Token is for a different home');
-    actor = { kind: 'token', scope: req.tokenScope ?? 'read' };
-    // Tokens only ever change things through the Home Assistant actions, and only control tokens can. Checked here
-    // too so a route that forgets to refuse tokens can't be used to write with one.
-    if (!['GET', 'HEAD'].includes(req.method) && (actor.scope !== 'control' || !req.routeOptions.url?.startsWith('/api/homes/:homeId/ha/'))) {
-      throw new HttpError(403, 'Tokens can only change things through the Home Assistant actions, with a control token');
+    const scope = req.tokenScope ?? 'read';
+    // On the public API a token stands in for a parent, as far as its scope reaches (read: GET only).
+    const v1 = (req.routeOptions.config as { v1?: 'read' | 'control' } | undefined)?.v1;
+    if (v1) {
+      if (v1 === 'control' && scope !== 'control') throw new HttpError(403, 'This needs a control token. Read tokens can only look.');
+      return { homeId, user: null, tokenName: req.tokenName ?? 'API', actor: { kind: 'parent', user: null, memberId: null } };
+    }
+    actor = { kind: 'token', scope };
+    // Elsewhere, tokens only ever change things through the Home Assistant actions, and only control tokens can.
+    // Checked here too so a route that forgets to refuse tokens can't be used to write with one.
+    if (!['GET', 'HEAD'].includes(req.method) && (scope !== 'control' || !req.routeOptions.url?.startsWith('/api/homes/:homeId/ha/'))) {
+      throw new HttpError(403, 'Tokens can only change things through the Home Assistant actions or /api/v1, with a control token');
     }
   }
   if (!actor) {

@@ -17,6 +17,7 @@ import { KidPicker } from './pages/KidPicker.tsx';
 import { FamilyWall } from './pages/FamilyWall.tsx';
 import { Reminders } from './pages/Reminders.tsx';
 import { KidBoard, ParentKidBoard } from './pages/KidBoard.tsx';
+import { ApiDocs } from './pages/ApiDocs.tsx';
 import { DownloadsPage } from './pages/Downloads.tsx';
 
 const NAV = [
@@ -63,6 +64,8 @@ export function App() {
   if (loading) {
     return <div className="center-screen"><RaccoonAvatar variant="ninja" size={96} title="Loading" /></div>;
   }
+  // The API reference is open to anyone (it describes the API, it doesn't use it).
+  if (loc.pathname === '/api-docs') return <ApiDocs />;
   // The app download page is open to anyone, signed in or not.
   if (loc.pathname === '/download') return <DownloadsPage />;
 
