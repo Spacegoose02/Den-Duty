@@ -580,6 +580,41 @@ export const MIGRATIONS: string[] = [
     PRIMARY KEY (goal_id, date)
   );
   `,
+  // Closing Parent Duty cards: a closed card leaves the board for its history (done or not). Done cards that had
+  // already dropped off the board (older than 30 days) start out in history.
+  `
+  ALTER TABLE honeydo ADD COLUMN closed_at TEXT;
+  ALTER TABLE honeydo ADD COLUMN close_note TEXT;
+  ALTER TABLE honeydo ADD COLUMN closed_by TEXT REFERENCES users(id) ON DELETE SET NULL;
+  UPDATE honeydo SET closed_at = done_at WHERE status = 'done' AND done_at <= datetime('now', '-30 days');
+  CREATE INDEX honeydo_closed ON honeydo(home_id, closed_at);
+  `,
+  // The weekly chore archive: one frozen row per kid per finished week, so weeks can be looked back on and compared
+  // even after chores are edited or removed. A week stays open (final = 0) for 7 days after it ends to catch late approvals.
+  `
+  CREATE TABLE week_archive (
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    week_start TEXT NOT NULL,
+    week_end TEXT NOT NULL,
+    points INTEGER NOT NULL,
+    done INTEGER NOT NULL,
+    due INTEGER NOT NULL,
+    bonus_done INTEGER NOT NULL,
+    perfect_days INTEGER NOT NULL,
+    streak INTEGER NOT NULL,
+    penalties INTEGER NOT NULL,
+    spent INTEGER NOT NULL,
+    rewards INTEGER NOT NULL,
+    balance INTEGER NOT NULL,
+    chores TEXT NOT NULL DEFAULT '[]',
+    days TEXT NOT NULL DEFAULT '[]',
+    final INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (member_id, week_start)
+  );
+  CREATE INDEX week_archive_home ON week_archive(home_id, week_start);
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

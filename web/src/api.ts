@@ -125,6 +125,16 @@ export interface KidStats {
   /** When Goals & rewards is on. */
   goalStats: GoalStats | null;
 }
+/** One kid's finished week from the weekly archive. */
+export interface ArchivedWeek {
+  memberId: string; weekStart: string; weekEnd: string; points: number; done: number; due: number; bonusDone: number;
+  perfectDays: number; streak: number; penalties: number; spent: number; rewards: number; balance: number;
+  chores: { title: string; icon: string; due: number; done: number; points: number }[];
+  days: DayStat[];
+  /** False while the week still takes late approvals (7 days after it ends). */
+  final: boolean;
+}
+export interface ArchiveWeek { weekStart: string; weekEnd: string; final: boolean; kids: ArchivedWeek[] }
 export interface DoctorsStats {
   weeks: string[]; perWeek: { area: string; values: number[] }[]; streak: number; practicesInRange: number;
   goals: { id: string; title: string; area: string; progress: number; status: string }[];
