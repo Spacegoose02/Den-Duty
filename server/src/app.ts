@@ -23,6 +23,7 @@ import { reminderRoutes } from './routes/reminders.ts';
 import { haRoutes } from './routes/ha.ts';
 import { calendarRoutes } from './routes/calendars.ts';
 import { aiRoutes } from './routes/ai.ts';
+import { archiveRoutes } from './routes/archive.ts';
 
 export async function buildApp(db: DatabaseSync, opts: { logger?: boolean; serveWeb?: boolean } = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 1024 * 1024, trustProxy: config.trustProxy });
@@ -55,6 +56,7 @@ export async function buildApp(db: DatabaseSync, opts: { logger?: boolean; serve
   haRoutes(app, db);
   calendarRoutes(app, db);
   aiRoutes(app, db);
+  archiveRoutes(app, db);
 
   const hasWeb = opts.serveWeb !== false && fs.existsSync(path.join(config.webDist, 'index.html'));
   if (hasWeb) {

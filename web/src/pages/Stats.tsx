@@ -6,6 +6,7 @@ import { BarList, ChartTable, ColumnChart, Legend, LineChart } from '../componen
 import { ProgressBar, shortDate } from '../components/Bits.tsx';
 import { seriesColor } from '../../../shared/catalog.ts';
 import { AREA_ICONS, AREA_LABELS } from './Doctors.tsx';
+import { WeeklyArchive } from './Archive.tsx';
 
 type StatsKid = Kid & KidStats;
 
@@ -165,7 +166,8 @@ function GoalsPanel({ s, color, missedColor }: { s: GoalStats; color: string; mi
 export function Stats() {
   const { base, home, dark } = useApp();
   const [weeks, setWeeks] = useState(12);
-  const [data] = useLoad<{ today: string; weeks: number; kids: StatsKid[] }>(`${base}/stats?weeks=${weeks}`);
+  const [view, setView] = useState<'charts' | 'archive'>('charts');
+  const [data] = useLoad<{ today: string; weeks: number; kids: StatsKid[] }>(view === 'charts' ? `${base}/stats?weeks=${weeks}` : null, [view]);
   const [picked, setPicked] = useState<string | null>(null);
   const kid = data?.kids.find((k) => k.id === picked) ?? data?.kids[0];
   const missedColor = dark ? '#5c636a' : '#ced4da';
@@ -177,12 +179,17 @@ export function Stats() {
       <div className="topbar">
         <h1>Stats</h1>
         <div className="chips">
-          {[4, 12, 26].map((w) => <button key={w} className={`chip${weeks === w ? ' on' : ''}`} onClick={() => setWeeks(w)}>{w} weeks</button>)}
+          <button className={`chip${view === 'charts' ? ' on' : ''}`} onClick={() => setView('charts')}>📈 Charts</button>
+          <button className={`chip${view === 'archive' ? ' on' : ''}`} onClick={() => setView('archive')}>🗄️ Weekly archive</button>
         </div>
+        {view === 'charts' && <div className="chips">
+          {[4, 12, 26].map((w) => <button key={w} className={`chip${weeks === w ? ' on' : ''}`} onClick={() => setWeeks(w)}>{w} weeks</button>)}
+        </div>}
       </div>
-      {data && !data.kids.length && <div className="card">Add kids and chores, and their charts show up here.</div>}
+      {view === 'archive' && <WeeklyArchive />}
+      {view === 'charts' && data && !data.kids.length && <div className="card">Add kids and chores, and their charts show up here.</div>}
 
-      {data && data.kids.length > 1 && (
+      {view === 'charts' && data && data.kids.length > 1 && (
         <section className="card stack">
           <h2 style={{ margin: 0 }}>{home?.pointsName} per week, everyone</h2>
           <LineChart labels={weekLabels} series={compare} />
@@ -190,7 +197,7 @@ export function Stats() {
         </section>
       )}
 
-      {data && kid && (
+      {view === 'charts' && data && kid && (
         <>
           <div className="chips">
             {data.kids.map((k) => (
