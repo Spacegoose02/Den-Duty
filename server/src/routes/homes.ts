@@ -4,7 +4,7 @@ import { addParent, DEVICE_COOKIE, homeCtx, KID_COOKIE, requireAdmin, requireUse
 import { tx, type Row } from '../db.ts';
 import { config } from '../config.ts';
 import { HttpError, newId, randomToken, readableCode, requireStr, sha256, str } from '../util.ts';
-import { hashPassword } from '../security.ts';
+import { hashPassword, limitAuth } from '../security.ts';
 import { balance, homeInfo, homeToday } from '../chores.ts';
 import { ageOn, pictureMode } from '../../../shared/ages.ts';
 import { DOCTOR_AREA_IDS, IDEAS_OFF_DEFAULT, KID_PAGE_IDS, offList, PRACTICE_IDEA_IDS, type DoctorArea, type KidPage, type PracticeIdea } from '../../../shared/pages.ts';
@@ -102,6 +102,8 @@ export function homeRoutes(app: FastifyInstance, db: DatabaseSync): void {
   app.post('/api/homes/join', async (req) => {
     const user = requireUser(req);
     const code = requireStr((req.body as Row)?.code, 'Join code', 20).toUpperCase().replace(/[^A-Z0-9]/g, '');
+    // Join codes let you into a home as a parent, so guessing them is rate limited like a password.
+    limitAuth(req, 'join', user.id);
     const home = db.prepare('SELECT id FROM homes WHERE join_code = ?').get(code) as Row | undefined;
     if (!home) throw new HttpError(404, 'No home has that join code');
     addParent(db, home.id as string, user);

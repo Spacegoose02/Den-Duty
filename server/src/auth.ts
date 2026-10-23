@@ -347,6 +347,11 @@ export function homeCtxFor(db: DatabaseSync, req: FastifyRequest, homeId: string
   else if (req.tokenHomeId) {
     if (req.tokenHomeId !== homeId) throw new HttpError(403, 'Token is for a different home');
     actor = { kind: 'token', scope: req.tokenScope ?? 'read' };
+    // Tokens only ever change things through the Home Assistant actions, and only control tokens can. Checked here
+    // too so a route that forgets to refuse tokens can't be used to write with one.
+    if (!['GET', 'HEAD'].includes(req.method) && (actor.scope !== 'control' || !req.routeOptions.url?.startsWith('/api/homes/:homeId/ha/'))) {
+      throw new HttpError(403, 'Tokens can only change things through the Home Assistant actions, with a control token');
+    }
   }
   if (!actor) {
     if (!req.user && !req.device) throw new HttpError(401, 'Please sign in');
