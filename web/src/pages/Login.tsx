@@ -146,6 +146,7 @@ export function Login({ onTablet = false }: { onTablet?: boolean }) {
 
         {error && <p style={{ color: 'var(--danger)', margin: 0 }}>{error}</p>}
         {onTablet && <button className="ghost" onClick={() => nav('/')}>← Back to the kids</button>}
+        {!onTablet && <a href="/download" className="small" style={{ textAlign: 'center' }}>📲 Get the Windows or Android app</a>}
       </div>
     </div>
   );
