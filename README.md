@@ -132,6 +132,16 @@ rest:
 
 Tokens can read but never change anything.
 
+## API
+
+Den Duty has a public API at `/api/v1` for your own apps, dashboards and scripts: kids, chores and their daily status, the review queue, approving and rejecting, points and goals, Parent Duty, the weekly archive and events. Make a token in **Settings → Home Assistant, automations and the API** and send it as `Authorization: Bearer dnk_…`. Read tokens can call the GET endpoints; control tokens can call all of them, and whatever they do is credited to the token by name. Doctors, Helpdesk and AI stay out of the API.
+
+The reference is at `/api-docs` on your server (the OpenAPI file is `/api/v1/openapi.json`).
+
+```bash
+curl -H "Authorization: Bearer $DEN_DUTY_TOKEN" http://YOUR-SERVER:8080/api/v1/homes/YOUR-HOME-ID/instances?status=submitted
+```
+
 ## Development
 
 Requires Node.js 24 or newer.

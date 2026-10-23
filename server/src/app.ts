@@ -24,6 +24,7 @@ import { haRoutes } from './routes/ha.ts';
 import { calendarRoutes } from './routes/calendars.ts';
 import { aiRoutes } from './routes/ai.ts';
 import { archiveRoutes } from './routes/archive.ts';
+import { installV1, v1Routes } from './routes/v1.ts';
 
 export async function buildApp(db: DatabaseSync, opts: { logger?: boolean; serveWeb?: boolean } = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 1024 * 1024, trustProxy: config.trustProxy });
@@ -40,6 +41,8 @@ export async function buildApp(db: DatabaseSync, opts: { logger?: boolean; serve
 
   app.get('/api/health', async () => ({ ok: true }));
 
+  // Before the routes, so it can serve the public ones again under /api/v1.
+  installV1(app);
   registerAuthRoutes(app, db);
   accountRoutes(app, db);
   homeRoutes(app, db);
@@ -57,6 +60,7 @@ export async function buildApp(db: DatabaseSync, opts: { logger?: boolean; serve
   calendarRoutes(app, db);
   aiRoutes(app, db);
   archiveRoutes(app, db);
+  v1Routes(app, db);
 
   const hasWeb = opts.serveWeb !== false && fs.existsSync(path.join(config.webDist, 'index.html'));
   if (hasWeb) {

@@ -17,6 +17,7 @@ import { KidPicker } from './pages/KidPicker.tsx';
 import { FamilyWall } from './pages/FamilyWall.tsx';
 import { Reminders } from './pages/Reminders.tsx';
 import { KidBoard, ParentKidBoard } from './pages/KidBoard.tsx';
+import { ApiDocs } from './pages/ApiDocs.tsx';
 
 const NAV = [
   { to: '/', ico: '🏠', label: 'Home', end: true },
@@ -62,6 +63,8 @@ export function App() {
   if (loading) {
     return <div className="center-screen"><RaccoonAvatar variant="ninja" size={96} title="Loading" /></div>;
   }
+  // The API reference is open to anyone (it describes the API, it doesn't use it).
+  if (loc.pathname === '/api-docs') return <ApiDocs />;
 
   // A family tablet with no parent signed in: kids pick their avatar. Parents can still sign in on top.
   if (!who?.user && who?.device) {
