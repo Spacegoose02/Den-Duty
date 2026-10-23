@@ -77,6 +77,8 @@ All settings are environment variables. See [.env.example](.env.example).
 | `LOCAL_LOGIN` | Name-only quick sign-in for parents: `lan` (home network only), `off`, or `anywhere`. |
 | `TRUST_PROXY` | Reverse proxies allowed to set X-Forwarded headers. Defaults to loopback and private networks. |
 | `SESSION_SECRET` | Optional. Generated and saved in the data folder if empty. |
+| `DOWNLOADS_DIR` | Folder of app files (EXE, APK…) offered on the `/download` page. Defaults to `downloads` in the data folder. |
+| `DOWNLOADS_FALLBACK` | Where `/download` links when the folder has no file for a device: the newest GitHub release by default, `off`, or another URL. |
 | `TZ` | Fallback time zone for new homes. Each home stores its own (set from the browser, changeable in Settings), so “today” flips at your midnight. |
 
 ## How points work
@@ -97,6 +99,8 @@ All settings are environment variables. See [.env.example](.env.example).
 4. Family tablets use a long random device token, not a password. Unpair a lost tablet in **Settings → Family tablets**. Kid PINs are rate limited.
 
 ## Apps
+
+Your server has a public **download page** at `/download` (linked from the sign-in screen and Settings → Family tablets). It offers the newest app for the visitor's device, shows the server address to type into the app, and has a QR code to open the page on a phone. Put the files in the `downloads` folder inside your data folder (`/data/downloads` in Docker, or set `DOWNLOADS_DIR`), for example `DenDuty-Setup-0.1.0.exe`, `DenDuty-Portable-0.1.0.exe` and `DenDuty-v0.1.0.apk`. For anything missing from that folder, the page links to the newest GitHub release instead (set `DOWNLOADS_FALLBACK=off` to turn that off, or point it at your own mirror).
 
 - **Windows**: the installer or portable EXE from [Releases](../../releases). On first launch, enter your server's address. Change servers from the app menu.
 - **Android (phones and tablets)**: the APK from [Releases](../../releases). Enter your server's address, then either pair it as the family tablet (Settings → Family tablets → Get a tablet code) or sign yourself in (Settings → Pair a device).

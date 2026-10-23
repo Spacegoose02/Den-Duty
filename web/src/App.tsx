@@ -18,6 +18,7 @@ import { FamilyWall } from './pages/FamilyWall.tsx';
 import { Reminders } from './pages/Reminders.tsx';
 import { KidBoard, ParentKidBoard } from './pages/KidBoard.tsx';
 import { ApiDocs } from './pages/ApiDocs.tsx';
+import { DownloadsPage } from './pages/Downloads.tsx';
 
 const NAV = [
   { to: '/', ico: '🏠', label: 'Home', end: true },
@@ -65,6 +66,8 @@ export function App() {
   }
   // The API reference is open to anyone (it describes the API, it doesn't use it).
   if (loc.pathname === '/api-docs') return <ApiDocs />;
+  // The app download page is open to anyone, signed in or not.
+  if (loc.pathname === '/download') return <DownloadsPage />;
 
   // A family tablet with no parent signed in: kids pick their avatar. Parents can still sign in on top.
   if (!who?.user && who?.device) {

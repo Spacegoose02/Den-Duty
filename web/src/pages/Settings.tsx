@@ -68,6 +68,7 @@ function FamilyTablets() {
         </button>
         {code && <span className="pair-code">{code}</span>}
         {code && <span className="small muted">On the tablet, open this site, choose “I have a pairing code” and type it. Valid 10 minutes.</span>}
+        <a href="/download" className="btn ghost">📲 Get the apps</a>
       </div>
       {!who?.device && (
         <button style={{ alignSelf: 'flex-start' }} onClick={async () => {

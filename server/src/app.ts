@@ -25,6 +25,7 @@ import { calendarRoutes } from './routes/calendars.ts';
 import { aiRoutes } from './routes/ai.ts';
 import { archiveRoutes } from './routes/archive.ts';
 import { installV1, v1Routes } from './routes/v1.ts';
+import { downloadRoutes } from './routes/downloads.ts';
 
 export async function buildApp(db: DatabaseSync, opts: { logger?: boolean; serveWeb?: boolean } = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 1024 * 1024, trustProxy: config.trustProxy });
@@ -61,6 +62,7 @@ export async function buildApp(db: DatabaseSync, opts: { logger?: boolean; serve
   aiRoutes(app, db);
   archiveRoutes(app, db);
   v1Routes(app, db);
+  downloadRoutes(app);
 
   const hasWeb = opts.serveWeb !== false && fs.existsSync(path.join(config.webDist, 'index.html'));
   if (hasWeb) {

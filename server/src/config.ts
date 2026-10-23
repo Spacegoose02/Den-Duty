@@ -72,5 +72,11 @@ export const config = {
     : null,
   // Fallback time zone for homes whose browser didn't say (each home stores its own).
   defaultTimezone: process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+  // App files (Windows EXE, Android APK...) the server offers on its /download page. Drop them in this folder.
+  downloadsDir: path.resolve(process.env.DOWNLOADS_DIR || path.join(process.env.DATA_DIR || './data', 'downloads')),
+  // Where the /download page sends people when the folder has no file for their device: the newest GitHub release
+  // by default, or "off". The release workflow publishes copies with fixed names so these links never go stale.
+  downloadsFallback: process.env.DOWNLOADS_FALLBACK === 'off' ? null
+    : (process.env.DOWNLOADS_FALLBACK || 'https://github.com/Spacegoose02/Den-Duty/releases/latest/download').replace(/\/$/, ''),
   webDist: path.resolve(process.env.WEB_DIST || fileURLToPath(new URL('../../web/dist', import.meta.url))),
 };

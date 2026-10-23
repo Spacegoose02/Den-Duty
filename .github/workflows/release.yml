@@ -65,6 +65,12 @@ jobs:
         with:
           path: dist
           merge-multiple: true
+      # Copies with fixed names, so releases/latest/download/<name> always works (the server's /download page links there).
+      - name: Add fixed-name copies
+        run: |
+          cp dist/DenDuty-Setup-*.exe dist/DenDuty-Setup.exe
+          cp dist/DenDuty-Portable-*.exe dist/DenDuty-Portable.exe
+          cp dist/DenDuty-v*.apk dist/DenDuty.apk
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*
