@@ -106,8 +106,16 @@ const MAX_BYTES = 2 * 1024 * 1024;
 export let fetchText = async (url: string): Promise<string> => {
   const res = await fetch(url.replace(/^webcal:/i, 'https:'), { signal: AbortSignal.timeout(8000), headers: { accept: 'text/calendar, */*' } });
   if (!res.ok) throw new Error(`The feed answered ${res.status}`);
-  const text = await res.text();
-  if (text.length > MAX_BYTES) throw new Error('That feed is too big (over 2 MB)');
+  // Read at most MAX_BYTES, so a huge (or endless) response can't fill the server's memory.
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for await (const chunk of (res.body ?? []) as AsyncIterable<Uint8Array>) {
+    size += chunk.byteLength;
+    // Leaving the loop cancels the rest of the download.
+    if (size > MAX_BYTES) throw new Error('That feed is too big (over 2 MB)');
+    chunks.push(chunk);
+  }
+  const text = Buffer.concat(chunks).toString('utf8');
   if (!text.includes('BEGIN:VCALENDAR')) throw new Error("That address doesn't return an ICS calendar");
   return text;
 };

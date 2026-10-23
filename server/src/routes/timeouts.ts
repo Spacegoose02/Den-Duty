@@ -170,7 +170,8 @@ export function timeoutRoutes(app: FastifyInstance, db: DatabaseSync): void {
   // The kid asks to buy some time back. Nothing is spent until a parent approves.
   app.post('/api/homes/:homeId/timeouts/:id/requests', async (req) => {
     const ctx = homeCtx(db, req);
-    if (ctx.actor.kind === 'token') throw new HttpError(403, 'Kids ask for this on their own screen');
+    // The kid themselves (signed in on the tablet, PIN and all) or a parent; not a tablet nobody has tapped into.
+    if (ctx.actor.kind !== 'kid' && ctx.actor.kind !== 'parent') throw new HttpError(403, 'Kids ask for this on their own screen');
     const cur = get(ctx, (req.params as { id: string }).id);
     assertCanActFor(ctx, cur.member_id as string);
     on(cur.member_id as string);
@@ -203,6 +204,7 @@ export function timeoutRoutes(app: FastifyInstance, db: DatabaseSync): void {
 
   app.delete('/api/homes/:homeId/timeout-requests/:rid', async (req) => {
     const ctx = homeCtx(db, req);
+    if (ctx.actor.kind !== 'kid' && ctx.actor.kind !== 'parent') throw new HttpError(403, 'Tap your raccoon first');
     const r = request(ctx, (req.params as { rid: string }).rid);
     assertCanActFor(ctx, r.member_id as string);
     db.prepare("UPDATE timeout_requests SET status = 'cancelled', decided_at = datetime('now') WHERE id = ?").run(r.id as string);
