@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.ts';
 import { useApp, useLoad } from '../state.tsx';
-import { RaccoonAvatar } from '../components/Raccoon.tsx';
+import { AvatarPicker, RaccoonAvatar } from '../components/Raccoon.tsx';
 import { AdminSignIn, AdminUserActions, SecurityCard } from './Security.tsx';
-import { AVATARS, AVATAR_LABELS, POINT_ICONS } from '../../../shared/catalog.ts';
+import { POINT_ICONS } from '../../../shared/catalog.ts';
 import { ThemePicker } from '../components/ThemePicker.tsx';
 import { CalendarsCard } from './Calendars.tsx';
 import { AiCard } from '../components/Ideas.tsx';
@@ -24,15 +24,8 @@ function Profile() {
         <button>Save name</button>
       </form>
       {user.email && <p className="small muted" style={{ margin: 0 }}>Signed in with Google as {user.email}</p>}
-      <h3>Raccoon avatar</h3>
-      <div className="chips">
-        {AVATARS.map((a) => (
-          <button key={a} className={`chip avatar-chip${user.avatar === a ? ' on' : ''}`} onClick={() => update({ avatar: a })}>
-            <RaccoonAvatar variant={a} size={52} />
-            <span className="small">{AVATAR_LABELS[a]}</span>
-          </button>
-        ))}
-      </div>
+      <h3>Your avatar</h3>
+      <AvatarPicker value={user.avatar} onPick={(avatar) => void update({ avatar })} />
       <h3>Your theme</h3>
       <ThemePicker value={user.theme === 'home' ? null : user.theme} onPick={(t) => void update({ theme: t ?? 'home' })}
         inherit={{ label: 'Same as the home', theme: home?.theme ?? 'sunny' }} />

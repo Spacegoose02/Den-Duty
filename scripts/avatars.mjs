@@ -1,4 +1,4 @@
-// Renders the raccoon avatars and Dr. Bandit from the app's own React components into brand/characters/ (SVG + PNG),
+// Renders the avatars (every animal, and the raccoon in every outfit) and Dr. Bandit from the app's own React components into brand/characters/ (SVG + PNG),
 // so the brand art always matches what's on screen. Called by scripts/brand.mjs; uses Vite to load the TSX.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -17,7 +17,7 @@ export async function renderCharacters(outDir) {
   const vite = await createServer({ root: WEB, logLevel: 'error', server: { middlewareMode: true, hmr: false }, appType: 'custom', configFile: false });
   try {
     const { RaccoonAvatar, DoctorRaccoon } = await vite.ssrLoadModule('/src/components/Raccoon.tsx');
-    const { AVATARS, AVATAR_LABELS } = await vite.ssrLoadModule('/../shared/catalog.ts');
+    const { ANIMALS, OUTFITS, avatarId, avatarLabel } = await vite.ssrLoadModule('/../shared/catalog.ts');
     fs.mkdirSync(path.join(outDir, 'avatars'), { recursive: true });
     const write = async (file, el) => {
       let svg = renderToStaticMarkup(el);
@@ -25,9 +25,11 @@ export async function renderCharacters(outDir) {
       fs.writeFileSync(`${file}.svg`, svg);
       await sharp(Buffer.from(svg), { density: 600 }).resize(512, 512, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } }).png().toFile(`${file}.png`);
     };
-    for (const a of AVATARS) await write(path.join(outDir, 'avatars', `raccoon-${a}`), React.createElement(RaccoonAvatar, { variant: a, size: 512, title: AVATAR_LABELS[a] }));
+    const avatar = (file, id) => write(path.join(outDir, 'avatars', file), React.createElement(RaccoonAvatar, { variant: id, size: 512, title: avatarLabel(id) }));
+    for (const o of OUTFITS) await avatar(`raccoon-${o}`, avatarId('raccoon', o));
+    for (const a of ANIMALS) if (a !== 'raccoon') await avatar(a, avatarId(a, 'classic'));
     await write(path.join(outDir, 'dr-bandit'), React.createElement(DoctorRaccoon, { size: 512, title: 'Dr. Bandit' }));
-    return AVATARS.length;
+    return OUTFITS.length + ANIMALS.length - 1;
   } finally {
     await vite.close();
   }

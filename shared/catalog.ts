@@ -1,26 +1,65 @@
 // Built-in choices shared by the server (to validate) and the app (to show).
 
-/** Raccoon avatars. Drawn in web/src/components/Raccoon.tsx. */
-export const AVATARS = [
+/** Avatars are an animal friend wearing an outfit. Drawn in web/src/components/Raccoon.tsx. */
+export const ANIMALS = ['raccoon', 'fox', 'panda', 'bunny', 'cat', 'bear', 'puppy', 'koala', 'tiger'] as const;
+export type Animal = (typeof ANIMALS)[number];
+
+export const ANIMAL_LABELS: Record<Animal, string> = {
+  raccoon: 'Raccoon', fox: 'Fox', panda: 'Panda', bunny: 'Bunny', cat: 'Kitty', bear: 'Bear', puppy: 'Puppy', koala: 'Koala', tiger: 'Tiger',
+};
+
+/** Outfits any animal can wear. 'classic' is no outfit. */
+export const OUTFITS = [
   'classic', 'ninja', 'bandana', 'glasses', 'cap', 'crown', 'bow', 'headphones',
   'party', 'pirate', 'wizard', 'astronaut', 'superhero', 'golden',
 ] as const;
-export type Avatar = (typeof AVATARS)[number];
+export type Outfit = (typeof OUTFITS)[number];
 
-export const AVATAR_LABELS: Record<Avatar, string> = {
+export const OUTFIT_LABELS: Record<Outfit, string> = {
   classic: 'Classic', ninja: 'Ninja', bandana: 'Bandit', glasses: 'Professor',
   cap: 'Sporty', crown: 'Royal', bow: 'Fancy', headphones: 'DJ',
   party: 'Party', pirate: 'Pirate', wizard: 'Wizard', astronaut: 'Astronaut', superhero: 'Superhero', golden: 'Golden Legend',
 };
 
-/** Raccoon level a kid needs before they can pick an avatar themselves (parents can always pick any). */
-export const AVATAR_UNLOCK_LEVEL: Partial<Record<Avatar, number>> = {
+/** Level a kid needs before they can pick an outfit themselves (parents can always pick any). Every animal is open. */
+export const OUTFIT_UNLOCK_LEVEL: Partial<Record<Outfit, number>> = {
   party: 2, pirate: 3, wizard: 4, astronaut: 5, superhero: 6, golden: 7,
 };
 
-export const avatarUnlocked = (avatar: Avatar, level: number): boolean => level >= (AVATAR_UNLOCK_LEVEL[avatar] ?? 1);
+/**
+ * An avatar id: "fox-wizard", or "fox" for a fox in no outfit. A raccoon is just its outfit ("wizard", "classic"),
+ * which is how avatars were stored before there were other animals, so existing picks keep working.
+ */
+export type Avatar = string;
 
-export const isAvatar = (v: unknown): v is Avatar => typeof v === 'string' && (AVATARS as readonly string[]).includes(v);
+export function avatarId(animal: Animal, outfit: Outfit): Avatar {
+  if (animal === 'raccoon') return outfit;
+  return outfit === 'classic' ? animal : `${animal}-${outfit}`;
+}
+
+export function parseAvatar(v: unknown): { animal: Animal; outfit: Outfit } | null {
+  if (typeof v !== 'string') return null;
+  if ((OUTFITS as readonly string[]).includes(v)) return { animal: 'raccoon', outfit: v as Outfit };
+  const [animal, outfit = 'classic', ...rest] = v.split('-');
+  if (rest.length || !(ANIMALS as readonly string[]).includes(animal) || !(OUTFITS as readonly string[]).includes(outfit)) return null;
+  return { animal: animal as Animal, outfit: outfit as Outfit };
+}
+
+export function isAvatar(v: unknown): v is Avatar {
+  const p = parseAvatar(v);
+  return p !== null && avatarId(p.animal, p.outfit) === v;
+}
+
+export function avatarLabel(v: Avatar): string {
+  const p = parseAvatar(v) ?? { animal: 'raccoon', outfit: 'classic' };
+  return p.outfit === 'classic' ? ANIMAL_LABELS[p.animal] : `${OUTFIT_LABELS[p.outfit]} ${ANIMAL_LABELS[p.animal].toLowerCase()}`;
+}
+
+export const outfitUnlocked = (outfit: Outfit, level: number): boolean => level >= (OUTFIT_UNLOCK_LEVEL[outfit] ?? 1);
+export const avatarUnlocked = (avatar: Avatar, level: number): boolean => outfitUnlocked(parseAvatar(avatar)?.outfit ?? 'classic', level);
+
+/** Starting avatars for new kids, so siblings don't all begin as the same animal. */
+export const defaultAvatar = (n: number): Avatar => avatarId(ANIMALS[n % ANIMALS.length], 'classic');
 
 /** Card colors for kids, picked to stay readable with white text. */
 // They double as chart series colors, so the set is checked for color-blind separation and contrast on both light and
