@@ -10,6 +10,7 @@ import { Calendar } from './Week.tsx';
 import { TimeoutCard, TimeoutForm } from '../components/Timeouts.tsx';
 import { KidHelpdesk } from '../components/Helpdesk.tsx';
 import { confetti } from '../components/Confetti.ts';
+import { KidShop } from '../components/Shop.tsx';
 
 const IDLE_MS = 3 * 60e3;
 /** How often a kid's own board checks for chores a grown-up just approved. */
@@ -68,7 +69,8 @@ const COLUMNS: { id: Column; title: string; empty: string }[] = [
 /** How a points entry reads to a kid. Take-aways are shown gently: what happened, not a scolding. */
 function recentLine(e: LedgerEntry, icon: string): { mark: string; text: string; amount: string } {
   const amount = `${e.amount > 0 ? '+' : '−'}${Math.abs(e.amount)} ${icon}`;
-  if (e.kind === 'redeem') return { mark: '🎁', text: e.reason.replace(/^Redeemed: /, 'Got: '), amount };
+  if (e.kind === 'redeem' && e.amount > 0) return { mark: '↩️', text: e.reason.replace(/^Refund: /, 'Points back: '), amount };
+  if (e.kind === 'redeem') return { mark: '🎁', text: e.reason.replace(/^(Redeemed|Bought): /, 'Got: '), amount };
   if (e.kind === 'reversal') return { mark: '↩️', text: e.reason, amount };
   if (e.amount < 0) return { mark: '🌱', text: `Let's work on: ${e.reason}`, amount };
   if (e.kind === 'chore') return { mark: '✅', text: e.reason, amount };
@@ -297,6 +299,8 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
           ))}
         </section>
       )}
+
+      <KidShop kid={kid} asParent={asParent} onBought={() => void reload()} />
 
       {(openPolls.length > 0 || decided.length > 0) && (
         <section className="card stack pg-goals">
