@@ -387,6 +387,18 @@ td, th { text-align: left; padding: 8px; border-bottom: 1px solid var(--border);
 .bonus-card { display: flex; align-items: center; gap: 10px; border: 2px dashed var(--kid, var(--primary)); border-radius: 16px; padding: 10px; }
 .vote-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
 .vote-option { flex-direction: column; min-height: 130px; border-radius: 20px; border: 3px solid var(--border); gap: 4px; }
+.shop-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.shop-item {
+  flex-direction: column; justify-content: flex-start; min-height: 170px; border-radius: 20px; border: 3px solid var(--border);
+  gap: 4px; padding: 12px 10px; background: var(--surface); transition: transform .15s ease, box-shadow .15s ease;
+}
+.shop-item.can-buy { border-color: var(--kid, var(--primary)); box-shadow: 0 6px 18px color-mix(in srgb, var(--kid, var(--primary)) 25%, transparent); }
+.shop-item.can-buy:hover { transform: translateY(-2px); }
+.shop-item:disabled { opacity: .55; }
+.shop-icon { font-size: 2.8rem; line-height: 1.1; }
+.shop-title { font-weight: 700; text-align: center; }
+.shop-price { font-weight: 800; color: var(--primary); }
+.shop-progress { display: grid; gap: 2px; width: 100%; text-align: center; }
 .vote-option.on { border-color: var(--kid, var(--primary)); background: color-mix(in srgb, var(--kid, var(--primary)) 12%, var(--surface)); }
 .badge-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
 .badge { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 2px; padding: 10px; border-radius: 16px; background: var(--surface-2); opacity: 0.7; }

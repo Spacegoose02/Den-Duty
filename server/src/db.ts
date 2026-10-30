@@ -615,6 +615,35 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX week_archive_home ON week_archive(home_id, week_start);
   `,
+  // The rewards shop: parents stock it, kids spend their points, a parent hands the reward over (or refunds it).
+  // Orders copy the title, icon and price so they still read right after the item is changed or removed.
+  `
+  CREATE TABLE shop_items (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    icon TEXT NOT NULL DEFAULT '🎁',
+    price INTEGER NOT NULL CHECK (price > 0),
+    -- NULL means as many as they like.
+    stock INTEGER CHECK (stock IS NULL OR stock >= 0),
+    position INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE shop_orders (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    item_id TEXT REFERENCES shop_items(id) ON DELETE SET NULL,
+    title TEXT NOT NULL,
+    icon TEXT NOT NULL,
+    price INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'waiting' CHECK (status IN ('waiting', 'given', 'refunded')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    closed_at TEXT,
+    closed_by TEXT
+  );
+  CREATE INDEX shop_orders_home ON shop_orders(home_id, status);
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

@@ -11,6 +11,7 @@ import { TimeoutCard, TimeoutForm } from '../components/Timeouts.tsx';
 import { HelpdeskCard } from '../components/Helpdesk.tsx';
 import { RemindersCard } from '../components/Reminders.tsx';
 import { confetti } from '../components/Confetti.ts';
+import { ShopOrdersCard } from '../components/Shop.tsx';
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -92,6 +93,7 @@ export function Dashboard() {
 
       {summary && <RemindersCard items={summary.reminders} onChange={() => void reloadSummary()} />}
       {summary && <HelpdeskCard items={summary.helpdesk} onChange={() => void reloadSummary()} />}
+      {home && <ShopOrdersCard kids={home.kids} onChange={() => void reloadSummary()} />}
 
       {!!summary?.timeouts.length && (
         <section className="card stack">

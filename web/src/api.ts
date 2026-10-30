@@ -108,6 +108,13 @@ export interface Board {
 
 export interface QuickReward { id: string; title: string; icon: string; amount: number }
 
+/** A reward in the shop. stock is null for unlimited. */
+export interface ShopItem { id: string; title: string; icon: string; price: number; stock: number | null }
+export interface ShopOrder {
+  id: string; memberId: string; kidName: string; itemId: string | null; title: string; icon: string; price: number;
+  status: 'waiting' | 'given' | 'refunded'; createdAt: string; closedAt: string | null; closedBy: string | null;
+}
+
 export interface Poll {
   id: string; title: string; status: 'open' | 'closed'; winnerOptionId: string | null; createdAt: string; closedAt: string | null;
   myVote: string | null; totalVotes: number;
