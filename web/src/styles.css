@@ -271,6 +271,19 @@ button.agenda-item:disabled { opacity: 1; cursor: default; }
 .kid-summaries > *:nth-child(3), .kid-grid > *:nth-child(3) { animation-delay: .12s; }
 .kid-summaries > *:nth-child(n+4), .kid-grid > *:nth-child(n+4) { animation-delay: .18s; }
 
+/* A few themes change shape and light, not just color */
+[data-theme='blocky'] :is(.card, button, .btn, .chip, input, select, textarea, .kanban-col, .kanban-card, .modal, .badge, .stats > div, .balance, .progress, .progress-fill, .nav-link, .kid-card, .chore-tile, .toast, .pill) { border-radius: 3px; }
+[data-theme='blocky'] :is(.card, .kanban-card, .kid-card, .chore-tile) { box-shadow: 4px 4px 0 color-mix(in srgb, var(--text) 18%, transparent); }
+[data-theme='blocky'] button.primary { box-shadow: inset -3px -3px 0 rgb(0 0 0 / 0.25), inset 3px 3px 0 rgb(255 255 255 / 0.2); }
+[data-theme='obby'] :is(.card, .kanban-card, .kid-card, .chore-tile) { border-radius: 10px; }
+[data-theme='obby'] button.primary { box-shadow: 0 4px 0 var(--primary-strong); }
+[data-theme='toxic'] button.primary, [data-theme='toxic'] .progress-fill { box-shadow: 0 0 14px color-mix(in srgb, var(--primary) 70%, transparent); }
+[data-theme='toxic'] h1 { text-shadow: 0 0 18px color-mix(in srgb, var(--primary) 45%, transparent); }
+[data-theme='storm'] body { animation: lightning 9s infinite; }
+@keyframes lightning { 0%, 93%, 96%, 100% { background-color: var(--bg); } 94%, 97% { background-color: color-mix(in srgb, var(--primary) 14%, var(--bg)); } }
+[data-theme='glam'] h1 { background: linear-gradient(90deg, var(--primary), #ff7ac6); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme='clubhouse'] .card { border-width: 2px; border-color: color-mix(in srgb, var(--text) 85%, transparent); }
+
 .confetti { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 80; }
 
 @media (prefers-reduced-motion: reduce) {
