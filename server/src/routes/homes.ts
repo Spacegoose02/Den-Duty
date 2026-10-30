@@ -8,7 +8,7 @@ import { hashPassword, limitAuth } from '../security.ts';
 import { balance, homeInfo, homeToday } from '../chores.ts';
 import { ageOn, pictureMode } from '../../../shared/ages.ts';
 import { DOCTOR_AREA_IDS, IDEAS_OFF_DEFAULT, KID_PAGE_IDS, offList, PRACTICE_IDEA_IDS, type DoctorArea, type KidPage, type PracticeIdea } from '../../../shared/pages.ts';
-import { AVATARS, isAvatar, isKidColor, KID_COLORS, POINT_ICONS } from '../../../shared/catalog.ts';
+import { defaultAvatar, isAvatar, isKidColor, KID_COLORS, POINT_ICONS } from '../../../shared/catalog.ts';
 import { isIsoDate, isTimeZone } from '../../../shared/schedule.ts';
 import { isThemeId } from '../../../shared/themes.ts';
 
@@ -203,7 +203,7 @@ export function homeRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const id = newId();
     const pin = b.pin == null || b.pin === '' ? null : await hashPassword(cleanPin(b.pin));
     db.prepare("INSERT INTO members (id, home_id, role, name, avatar, color, pin_hash, position, theme) VALUES (?, ?, 'kid', ?, ?, ?, ?, ?, ?)")
-      .run(id, ctx.homeId, name, isAvatar(b.avatar) ? b.avatar : AVATARS[count % 8],
+      .run(id, ctx.homeId, name, isAvatar(b.avatar) ? b.avatar : defaultAvatar(count),
         isKidColor(b.color) ? b.color : KID_COLORS[count % KID_COLORS.length], pin, count, isThemeId(b.theme) ? b.theme : null);
     applyKidProfile(db, id, b, homeToday(homeInfo(db, ctx.homeId)));
     return kidView(db, getKid(db, ctx, id));

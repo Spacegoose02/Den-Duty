@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, type Goal, type Kid, type LedgerEntry } from '../api.ts';
 import { useApp, useLoad } from '../state.tsx';
-import { RaccoonAvatar } from '../components/Raccoon.tsx';
+import { AvatarPicker, RaccoonAvatar } from '../components/Raccoon.tsx';
 import { Modal, ProgressBar, shortDate } from '../components/Bits.tsx';
-import { AVATARS, AVATAR_LABELS, KID_COLORS } from '../../../shared/catalog.ts';
+import { defaultAvatar, KID_COLORS } from '../../../shared/catalog.ts';
 import { ThemePicker } from '../components/ThemePicker.tsx';
 import { IdeasButton } from '../components/Ideas.tsx';
 import { DOCTOR_AREAS, IDEAS_OFF_DEFAULT, KID_PAGES, PRACTICE_IDEAS, type DoctorArea, type KidPage, type PracticeIdea } from '../../../shared/pages.ts';
@@ -32,14 +32,7 @@ function KidForm({ initial, onSubmit, submitLabel, hasPin, onClearPin }: {
       try { await onSubmit(d); } catch (err) { setError((err as Error).message); }
     }}>
       <input value={d.name} onChange={(e) => setD({ ...d, name: e.target.value })} placeholder="Name" autoFocus />
-      <div className="chips">
-        {AVATARS.map((a) => (
-          <button key={a} type="button" className={`chip avatar-chip${d.avatar === a ? ' on' : ''}`} onClick={() => setD({ ...d, avatar: a })}>
-            <RaccoonAvatar variant={a} size={52} />
-            <span className="small">{AVATAR_LABELS[a]}</span>
-          </button>
-        ))}
-      </div>
+      <AvatarPicker value={d.avatar} onPick={(avatar) => setD({ ...d, avatar })} />
       <div className="chips">
         {KID_COLORS.map((c) => (
           <button key={c} type="button" className={`swatch${d.color === c ? ' on' : ''}`} style={{ background: c }} onClick={() => setD({ ...d, color: c })} aria-label={`Color ${c}`} />
@@ -280,7 +273,7 @@ export function Kids() {
         <Modal onClose={() => setAdding(false)}>
           <div className="stack">
             <h2 style={{ margin: 0 }}>Add a kid</h2>
-            <KidForm initial={{ name: '', avatar: AVATARS[count % AVATARS.length], color: KID_COLORS[count % KID_COLORS.length], pin: '', theme: null, birthdate: '', pictureMode: 'auto', pagesOff: [], doctorAreasOff: [], ideasOff: IDEAS_OFF_DEFAULT, aiOn: true }} submitLabel="Add"
+            <KidForm initial={{ name: '', avatar: defaultAvatar(count), color: KID_COLORS[count % KID_COLORS.length], pin: '', theme: null, birthdate: '', pictureMode: 'auto', pagesOff: [], doctorAreasOff: [], ideasOff: IDEAS_OFF_DEFAULT, aiOn: true }} submitLabel="Add"
               onSubmit={async (d) => {
                 await api(`${base}/kids`, { body: { ...d, pin: d.pin || null } });
                 setAdding(false);

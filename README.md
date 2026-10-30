@@ -8,7 +8,7 @@ Den Duty is the sibling of [Nighttime Ninja](https://github.com/Spacegoose02/Nig
 
 ## What it does
 
-- **Homes with parents and kids.** Parents have accounts; kids get a profile with a **raccoon avatar**, a color, an optional **4-digit PIN** and an optional **birthday**. The age updates itself, tailors chore ideas, and gives kids under 6 a picture-first board.
+- **Homes with parents and kids.** Parents have accounts; kids get a profile with an **animal-friend avatar** (raccoon, fox, panda, bunny, kitty, bear, puppy, koala or tiger, in one of 14 outfits), a color, an optional **4-digit PIN** and an optional **birthday**. The age updates itself, tailors chore ideas, and gives kids under 6 a picture-first board.
 - **Family tablet.** Pair a tablet to your home and it shows every kid's raccoon. Kids tap theirs (plus their PIN) to see their day. It signs itself out after a few idle minutes, and it can never approve anything.
 - **Chores** with an icon, points, and a schedule: **every day**, **specific weekdays**, or **just once**, assigned to one or more kids.
 - **Done → review → points.** Kids tap a chore when it's done; it waits for a parent. Parents **approve** (or send it back with a note) from the review queue. Every approval writes one row to an **append-only points ledger**, so balances are always explainable. Mistakes are undone with a reversing entry, never by editing history.
@@ -18,7 +18,7 @@ Den Duty is the sibling of [Nighttime Ninja](https://github.com/Spacegoose02/Nig
 - **Bonus chores** kids can opt into for extra points: open to everyone or to chosen kids, for every kid or first-come (one per day).
 - **Quick rewards** a parent hands out in one tap (“🤝 Helped someone +3”), and **penalties** with a reason, which kids see worded gently. Balances stop at zero unless you allow negatives in Settings.
 - **Reward votes**: parents suggest rewards, kids vote on the tablet (counts stay hidden until a parent picks), parents choose the winner.
-- **Raccoon levels** (Kit → Scout → Sneak → Shadow → Ninja → Master Ninja → Legend) from lifetime points and redeemed goals. Levels unlock 6 extra raccoon avatars kids can pick themselves.
+- **Raccoon levels** (Kit → Scout → Sneak → Shadow → Ninja → Master Ninja → Legend) from lifetime points and redeemed goals. Levels unlock 6 extra outfits kids can pick themselves.
 - **Badges and streaks**: 16 achievements for firsts, totals and streaks (days in a row with every chore done).
 - **Stats with charts**: points per week compared across kids, points per day, chores done vs due by week, which chores get done, and level / streak / trend tiles. A **Doctors panel** (practices per week by area, goal progress, goals reached, appointments kept and coming up, practice streak) and a **Goals panel** (goal progress, reached and redeemed by week, average time to reach a goal). Every chart has a table view.
 - **Doctors page per kid** (parents only): appointments (doctor, speech, feeding, OT, PT, behavioral, dental), goals by area with progress notes and a progress chart, and notes. Turn each section on or off per kid. Goals can **earn points** for each practice and when they're reached, and can have a **practice schedule** (some weekdays with an optional time, or one date): scheduled practices show on the calendar, where parents tick them off. You can choose to show a kid their own goals and next appointments; notes always stay private.
@@ -115,7 +115,7 @@ npm run dist --workspace apps/desktop          # Windows installer + portable EX
 cd web && npx cap add android && cp -r android-res/. android/app/src/main/res/ && npx cap open android   # then Build → Build APK
 ```
 
-Pushing a tag (`git tag v0.1.0 && git push --tags`) builds the Docker image, the EXE and the APK in GitHub Actions. `npm run icons` regenerates every icon from the logo drawing, plus the [brand/](brand/) folder (logos, app icons, wordmarks, Dr. Bandit and the raccoon avatars).
+Pushing a tag (`git tag v0.1.0 && git push --tags`) builds the Docker image, the EXE and the APK in GitHub Actions. `npm run icons` regenerates every icon from the logo drawing, plus the [brand/](brand/) folder (logos, app icons, wordmarks, Dr. Bandit and the avatars).
 
 ## Home Assistant
 

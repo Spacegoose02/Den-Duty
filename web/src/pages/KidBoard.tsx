@@ -2,9 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, type AgendaItem, type Board, type LedgerEntry, type Poll } from '../api.ts';
 import { useApp, useLoad } from '../state.tsx';
-import { RaccoonAvatar } from '../components/Raccoon.tsx';
+import { AvatarPicker, RaccoonAvatar } from '../components/Raccoon.tsx';
 import { Modal, ProgressBar, dayName } from '../components/Bits.tsx';
-import { AVATARS, AVATAR_LABELS, AVATAR_UNLOCK_LEVEL, avatarUnlocked } from '../../../shared/catalog.ts';
+import { OUTFIT_UNLOCK_LEVEL, outfitUnlocked } from '../../../shared/catalog.ts';
 import { AREA_ICONS, KIND_ICONS, whenText } from './Doctors.tsx';
 import { Calendar } from './Week.tsx';
 import { TimeoutCard, TimeoutForm } from '../components/Timeouts.tsx';
@@ -344,20 +344,10 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
       {picking && (
         <Modal onClose={() => setPicking(false)}>
           <div className="stack">
-            <h2 style={{ margin: 0 }}>Pick your raccoon</h2>
-            <p className="small muted" style={{ margin: 0 }}>Level up to unlock more. You're level {level.level}: {level.badge} {level.name}.</p>
-            <div className="chips">
-              {AVATARS.map((a) => {
-                const open = asParent || avatarUnlocked(a, level.level);
-                return (
-                  <button key={a} className={`chip avatar-chip${kid.avatar === a ? ' on' : ''}`} disabled={!open}
-                    onClick={() => void act(`av-${a}`, async () => { await post(`/kids/${memberId}/avatar`, { avatar: a }); setPicking(false); await refresh(); })}>
-                    <span style={{ filter: open ? undefined : 'grayscale(1) opacity(.5)' }}><RaccoonAvatar variant={a} size={52} /></span>
-                    <span className="small">{open ? AVATAR_LABELS[a] : `🔒 Level ${AVATAR_UNLOCK_LEVEL[a]}`}</span>
-                  </button>
-                );
-              })}
-            </div>
+            <h2 style={{ margin: 0 }}>Pick your animal friend</h2>
+            <p className="small muted" style={{ margin: 0 }}>Every animal is yours to pick. Level up to unlock more outfits. You're level {level.level}: {level.badge} {level.name}.</p>
+            <AvatarPicker value={kid.avatar} lockedAt={(o) => (asParent || outfitUnlocked(o, level.level) ? null : OUTFIT_UNLOCK_LEVEL[o] ?? null)}
+              onPick={(a) => void act(`av-${a}`, async () => { await post(`/kids/${memberId}/avatar`, { avatar: a }); await refresh(); })} />
           </div>
         </Modal>
       )}

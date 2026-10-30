@@ -4,7 +4,7 @@ import {
   addDays, cleanWeekdays, dateRange, describeSchedule, isIsoDate, isScheduledOn, startOfWeek, todayIn, weekdayOf,
   type Schedule,
 } from './schedule.ts';
-import { isAvatar, isKidColor, KID_COLORS } from './catalog.ts';
+import { avatarId, avatarLabel, avatarUnlocked, isAvatar, isKidColor, KID_COLORS, parseAvatar } from './catalog.ts';
 import { THEME_DEFS, THEME_IDS, themeCss } from './themes.ts';
 
 test('date helpers', () => {
@@ -44,6 +44,18 @@ test('chore schedules', () => {
 test('catalog validation', () => {
   assert.ok(isAvatar('ninja') && !isAvatar('dragon'));
   assert.ok(isKidColor(KID_COLORS[0]) && !isKidColor('red'));
+});
+
+test('avatars are an animal in an outfit, and raccoon picks from before still work', () => {
+  assert.deepEqual(parseAvatar('wizard'), { animal: 'raccoon', outfit: 'wizard' });
+  assert.deepEqual(parseAvatar('fox-wizard'), { animal: 'fox', outfit: 'wizard' });
+  assert.deepEqual(parseAvatar('panda'), { animal: 'panda', outfit: 'classic' });
+  assert.equal(avatarId('raccoon', 'pirate'), 'pirate');
+  assert.equal(avatarId('bunny', 'classic'), 'bunny');
+  assert.ok(isAvatar('bunny-bow') && isAvatar('classic'));
+  for (const bad of ['raccoon', 'raccoon-ninja', 'fox-classic', 'fox-dragon', 'fox-ninja-cap', 'dragon']) assert.ok(!isAvatar(bad), bad);
+  assert.equal(avatarLabel('cat-pirate'), 'Pirate kitty');
+  assert.ok(avatarUnlocked('tiger', 1) && !avatarUnlocked('tiger-golden', 6) && avatarUnlocked('tiger-golden', 7));
 });
 
 test('themes', () => {
