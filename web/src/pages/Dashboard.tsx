@@ -10,6 +10,7 @@ import { TodaysTipsCard } from '../components/TherapyHelper.tsx';
 import { TimeoutCard, TimeoutForm } from '../components/Timeouts.tsx';
 import { HelpdeskCard } from '../components/Helpdesk.tsx';
 import { RemindersCard } from '../components/Reminders.tsx';
+import { confetti } from '../components/Confetti.ts';
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -36,6 +37,7 @@ export function Dashboard() {
   }
   const approve = (i: ReviewItem) => act(async () => {
     const r = await api<{ awarded: number }>(`${base}/instances/${i.id}/approve`, { body: {} });
+    confetti({ colors: [i.kid.color], count: 90 });
     toast(`${i.kid.name}: +${r.awarded} ${icon}`);
   });
   const reject = (i: ReviewItem) => {
@@ -45,6 +47,7 @@ export function Dashboard() {
   };
   const approveAll = () => act(async () => {
     const r = await api<{ awarded: number }>(`${base}/review/approve`, { body: { ids: queue!.map((i) => i.id) } });
+    confetti({ colors: [...new Set(queue!.map((i) => i.kid.color))], count: 200 });
     toast(`Approved everything: ${r.awarded} ${icon} handed out`);
   });
 
@@ -67,7 +70,7 @@ export function Dashboard() {
         </div>
       )}
 
-      <section className="card stack">
+      <section className={`card stack review-card${queue?.length ? ' has-items' : ''}`}>
         <div className="row">
           <h2 style={{ margin: 0, flex: 1 }}>To review {!!queue?.length && <span className="pill warn">{queue.length}</span>}</h2>
           {(queue?.length ?? 0) > 1 && <button className="primary" disabled={busy} onClick={approveAll}>✅ Approve all</button>}
@@ -119,7 +122,7 @@ export function Dashboard() {
         {summary?.kids.map((k) => {
           const goal = k.goals[0];
           return (
-            <div key={k.id} className="card kid-summary" style={{ borderTop: `6px solid ${k.color}` }}>
+            <div key={k.id} className="card kid-summary" style={{ ['--kid' as string]: k.color }}>
               <Link to={`/kids/${k.id}`} className="row" style={{ textDecoration: 'none', color: 'inherit' }}>
                 <RaccoonAvatar variant={k.avatar} size={56} />
                 <div style={{ flex: 1 }}>

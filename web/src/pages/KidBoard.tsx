@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, type AgendaItem, type Board, type LedgerEntry, type Poll } from '../api.ts';
 import { useApp, useLoad } from '../state.tsx';
@@ -9,8 +9,11 @@ import { AREA_ICONS, KIND_ICONS, whenText } from './Doctors.tsx';
 import { Calendar } from './Week.tsx';
 import { TimeoutCard, TimeoutForm } from '../components/Timeouts.tsx';
 import { KidHelpdesk } from '../components/Helpdesk.tsx';
+import { confetti } from '../components/Confetti.ts';
 
 const IDLE_MS = 3 * 60e3;
+/** How often a kid's own board checks for chores a grown-up just approved. */
+const APPROVAL_POLL_MS = 20e3;
 
 /** A kid signed in on the family tablet. Signs itself out after a few idle minutes so the next kid starts fresh. */
 export function KidBoard() {
@@ -81,6 +84,30 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
   const [cheer, setCheer] = useState<{ icon: string; text: string } | null>(null);
   const [picking, setPicking] = useState(false);
   const [newTimeout, setNewTimeout] = useState(false);
+  const seenApproved = useRef<Set<string> | null>(null);
+  const justDone = useRef(new Set<string>());
+
+  // On the kid's own screen, keep an eye out for approvals so the party happens while they're still looking.
+  useEffect(() => {
+    if (asParent) return;
+    const t = window.setInterval(() => { if (document.visibilityState === 'visible') void reload(); }, APPROVAL_POLL_MS);
+    return () => window.clearInterval(t);
+  }, [asParent, reload]);
+
+  // Confetti when a chore turns approved after the board first loaded (a grown-up said yes).
+  useEffect(() => {
+    if (!board) return;
+    const approved = new Set(board.todayItems.filter((i) => i.status === 'approved' && i.id).map((i) => i.id!));
+    const before = seenApproved.current;
+    seenApproved.current = approved;
+    if (!before || asParent) return;
+    // Chores that count straight away were already cheered when they were ticked.
+    const fresh = board.todayItems.filter((i) => i.id && approved.has(i.id) && !before.has(i.id) && !justDone.current.has(i.id));
+    if (!fresh.length) return;
+    confetti({ colors: [board.kid.color] });
+    setCheer({ icon: fresh[0].icon, text: fresh.length > 1 ? `${fresh.length} chores approved! 🎉` : `${fresh[0].title}: approved! 🎉` });
+    window.setTimeout(() => setCheer(null), 2200);
+  }, [board, asParent]);
 
   if (!board) return <div className="center-screen"><RaccoonAvatar variant="ninja" size={96} title="Loading" /></div>;
   const { kid, stats, level, streak } = board;
@@ -91,14 +118,15 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
     setBusy(key);
     try { await fn(); await reload(); } catch (e) { toast((e as Error).message); } finally { setBusy(null); }
   }
+  const left = board.todayItems.filter((i) => i.status === 'pending' || i.status === 'rejected').length;
   const post = (path: string, body: object = {}) => api(`${base}${path}`, { body });
   const done = (i: AgendaItem) => act(i.id!, async () => {
+    justDone.current.add(i.id!);
     const r = await post(`/instances/${i.id}/done`) as { awarded: number };
-    if (asParent) toast(`${i.title}: +${r.awarded} ${icon}`);
-    else celebrate(i.icon, 'Nice work! Sent to a grown-up.');
+    if (asParent) { confetti({ colors: [kid.color], count: 80 }); toast(`${i.title}: +${r.awarded} ${icon}`); }
+    else { confetti({ colors: [kid.color], count: left === 1 ? 220 : 90 }); celebrate(i.icon, left === 1 ? 'Last one! You did them all! 🎉' : 'Nice work! Sent to a grown-up.'); }
   });
 
-  const left = board.todayItems.filter((i) => i.status === 'pending' || i.status === 'rejected').length;
   const byColumn = (c: Column) => board.todayItems.filter((i) => columnOf(i) === c);
   const earned = board.achievements.filter((a) => a.earned);
   const openPolls = polls?.filter((p) => p.status === 'open') ?? [];
