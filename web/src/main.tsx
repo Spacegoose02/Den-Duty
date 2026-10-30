@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { AppProvider } from './state.tsx';
 import { App } from './App.tsx';
 import { themeCss } from '../../shared/themes.ts';
+import '@fontsource-variable/nunito';
 import './styles.css';
 
 const themes = document.createElement('style');
