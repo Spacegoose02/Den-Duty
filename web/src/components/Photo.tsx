@@ -5,31 +5,65 @@ import { Modal } from './Bits.tsx';
 
 const MAX_SIDE = 1024;
 
-/** Shrinks a picked photo to at most 1024px on its long side, as a JPEG data: URL. */
-export async function shrinkPhoto(file: File): Promise<string> {
-  const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.round(bitmap.width * scale);
-  canvas.height = Math.round(bitmap.height * scale);
-  canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  bitmap.close();
-  return canvas.toDataURL('image/jpeg', 0.8);
+/** Thrown when a picked file can't be read as a picture; the message is shown to the kid. */
+const UNREADABLE = "That picture couldn't be opened. Try a JPEG or PNG photo (iPhone HEIC photos don't work here).";
+
+/** Decodes a picked file. createImageBitmap first, then a plain <img> for browsers and desktop apps where that fails. */
+async function decode(file: File): Promise<{ source: CanvasImageSource; width: number; height: number; done: () => void }> {
+  try {
+    const bitmap = await createImageBitmap(file);
+    return { source: bitmap, width: bitmap.width, height: bitmap.height, done: () => bitmap.close() };
+  } catch {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = new Image();
+      img.src = url;
+      await img.decode();
+      return { source: img, width: img.naturalWidth, height: img.naturalHeight, done: () => URL.revokeObjectURL(url) };
+    } catch {
+      URL.revokeObjectURL(url);
+      throw new Error(UNREADABLE);
+    }
+  }
 }
 
-/** Opens the camera (or photo picker) and resolves with the shrunk photo, or null if they backed out. */
+/** Shrinks a picked photo to at most 1024px on its long side, as a JPEG data: URL. */
+export async function shrinkPhoto(file: File): Promise<string> {
+  const pic = await decode(file);
+  try {
+    if (!pic.width || !pic.height) throw new Error(UNREADABLE);
+    const scale = Math.min(1, MAX_SIDE / Math.max(pic.width, pic.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(pic.width * scale));
+    canvas.height = Math.max(1, Math.round(pic.height * scale));
+    canvas.getContext('2d')!.drawImage(pic.source, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/jpeg', 0.8);
+  } finally {
+    pic.done();
+  }
+}
+
+/**
+ * Opens the camera (or, on a computer, the file picker) and resolves with the shrunk photo, or null if they backed out.
+ * Rejects with a friendly message if the file isn't a picture we can read. The input is put on the page while the
+ * picker is open: some desktop browsers and the desktop app drop the "picked a file" event for a detached input.
+ */
 export function pickPhoto(): Promise<string | null> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = 'image/*';
+    input.accept = 'image/jpeg,image/png,image/webp,image/gif,image/bmp,image/*';
     input.setAttribute('capture', 'environment');
-    input.onchange = () => {
+    input.style.display = 'none';
+    document.body.appendChild(input);
+    let settled = false;
+    const finish = (fn: () => void) => { if (settled) return; settled = true; input.remove(); fn(); };
+    input.addEventListener('change', () => {
       const f = input.files?.[0];
-      if (!f) return resolve(null);
-      shrinkPhoto(f).then(resolve, () => resolve(null));
-    };
-    input.addEventListener('cancel', () => resolve(null));
+      if (!f) return finish(() => resolve(null));
+      shrinkPhoto(f).then((url) => finish(() => resolve(url)), (e: Error) => finish(() => reject(e)));
+    });
+    input.addEventListener('cancel', () => finish(() => resolve(null)));
     input.click();
   });
 }

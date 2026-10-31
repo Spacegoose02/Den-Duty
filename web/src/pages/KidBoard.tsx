@@ -89,7 +89,6 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
   const [picking, setPicking] = useState(false);
   const [newTimeout, setNewTimeout] = useState(false);
   const seenApproved = useRef<Set<string> | null>(null);
-  const justDone = useRef(new Set<string>());
 
   // On the kid's own screen, keep an eye out for approvals so the party happens while they're still looking.
   useEffect(() => {
@@ -104,9 +103,9 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
     const approved = new Set(board.todayItems.filter((i) => i.status === 'approved' && i.id).map((i) => i.id!));
     const before = seenApproved.current;
     seenApproved.current = approved;
+    // A parent's own ticks count straight away and get their cheer when they're tapped.
     if (!before || asParent) return;
-    // Chores that count straight away were already cheered when they were ticked.
-    const fresh = board.todayItems.filter((i) => i.id && approved.has(i.id) && !before.has(i.id) && !justDone.current.has(i.id));
+    const fresh = board.todayItems.filter((i) => i.id && approved.has(i.id) && !before.has(i.id));
     if (!fresh.length) return;
     confetti({ colors: [board.kid.color] });
     const sent = cheerOf(fresh.find((i) => i.cheer)?.cheer);
@@ -126,14 +125,14 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
   }
   const left = board.todayItems.filter((i) => i.status === 'pending' || i.status === 'rejected').length;
   const post = (path: string, body: object = {}) => api(`${base}${path}`, { body });
+  // Photo chores: a kid snaps the picture first, then it goes to a grown-up. A parent ticking it off doesn't need one.
+  const needsSnap = (i: AgendaItem) => !asParent && i.needsPhoto && !i.hasPhoto;
   const done = (i: AgendaItem) => act(i.id!, async () => {
-    // Photo chores: snap the picture first, then it goes to a grown-up.
-    if (i.needsPhoto && !i.hasPhoto) {
+    if (needsSnap(i)) {
       const image = await pickPhoto();
       if (!image) return;
       await post(`/instances/${i.id}/photo`, { image });
     }
-    justDone.current.add(i.id!);
     const r = await post(`/instances/${i.id}/done`) as { awarded: number };
     if (asParent) { confetti({ colors: [kid.color], count: 80 }); toast(`${i.title}: +${r.awarded} ${icon}`); }
     else { confetti({ colors: [kid.color], count: left === 1 ? 220 : 90 }); celebrate(i.icon, left === 1 ? 'Last one! You did them all! 🎉' : 'Nice work! Sent to a grown-up.'); }
@@ -209,17 +208,20 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
                         <div className="kanban-title">{i.title}</div>
                         <div className="small muted">+{i.points} {icon}{i.surprise ? ' · 🎁 surprise ×2' : isBonus && ' · bonus'}{i.date !== board.today && ` · from ${dayName(i.date)}`}</div>
                         {i.status === 'rejected' && <div className="chore-note">🔁 {i.note ? `“${i.note}”` : 'Try again'}</div>}
-                        {i.needsPhoto && !i.hasPhoto && (col.id === 'todo' || col.id === 'doing') && <div className="small">📸 Snap a photo when it's done</div>}
+                        {needsSnap(i) && (col.id === 'todo' || col.id === 'doing') && <div className="small">📸 {i.status === 'rejected' ? 'Snap a new photo when it\'s done' : 'Snap a photo when it\'s done'}</div>}
                         {cheerOf(i.cheer) && <div className="cheer-tag">{cheerOf(i.cheer)!.icon} {cheerOf(i.cheer)!.text}</div>}
                       </div>
-                      {i.hasPhoto && <PhotoThumb src={`${base}/instances/${k}/photo`} alt={i.title} size={48} />}
+                      {i.hasPhoto && <PhotoThumb src={`${base}/instances/${k}/photo?v=${i.photoVersion ?? ''}`} alt={i.title} size={48} />}
                       <div className="kanban-actions">
                         {col.id === 'todo' && <button disabled={busy === k} onClick={() => void act(k, () => post(`/instances/${k}/start`, { started: true }))} aria-label="Start">▶</button>}
-                        {(col.id === 'todo' || col.id === 'doing') && <button className="primary" disabled={busy === k} onClick={() => void done(i)} aria-label={i.needsPhoto && !i.hasPhoto ? 'Snap a photo and finish' : 'Done'}>{i.needsPhoto && !i.hasPhoto ? '📸' : '✓'}</button>}
+                        {(col.id === 'todo' || col.id === 'doing') && <button className="primary" disabled={busy === k} onClick={() => void done(i)} aria-label={needsSnap(i) ? 'Snap a photo and finish' : 'Done'}>{needsSnap(i) ? '📸' : '✓'}</button>}
                         {col.id === 'doing' && <button disabled={busy === k} onClick={() => void act(k, () => post(`/instances/${k}/start`, { started: false }))} aria-label="Back to to do">↩</button>}
                         {col.id === 'todo' && isBonus && !i.surprise && <button disabled={busy === k} onClick={() => void act(k, () => post(`/instances/${k}/unclaim`))} aria-label="Drop bonus">✕</button>}
                         {col.id === 'waiting' && <button disabled={busy === k} onClick={() => void act(k, () => post(`/instances/${k}/undo`))}>Not yet</button>}
-                        {col.id === 'done' && asParent && <button disabled={busy === k} onClick={() => void act(k, () => post(`/instances/${k}/undo`))}>Undo</button>}
+                        {col.id === 'done' && asParent && <button disabled={busy === k} onClick={() => void act(k, async () => {
+                          const r = await post(`/instances/${k}/undo`) as { paid?: number; taken?: number };
+                          if (r.paid != null && r.taken != null && r.taken < r.paid) toast(`Took back ${r.taken} ${icon} (${kid.name} already spent the rest)`);
+                        })}>Undo</button>}
                       </div>
                     </div>
                   );

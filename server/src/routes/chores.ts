@@ -311,7 +311,8 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const { id } = req.params as { id: string };
     const inst = getInstance(db, ctx.homeId, id);
     if (ctx.actor.kind === 'parent') {
-      return { item: inst.status === 'approved' ? unapproveInstance(db, ctx.homeId, id, byOf(ctx)) : unsubmitInstance(db, ctx.homeId, id) };
+      if (inst.status === 'approved') return unapproveInstance(db, ctx.homeId, id, byOf(ctx));
+      return { item: unsubmitInstance(db, ctx.homeId, id) };
     }
     if (ctx.actor.kind !== 'kid') throw new HttpError(403, 'Tap your avatar first');
     assertCanActFor(ctx, inst.memberId);
@@ -362,9 +363,21 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const ctx = homeCtx(db, req, 'parent');
     const ids = (req.body as Row)?.ids;
     if (!Array.isArray(ids)) throw new HttpError(400, 'Send the chores to approve');
+    // One chore that can't be approved (say it was just deleted) doesn't stop the rest.
     let awarded = 0;
-    for (const id of ids.slice(0, 500)) awarded += approveInstance(db, ctx.homeId, String(id), byOf(ctx)).awarded;
-    return { approved: ids.length, awarded };
+    let approved = 0;
+    let failed = 0;
+    for (const id of ids.slice(0, 500)) {
+      try {
+        const r = approveInstance(db, ctx.homeId, String(id), byOf(ctx));
+        awarded += r.awarded;
+        approved++;
+      } catch (e) {
+        if (!(e instanceof HttpError)) throw e;
+        failed++;
+      }
+    }
+    return { approved, awarded, failed };
   });
 
   app.post('/api/homes/:homeId/instances/:id/reject', async (req) => {

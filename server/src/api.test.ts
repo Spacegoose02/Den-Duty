@@ -192,7 +192,8 @@ test('the core loop: chore, done, review, approve, points, goal', async () => {
   await call(mom, 'POST', `${base}/instances/${item.id}/undo`, {});
   const rejected = await call(mom, 'POST', `${base}/instances/${item.id}/reject`, { note: 'Try again please' });
   assert.equal(rejected.body.item.status, 'rejected');
-  assert.equal((await call(mom, 'GET', `${base}/kids/${ava.id}/ledger`)).body.balance, -5, 'the reversal shows the take-back honestly');
+  // Ava already spent those points, and this home keeps balances at zero or above, so the take-back stops at zero.
+  assert.equal((await call(mom, 'GET', `${base}/kids/${ava.id}/ledger`)).body.balance, 0, 'undoing an approval stops at zero');
 });
 
 test('home assistant tokens can read the summary but not change anything', async () => {
