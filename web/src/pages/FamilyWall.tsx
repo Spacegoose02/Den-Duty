@@ -7,6 +7,8 @@ import { KidPicker, useKidSignIn } from './KidPicker.tsx';
 import { AREA_ICONS, KIND_ICONS, timeText } from './Doctors.tsx';
 import { timeLeft } from '../components/Timeouts.tsx';
 import type { KidPage } from '../../../shared/pages.ts';
+import type { TeamGoal } from '../api.ts';
+import { TeamBar } from '../components/TeamGoals.tsx';
 
 interface WallKid {
   id: string; name: string; avatar: string; color: string; theme: string | null; hasPin: boolean; pagesOff: KidPage[]; balance: number;
@@ -25,6 +27,7 @@ interface Wall {
   settings: { landing: 'wall' | 'picker'; dim: { on: boolean; from: string; to: string } };
   kids: WallKid[]; family: WallDay[]; lunch: { title: string; time: string | null }[];
   polls: { id: string; title: string; options: { id: string; title: string; icon: string }[]; voted: number }[];
+  teamGoals: TeamGoal[];
 }
 
 const REFRESH_MS = 60e3;
@@ -167,6 +170,13 @@ export function FamilyWall() {
               {wall.lunch.map((l, i) => <div key={i} className="wall-line">{l.title}</div>)}
             </div>
           )}
+          {wall.teamGoals?.map((g) => (
+            <div key={g.id} className="wall-day">
+              <div className="wall-day-title">🤝 {g.icon} {g.title}</div>
+              <TeamBar goal={g} />
+              <div className="wall-sub">{g.reached ? '🎉 The family made it!' : `${g.progress} / ${g.target} together`}</div>
+            </div>
+          ))}
           {wall.polls.map((p) => (
             <div key={p.id} className="wall-day">
               <div className="wall-day-title">🗳️ {p.title}</div>

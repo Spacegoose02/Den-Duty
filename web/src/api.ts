@@ -54,7 +54,7 @@ export interface Kid {
 }
 
 export interface HomeDetail {
-  id: string; name: string; pointsName: string; pointsIcon: string; theme: string; timezone: string; weekStart: 0 | 1; allowNegative?: boolean; helpdeskMaxOpen?: number;
+  id: string; name: string; pointsName: string; pointsIcon: string; theme: string; timezone: string; weekStart: 0 | 1; allowNegative?: boolean; surprise?: 'off' | 'sometimes' | 'often' | 'daily'; helpdeskMaxOpen?: number;
   viewer: 'parent' | 'kid' | 'device' | 'token';
   kids: Kid[];
   joinCode?: string;
@@ -64,7 +64,7 @@ export interface HomeDetail {
 
 export interface Chore {
   id: string; title: string; icon: string; points: number; schedule: ScheduleKind; weekdays: number[]; dueDate: string | null;
-  startDate: string; describe: string; memberIds: string[]; bonus: boolean; claimLimit: 'each' | 'one'; category: 'room' | null;
+  startDate: string; describe: string; memberIds: string[]; bonus: boolean; claimLimit: 'each' | 'one'; category: 'room' | null; photo: boolean;
 }
 
 export type ItemStatus = 'pending' | 'submitted' | 'approved' | 'rejected' | 'planned';
@@ -72,6 +72,12 @@ export type ItemStatus = 'pending' | 'submitted' | 'approved' | 'rejected' | 'pl
 export interface AgendaItem {
   id: string | null; choreId: string | null; memberId: string; date: string; title: string; icon: string; points: number;
   status: ItemStatus; note: string | null; started: boolean;
+  /** A surprise bonus chore, worth double. */
+  surprise?: boolean;
+  /** Photo proof: asked for, and whether one was sent. */
+  needsPhoto?: boolean; hasPhoto?: boolean;
+  /** A parent's cheer on the approval (see CHEERS). */
+  cheer?: string | null;
 }
 
 export interface ExternalItem { date: string; time: string | null; title: string; feed: string; kind: string }
@@ -101,12 +107,19 @@ export interface BonusOffer { choreId: string; title: string; icon: string; poin
 
 export interface Board {
   today: string; weekStart: string; kid: Kid; stats: KidWeek; todayItems: AgendaItem[]; week: Day[]; goals: Goal[];
-  bonus: BonusOffer[]; level: LevelInfo; streak: Streak; achievements: Achievement[]; recent: LedgerEntry[]; timeouts: Timeout[];
+  bonus: BonusOffer[]; surprise: { state: 'waiting' } | { state: 'opened'; item: AgendaItem } | null; level: LevelInfo; streak: Streak; achievements: Achievement[]; recent: LedgerEntry[]; timeouts: Timeout[];
   /** Present only when a parent shares the kid's therapy goals with them. */
   therapy: { goals: { id: string; area: string; title: string; progress: number; rewardStep: number; rewardMet: number }[]; upcoming: { id: string; kind: string; title: string; provider: string | null; startsAt: string }[] } | null;
 }
 
 export interface QuickReward { id: string; title: string; icon: string; amount: number }
+
+/** A family goal everyone's earned points fill. */
+export interface TeamGoal {
+  id: string; title: string; icon: string; target: number; reward: string | null; status: 'active' | 'done';
+  progress: number; percent: number; reached: boolean; reachedAt: string | null; doneAt: string | null; createdAt: string;
+  contributions: { memberId: string; name: string; color: string; avatar: string; points: number }[];
+}
 
 /** A reward in the shop. stock is null for unlimited. */
 export interface ShopItem { id: string; title: string; icon: string; price: number; stock: number | null }

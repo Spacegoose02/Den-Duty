@@ -61,6 +61,18 @@ export const avatarUnlocked = (avatar: Avatar, level: number): boolean => outfit
 /** Starting avatars for new kids, so siblings don't all begin as the same animal. */
 export const defaultAvatar = (n: number): Avatar => avatarId(ANIMALS[n % ANIMALS.length], 'classic');
 
+/** Cheers a parent can send with an approval. */
+export const CHEERS = [
+  { id: 'star', icon: '🌟', text: 'Superstar!' },
+  { id: 'highfive', icon: '🙌', text: 'High five!' },
+  { id: 'strong', icon: '💪', text: 'So strong!' },
+  { id: 'champ', icon: '🏆', text: 'Champion!' },
+  { id: 'love', icon: '❤️', text: 'Love it!' },
+  { id: 'wow', icon: '🤩', text: 'Wow!' },
+] as const;
+export type CheerId = (typeof CHEERS)[number]['id'];
+export const isCheer = (v: unknown): v is CheerId => CHEERS.some((c) => c.id === v);
+
 /** Card colors for kids, picked to stay readable with white text. */
 // They double as chart series colors, so the set is checked for color-blind separation and contrast on both light and
 // dark surfaces. Dark themes draw charts with the matching KID_COLORS_DARK step.

@@ -9,7 +9,7 @@ import { WEEKDAY_SHORT, type ScheduleKind } from '../../../shared/schedule.ts';
 import { IdeasButton } from '../components/Ideas.tsx';
 import { choresForAge } from '../../../shared/ages.ts';
 
-interface Draft { id?: string; title: string; icon: string; points: number; schedule: ScheduleKind; weekdays: number[]; dueDate: string; memberIds: string[]; bonus: boolean; claimLimit: 'each' | 'one'; category: 'room' | null }
+interface Draft { id?: string; title: string; icon: string; points: number; schedule: ScheduleKind; weekdays: number[]; dueDate: string; memberIds: string[]; bonus: boolean; claimLimit: 'each' | 'one'; category: 'room' | null; photo: boolean }
 
 function localToday(): string {
   const d = new Date();
@@ -29,7 +29,7 @@ function ChoreEditor({ draft, onClose, onSaved }: { draft: Draft; onClose: () =>
   async function save() {
     setError(null);
     try {
-      const body = { title: d.title, icon: d.icon, points: d.points, schedule: d.schedule, weekdays: d.weekdays, dueDate: d.schedule === 'once' ? d.dueDate : null, memberIds: d.memberIds, bonus: d.bonus, claimLimit: d.claimLimit, category: d.category };
+      const body = { title: d.title, icon: d.icon, points: d.points, schedule: d.schedule, weekdays: d.weekdays, dueDate: d.schedule === 'once' ? d.dueDate : null, memberIds: d.memberIds, bonus: d.bonus, claimLimit: d.claimLimit, category: d.category, photo: d.photo };
       if (d.id) await api(`${base}/chores/${d.id}`, { method: 'PATCH', body });
       else await api(`${base}/chores`, { body });
       toast(d.id ? 'Chore saved' : 'Chore added');
@@ -107,6 +107,10 @@ function ChoreEditor({ draft, onClose, onSaved }: { draft: Draft; onClose: () =>
             <button type="button" className={`chip${d.claimLimit === 'one' ? ' on' : ''}`} onClick={() => set({ claimLimit: 'one' })}>First to grab it, one per day</button>
           </div>
         )}
+        <label className="row" style={{ fontWeight: 600 }}>
+          <input type="checkbox" checked={d.photo} onChange={(e) => set({ photo: e.target.checked })} style={{ width: 24, minHeight: 24 }} />
+          📸 Ask for a photo when it's done
+        </label>
         <label className="field">{d.bonus ? 'Who can pick it (none = every kid)' : 'Who does it'}
           <div className="chips">
             {home?.kids.filter((k) => !k.pagesOff.includes('chores')).map((k) => (
@@ -133,7 +137,7 @@ export function Chores() {
   const [chores, reload] = useLoad<Chore[]>(`${base}/chores`);
   const [editing, setEditing] = useState<Draft | null>(null);
   const kids = new Map(home?.kids.map((k) => [k.id, k]));
-  const blank = (): Draft => ({ title: '', icon: '⭐', points: 1, schedule: 'daily', weekdays: [1, 2, 3, 4, 5], dueDate: localToday(), memberIds: home?.kids.map((k) => k.id) ?? [], bonus: false, claimLimit: 'each', category: null });
+  const blank = (): Draft => ({ title: '', icon: '⭐', points: 1, schedule: 'daily', weekdays: [1, 2, 3, 4, 5], dueDate: localToday(), memberIds: home?.kids.map((k) => k.id) ?? [], bonus: false, claimLimit: 'each', category: null, photo: false });
 
   return (
     <div className="stack">
@@ -147,7 +151,7 @@ export function Chores() {
             <span className="big-icon" aria-hidden>{c.icon}</span>
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 700 }}>{c.title}</div>
-              <div className="small muted">{c.category === 'room' && <span className="pill">🛏️ room</span>} {c.bonus && <span className="pill">💪 bonus{c.claimLimit === 'one' ? ', first come' : ''}</span>} {c.describe} · +{c.points} {home?.pointsIcon}</div>
+              <div className="small muted">{c.category === 'room' && <span className="pill">🛏️ room</span>} {c.bonus && <span className="pill">💪 bonus{c.claimLimit === 'one' ? ', first come' : ''}</span>} {c.photo && <span className="pill">📸 photo</span>} {c.describe} · +{c.points} {home?.pointsIcon}</div>
             </div>
             <div className="row" style={{ gap: 2 }}>
               {c.memberIds.map((m) => <RaccoonAvatar key={m} variant={kids.get(m)?.avatar} size={30} title={kids.get(m)?.name} />)}

@@ -16,7 +16,10 @@ Den Duty is the sibling of [Nighttime Ninja](https://github.com/Spacegoose02/Nig
 - **Your own currency.** Points are called **Shinies ✨** by default; rename them and pick an icon per home (Acorns 🌰, Stars ⭐, Bucks 🪙…).
 - **Kid kanban board**: To do → Doing → Waiting for a grown-up → Done, with big buttons, plus goal progress, recent points and a weekly agenda. **Parent view**: review queue, per-kid summary (points this week, chores done, level, streak), a week grid and a points history.
 - **Bonus chores** kids can opt into for extra points: open to everyone or to chosen kids, for every kid or first-come (one per day).
+- **Family goals**: one goal the whole family works toward (“🦁 Trip to the zoo, 300 points together”). Every point a kid earns from then on fills it, nobody's points are spent, and the bar shows each kid's share in their color on their board and the family wall.
 - **Rewards shop**: stock it with rewards and prices (“🍦 Ice cream, 20 points”, optionally only so many). Kids see how close they are, buy on their own board with a big confirm step and confetti, and the reward shows up on your Home page to hand over or refund.
+- **Surprise bonus** (Settings, off by default): on some days a kid finds a wiggling gift box on their board. Opening it hands them one of today's bonus chores, worth double.
+- **Photo proof and cheers**: tick “📸 Ask for a photo” on a chore and kids snap a picture when they finish (shrunk on the device, kept 30 days in the data folder). You see it in the review queue, and can approve with a cheer (🌟 Superstar!, 🙌 High five!, 💪 So strong!, 🏆 Champion!) that pops up on the kid's board.
 - **Quick rewards** a parent hands out in one tap (“🤝 Helped someone +3”), and **penalties** with a reason, which kids see worded gently. Balances stop at zero unless you allow negatives in Settings.
 - **Reward votes**: parents suggest rewards, kids vote on the tablet (counts stay hidden until a parent picks), parents choose the winner.
 - **Raccoon levels** (Kit → Scout → Sneak → Shadow → Ninja → Master Ninja → Legend) from lifetime points and redeemed goals. Levels unlock 6 extra outfits kids can pick themselves.

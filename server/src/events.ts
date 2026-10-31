@@ -7,7 +7,8 @@ export type EventType = 'chore_submitted' | 'chore_approved' | 'goal_reached' | 
   | 'timeout_started' | 'timeout_ended' | 'timeout_buy_requested' | 'timeout_time_bought'
   | 'helpdesk_requested' | 'helpdesk_answered'
   | 'reminder_due' | 'reminder_done'
-  | 'reward_bought' | 'reward_given' | 'reward_refunded';
+  | 'reward_bought' | 'reward_given' | 'reward_refunded'
+  | 'team_goal_reached';
 
 /** Swapped out in tests so nothing leaves the machine. */
 export let deliver = async (url: string, payload: unknown): Promise<void> => {

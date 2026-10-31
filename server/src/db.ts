@@ -644,6 +644,36 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX shop_orders_home ON shop_orders(home_id, status);
   `,
+  // Family team goals: every kid's earned points (from when the goal was set) fill one shared goal. Nothing is spent.
+  `
+  CREATE TABLE team_goals (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    icon TEXT NOT NULL DEFAULT '🏕️',
+    target INTEGER NOT NULL CHECK (target > 0),
+    reward TEXT,
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'done')),
+    reached_at TEXT,
+    done_at TEXT,
+    created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX team_goals_home ON team_goals(home_id, status);
+  `,
+  // Surprise bonus chores: on some days a kid finds a gift box that turns one of today's bonus chores into double points.
+  `
+  ALTER TABLE homes ADD COLUMN surprise TEXT NOT NULL DEFAULT 'off' CHECK (surprise IN ('off', 'sometimes', 'often', 'daily'));
+  ALTER TABLE chore_instances ADD COLUMN surprise INTEGER NOT NULL DEFAULT 0;
+  `,
+  // Photo proof and cheers: a chore can ask for a photo when it's marked done, and a parent can send a cheer with the approval.
+  // Photos are files in the data folder (photos/<home>/), kept for 30 days.
+  `
+  ALTER TABLE chores ADD COLUMN photo INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE chore_instances ADD COLUMN needs_photo INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE chore_instances ADD COLUMN photo TEXT;
+  ALTER TABLE chore_instances ADD COLUMN cheer TEXT;
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

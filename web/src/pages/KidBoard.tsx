@@ -11,6 +11,8 @@ import { TimeoutCard, TimeoutForm } from '../components/Timeouts.tsx';
 import { KidHelpdesk } from '../components/Helpdesk.tsx';
 import { confetti } from '../components/Confetti.ts';
 import { KidShop } from '../components/Shop.tsx';
+import { KidTeamGoals } from '../components/TeamGoals.tsx';
+import { cheerOf, pickPhoto, PhotoThumb } from '../components/Photo.tsx';
 
 const IDLE_MS = 3 * 60e3;
 /** How often a kid's own board checks for chores a grown-up just approved. */
@@ -107,7 +109,9 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
     const fresh = board.todayItems.filter((i) => i.id && approved.has(i.id) && !before.has(i.id) && !justDone.current.has(i.id));
     if (!fresh.length) return;
     confetti({ colors: [board.kid.color] });
-    setCheer({ icon: fresh[0].icon, text: fresh.length > 1 ? `${fresh.length} chores approved! 🎉` : `${fresh[0].title}: approved! 🎉` });
+    const sent = cheerOf(fresh.find((i) => i.cheer)?.cheer);
+    setCheer(sent ? { icon: sent.icon, text: `${sent.text} ${fresh.length > 1 ? `${fresh.length} chores approved` : `${fresh[0].title}: approved`} 🎉` }
+      : { icon: fresh[0].icon, text: fresh.length > 1 ? `${fresh.length} chores approved! 🎉` : `${fresh[0].title}: approved! 🎉` });
     window.setTimeout(() => setCheer(null), 2200);
   }, [board, asParent]);
 
@@ -123,6 +127,12 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
   const left = board.todayItems.filter((i) => i.status === 'pending' || i.status === 'rejected').length;
   const post = (path: string, body: object = {}) => api(`${base}${path}`, { body });
   const done = (i: AgendaItem) => act(i.id!, async () => {
+    // Photo chores: snap the picture first, then it goes to a grown-up.
+    if (i.needsPhoto && !i.hasPhoto) {
+      const image = await pickPhoto();
+      if (!image) return;
+      await post(`/instances/${i.id}/photo`, { image });
+    }
     justDone.current.add(i.id!);
     const r = await post(`/instances/${i.id}/done`) as { awarded: number };
     if (asParent) { confetti({ colors: [kid.color], count: 80 }); toast(`${i.title}: +${r.awarded} ${icon}`); }
@@ -197,14 +207,17 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
                       <span className="kanban-icon" aria-hidden>{i.icon}</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div className="kanban-title">{i.title}</div>
-                        <div className="small muted">+{i.points} {icon}{isBonus && ' · bonus'}{i.date !== board.today && ` · from ${dayName(i.date)}`}</div>
+                        <div className="small muted">+{i.points} {icon}{i.surprise ? ' · 🎁 surprise ×2' : isBonus && ' · bonus'}{i.date !== board.today && ` · from ${dayName(i.date)}`}</div>
                         {i.status === 'rejected' && <div className="chore-note">🔁 {i.note ? `“${i.note}”` : 'Try again'}</div>}
+                        {i.needsPhoto && !i.hasPhoto && (col.id === 'todo' || col.id === 'doing') && <div className="small">📸 Snap a photo when it's done</div>}
+                        {cheerOf(i.cheer) && <div className="cheer-tag">{cheerOf(i.cheer)!.icon} {cheerOf(i.cheer)!.text}</div>}
                       </div>
+                      {i.hasPhoto && <PhotoThumb src={`${base}/instances/${k}/photo`} alt={i.title} size={48} />}
                       <div className="kanban-actions">
                         {col.id === 'todo' && <button disabled={busy === k} onClick={() => void act(k, () => post(`/instances/${k}/start`, { started: true }))} aria-label="Start">▶</button>}
-                        {(col.id === 'todo' || col.id === 'doing') && <button className="primary" disabled={busy === k} onClick={() => void done(i)} aria-label="Done">✓</button>}
+                        {(col.id === 'todo' || col.id === 'doing') && <button className="primary" disabled={busy === k} onClick={() => void done(i)} aria-label={i.needsPhoto && !i.hasPhoto ? 'Snap a photo and finish' : 'Done'}>{i.needsPhoto && !i.hasPhoto ? '📸' : '✓'}</button>}
                         {col.id === 'doing' && <button disabled={busy === k} onClick={() => void act(k, () => post(`/instances/${k}/start`, { started: false }))} aria-label="Back to to do">↩</button>}
-                        {col.id === 'todo' && isBonus && <button disabled={busy === k} onClick={() => void act(k, () => post(`/instances/${k}/unclaim`))} aria-label="Drop bonus">✕</button>}
+                        {col.id === 'todo' && isBonus && !i.surprise && <button disabled={busy === k} onClick={() => void act(k, () => post(`/instances/${k}/unclaim`))} aria-label="Drop bonus">✕</button>}
                         {col.id === 'waiting' && <button disabled={busy === k} onClick={() => void act(k, () => post(`/instances/${k}/undo`))}>Not yet</button>}
                         {col.id === 'done' && asParent && <button disabled={busy === k} onClick={() => void act(k, () => post(`/instances/${k}/undo`))}>Undo</button>}
                       </div>
@@ -217,6 +230,24 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
           })}
         </div>
       </section>
+
+      {board.surprise?.state === 'waiting' && (
+        <section className="card pg-chores surprise-card">
+          <button className="surprise-box" disabled={busy === 'surprise'} aria-label="Open your surprise"
+            onClick={() => void act('surprise', async () => {
+              const r = await post(`/kids/${memberId}/surprise/open`) as { item: AgendaItem };
+              confetti({ colors: [kid.color, '#ffd43b', '#ff6b6b'], count: 200 });
+              setCheer({ icon: r.item.icon, text: `Surprise! ${r.item.title} for double ${home?.pointsName ?? 'points'}: +${r.item.points} ${icon}` });
+              window.setTimeout(() => setCheer(null), 3200);
+            })}>
+            <span className="surprise-gift" aria-hidden>🎁</span>
+            <span>
+              <strong>{asParent ? `${kid.name} has a surprise waiting` : 'A surprise is waiting for you!'}</strong>
+              <span className="small muted" style={{ display: 'block' }}>{asParent ? 'It opens on their board, or tap to open it now.' : 'Tap to open it'}</span>
+            </span>
+          </button>
+        </section>
+      )}
 
       {board.bonus.length > 0 && (
         <section className="card stack pg-chores">
@@ -299,6 +330,8 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
           ))}
         </section>
       )}
+
+      <KidTeamGoals />
 
       <KidShop kid={kid} asParent={asParent} onBought={() => void reload()} />
 

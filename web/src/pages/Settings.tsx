@@ -130,6 +130,16 @@ function HomeSettings() {
       </label>
       <p className="small muted" style={{ margin: 0 }}>Off by default: a penalty takes what's there and stops at zero.</p>
 
+      <h3>🎁 Surprise bonus</h3>
+      <div className="chips">
+        {([['off', 'Off'], ['sometimes', 'Sometimes'], ['often', 'Often'], ['daily', 'Every day']] as const).map(([v, label]) => (
+          <button key={v} className={`chip${(home.surprise ?? 'off') === v ? ' on' : ''}`} onClick={() => void patch({ surprise: v })}>{label}</button>
+        ))}
+      </div>
+      <p className="small muted" style={{ margin: 0 }}>
+        On surprise days a kid finds a gift box on their board. Opening it picks one of today's bonus chores for them, worth double. Needs at least one bonus chore.
+      </p>
+
       <h3>🛎️ Helpdesk</h3>
       <label className="row" style={{ fontWeight: 600 }}>
         Each kid can have up to

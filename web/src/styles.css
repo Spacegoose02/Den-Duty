@@ -387,6 +387,28 @@ td, th { text-align: left; padding: 8px; border-bottom: 1px solid var(--border);
 .bonus-card { display: flex; align-items: center; gap: 10px; border: 2px dashed var(--kid, var(--primary)); border-radius: 16px; padding: 10px; }
 .vote-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
 .vote-option { flex-direction: column; min-height: 130px; border-radius: 20px; border: 3px solid var(--border); gap: 4px; }
+.photo-thumb { padding: 0; min-height: 0; border-radius: 12px; overflow: hidden; border: 2px solid var(--border); flex-shrink: 0; background: var(--surface-2); }
+.photo-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cheer-row { display: flex; gap: 4px; }
+.cheer-row button { min-height: 40px; min-width: 40px; padding: 0; font-size: 1.25rem; border-radius: 99px; }
+.cheer-tag { display: inline-flex; align-items: center; gap: 4px; font-weight: 700; color: var(--kid, var(--primary)); }
+.surprise-card { padding: 0; overflow: hidden; }
+.surprise-box {
+  width: 100%; justify-content: flex-start; gap: 16px; padding: 16px 20px; border: none; border-radius: inherit; text-align: left;
+  background: linear-gradient(120deg, color-mix(in srgb, var(--kid, var(--primary)) 18%, var(--surface)), color-mix(in srgb, #ffd43b 30%, var(--surface)));
+}
+.surprise-gift { font-size: 3.2rem; line-height: 1; animation: gift-wiggle 1.8s ease-in-out infinite; }
+@keyframes gift-wiggle { 0%, 60%, 100% { transform: rotate(0); } 70% { transform: rotate(-12deg) scale(1.08); } 80% { transform: rotate(10deg) scale(1.08); } 90% { transform: rotate(-6deg); } }
+@media (prefers-reduced-motion: reduce) { .surprise-gift { animation: none; } }
+.team-goal { display: grid; gap: 8px; padding: 12px; border-radius: 18px; background: var(--surface-2); }
+.team-goal.reached { background: color-mix(in srgb, var(--ok) 14%, var(--surface)); }
+.team-icon { font-size: 2.4rem; line-height: 1; }
+.team-bar { display: flex; height: 18px; border-radius: 99px; overflow: hidden; background: var(--surface); box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.12); }
+.team-bar-part { height: 100%; transition: width .6s ease; }
+.team-bar-part + .team-bar-part { box-shadow: inset 2px 0 0 rgb(255 255 255 / 0.6); }
+.team-kids { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.team-kid { display: inline-flex; align-items: center; gap: 6px; font-size: .9rem; }
+.team-kid strong { color: var(--kid); }
 .shop-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 .shop-item {
   flex-direction: column; justify-content: flex-start; min-height: 170px; border-radius: 20px; border: 3px solid var(--border);

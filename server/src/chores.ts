@@ -1,9 +1,11 @@
 // The core loop: chores become daily instances per kid, kids submit them, parents approve, approvals write points.
 // Everything here takes "today" as an argument so it's easy to test and always uses the home's own calendar.
+import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { tx, type Row } from './db.ts';
 import { HttpError, newId } from './util.ts';
 import { emit } from './events.ts';
+import { checkTeamGoals } from './team.ts';
 import { addDays, dateRange, isScheduledOn, startOfWeek, todayIn, type Schedule, type ScheduleKind } from '../../shared/schedule.ts';
 
 export type InstanceStatus = 'pending' | 'submitted' | 'approved' | 'rejected';
@@ -29,6 +31,8 @@ interface ChoreRow {
   id: string; title: string; icon: string; points: number; schedule: ScheduleKind; weekdays: string; due_date: string | null; start_date: string;
   /** Bonus chores are opt-in: nothing is created until a kid claims one. */
   bonus: number;
+  /** Ask for a photo when it's marked done. */
+  photo: number;
   claim_limit: 'each' | 'one';
 }
 
@@ -37,7 +41,7 @@ const scheduleOf = (c: ChoreRow): Schedule => ({
 });
 
 function activeChores(db: DatabaseSync, homeId: string, choreId?: string): (ChoreRow & { memberIds: string[] })[] {
-  const rows = db.prepare(`SELECT id, title, icon, points, schedule, weekdays, due_date, start_date, bonus, claim_limit FROM chores
+  const rows = db.prepare(`SELECT id, title, icon, points, schedule, weekdays, due_date, start_date, bonus, claim_limit, photo FROM chores
     WHERE home_id = ? AND active = 1 ${choreId ? 'AND id = ?' : ''}`).all(...(choreId ? [homeId, choreId] : [homeId])) as unknown as ChoreRow[];
   const assigned = db.prepare('SELECT member_id FROM chore_assignments WHERE chore_id = ?');
   return rows.map((c) => ({ ...c, memberIds: (assigned.all(c.id) as Row[]).map((r) => r.member_id as string) }));
@@ -57,8 +61,8 @@ export function kidsWithPageOff(db: DatabaseSync, homeId: string, page: string):
 export function materialize(db: DatabaseSync, homeId: string, from: string, to: string, today: string): void {
   const last = to < today ? to : today;
   if (from > last) return;
-  const ins = db.prepare(`INSERT OR IGNORE INTO chore_instances (id, home_id, chore_id, member_id, date, title, icon, points)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+  const ins = db.prepare(`INSERT OR IGNORE INTO chore_instances (id, home_id, chore_id, member_id, date, title, icon, points, needs_photo)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   tx(db, () => {
     const paused = kidsWithPageOff(db, homeId, 'chores');
     for (const c of activeChores(db, homeId)) {
@@ -67,7 +71,7 @@ export function materialize(db: DatabaseSync, homeId: string, from: string, to: 
       const start = from > c.start_date ? from : c.start_date;
       for (const date of dateRange(start, last)) {
         if (!isScheduledOn(s, date)) continue;
-        for (const m of c.memberIds) if (!paused.has(m)) ins.run(newId(), homeId, c.id, m, date, c.title, c.icon, c.points);
+        for (const m of c.memberIds) if (!paused.has(m)) ins.run(newId(), homeId, c.id, m, date, c.title, c.icon, c.points, c.photo);
       }
     }
   });
@@ -85,7 +89,8 @@ export function syncChore(db: DatabaseSync, homeId: string, choreId: string, tod
     for (const i of open) {
       const keep = chore && bonusEligible(chore, i.member_id as string) && isScheduledOn(scheduleOf(chore), i.date as string);
       if (!keep) db.prepare('DELETE FROM chore_instances WHERE id = ?').run(i.id as string);
-      else db.prepare('UPDATE chore_instances SET title = ?, icon = ?, points = ? WHERE id = ?').run(chore.title, chore.icon, chore.points, i.id as string);
+      else db.prepare('UPDATE chore_instances SET title = ?, icon = ?, points = ? * (CASE WHEN surprise = 1 THEN ? ELSE 1 END), needs_photo = ? WHERE id = ?')
+        .run(chore.title, chore.icon, chore.points, SURPRISE_MULTIPLIER, chore.photo, i.id as string);
     }
   });
   materialize(db, homeId, today, today, today);
@@ -99,7 +104,7 @@ function bonusEligible(c: ChoreRow & { memberIds: string[] }, memberId: string):
 // ---------- bonus chores ----------
 
 export interface BonusOffer {
-  choreId: string; title: string; icon: string; points: number; claimLimit: 'each' | 'one';
+  choreId: string; title: string; icon: string; points: number; claimLimit: 'each' | 'one'; photo: boolean;
   /** This kid's instance, once claimed. */
   instanceId: string | null;
   /** Someone else got the only spot today. */
@@ -117,24 +122,63 @@ export function bonusOffers(db: DatabaseSync, homeId: string, memberId: string, 
       const mine = rows.find((r) => r.member_id === memberId);
       const other = c.claim_limit === 'one' && !mine ? rows[0] : undefined;
       return {
-        choreId: c.id, title: c.title, icon: c.icon, points: c.points, claimLimit: c.claim_limit,
+        choreId: c.id, title: c.title, icon: c.icon, points: c.points, claimLimit: c.claim_limit, photo: !!c.photo,
         instanceId: (mine?.id as string) ?? null, takenBy: (other?.name as string) ?? null,
       };
     });
 }
 
 /** A kid signs up for a bonus chore today. It then works like any other chore: done, review, points. */
-export function claimBonus(db: DatabaseSync, homeId: string, choreId: string, memberId: string, today: string): AgendaItem {
+export function claimBonus(db: DatabaseSync, homeId: string, choreId: string, memberId: string, today: string, surprise = false): AgendaItem {
   return tx(db, () => {
     const offer = bonusOffers(db, homeId, memberId, today).find((o) => o.choreId === choreId);
     if (!offer) throw new HttpError(404, "That bonus chore isn't available today");
     if (offer.instanceId) return getInstance(db, homeId, offer.instanceId);
     if (offer.takenBy) throw new HttpError(409, `${offer.takenBy} already took that one today`);
     const id = newId();
-    db.prepare(`INSERT INTO chore_instances (id, home_id, chore_id, member_id, date, title, icon, points) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(id, homeId, choreId, memberId, today, offer.title, offer.icon, offer.points);
+    db.prepare(`INSERT INTO chore_instances (id, home_id, chore_id, member_id, date, title, icon, points, surprise, needs_photo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(id, homeId, choreId, memberId, today, offer.title, offer.icon, offer.points * (surprise ? SURPRISE_MULTIPLIER : 1), surprise ? 1 : 0, offer.photo ? 1 : 0);
     return getInstance(db, homeId, id);
   });
+}
+
+// ---------- surprise bonus chores ----------
+
+export type SurpriseLevel = 'off' | 'sometimes' | 'often' | 'daily';
+export const SURPRISE_LEVELS: SurpriseLevel[] = ['off', 'sometimes', 'often', 'daily'];
+const SURPRISE_CHANCE: Record<SurpriseLevel, number> = { off: 0, sometimes: 0.3, often: 0.6, daily: 1 };
+export const SURPRISE_MULTIPLIER = 2;
+
+/** A steady number in [0, 1) for this kid and day, so the gift box doesn't come and go between page loads. */
+function dayRoll(...parts: string[]): number {
+  return createHash('sha256').update(parts.join(':')).digest().readUInt32BE(0) / 2 ** 32;
+}
+
+export type SurpriseView = { state: 'waiting' } | { state: 'opened'; item: AgendaItem } | null;
+
+/** Which bonus chore today's gift box hides for this kid, if there is one. */
+function surpriseCandidate(db: DatabaseSync, homeId: string, memberId: string, today: string): BonusOffer | null {
+  const level = ((db.prepare('SELECT surprise FROM homes WHERE id = ?').get(homeId) as Row | undefined)?.surprise ?? 'off') as SurpriseLevel;
+  if (dayRoll(homeId, memberId, today, 'gift') >= SURPRISE_CHANCE[level]) return null;
+  const open = bonusOffers(db, homeId, memberId, today).filter((o) => !o.instanceId && !o.takenBy).sort((a, b) => a.choreId.localeCompare(b.choreId));
+  if (!open.length) return null;
+  return open[Math.floor(dayRoll(homeId, memberId, today, 'pick') * open.length)];
+}
+
+/** The kid's gift box for today: still wrapped (what's inside stays a secret), opened, or none. */
+export function surpriseFor(db: DatabaseSync, homeId: string, memberId: string, today: string): SurpriseView {
+  const opened = db.prepare('SELECT * FROM chore_instances WHERE member_id = ? AND date = ? AND surprise = 1').get(memberId, today) as Row | undefined;
+  if (opened) return { state: 'opened', item: instanceItem(opened) };
+  return surpriseCandidate(db, homeId, memberId, today) ? { state: 'waiting' } : null;
+}
+
+/** Opens the gift box: the hidden bonus chore lands in the kid's To do, worth double. */
+export function openSurprise(db: DatabaseSync, homeId: string, memberId: string, today: string): AgendaItem {
+  const now = surpriseFor(db, homeId, memberId, today);
+  if (now?.state === 'opened') return now.item;
+  const pick = surpriseCandidate(db, homeId, memberId, today);
+  if (!pick) throw new HttpError(404, 'No surprise today. Maybe tomorrow!');
+  return claimBonus(db, homeId, pick.choreId, memberId, today, true);
 }
 
 /** Changed your mind? Only before it's been marked done. */
@@ -161,12 +205,20 @@ export interface AgendaItem {
   note: string | null;
   /** Kanban "Doing": the kid has started but not finished. */
   started: boolean;
+  /** A surprise bonus chore (double points). */
+  surprise: boolean;
+  /** Photo proof: asked for, and whether one was sent. */
+  needsPhoto: boolean;
+  hasPhoto: boolean;
+  /** The cheer a parent sent with the approval (see CHEERS). */
+  cheer: string | null;
 }
 
 const instanceItem = (r: Row): AgendaItem => ({
   id: r.id as string, choreId: r.chore_id as string | null, memberId: r.member_id as string, date: r.date as string,
   title: r.title as string, icon: r.icon as string, points: r.points as number, status: r.status as InstanceStatus,
-  note: (r.note as string | null) ?? null, started: !!r.started_at,
+  note: (r.note as string | null) ?? null, started: !!r.started_at, surprise: !!r.surprise,
+  needsPhoto: !!r.needs_photo, hasPhoto: !!r.photo, cheer: (r.cheer as string | null) ?? null,
 });
 
 /** Every chore for these kids from `from` for `days` days, with stored instances up to today and planned ones after. */
@@ -185,7 +237,7 @@ export function agenda(db: DatabaseSync, homeId: string, memberIds: string[], fr
         if (c.bonus || !isScheduledOn(scheduleOf(c), day.date)) continue;
         for (const m of c.memberIds) {
           if (!wanted.has(m)) continue;
-          day.items.push({ id: null, choreId: c.id, memberId: m, date: day.date, title: c.title, icon: c.icon, points: c.points, status: 'planned', note: null, started: false });
+          day.items.push({ id: null, choreId: c.id, memberId: m, date: day.date, title: c.title, icon: c.icon, points: c.points, status: 'planned', note: null, started: false, surprise: false, needsPhoto: !!c.photo, hasPhoto: false, cheer: null });
         }
       }
     }
@@ -216,6 +268,7 @@ export function submitInstance(db: DatabaseSync, homeId: string, id: string, tod
   const inst = getInstance(db, homeId, id);
   if (inst.date > today) throw new HttpError(400, "That chore isn't due yet");
   if (inst.status === 'submitted' || inst.status === 'approved') return inst;
+  if (inst.needsPhoto && !inst.hasPhoto) throw new HttpError(400, 'Snap a photo first! 📸');
   db.prepare("UPDATE chore_instances SET status = 'submitted', submitted_at = datetime('now'), note = NULL WHERE id = ?").run(id);
   emit(db, homeId, 'chore_submitted', inst.memberId, { chore: inst.title, icon: inst.icon, points: inst.points, instance_id: id });
   return getInstance(db, homeId, id);
@@ -242,15 +295,16 @@ export function unsubmitInstance(db: DatabaseSync, homeId: string, id: string): 
  * A parent approves (from any state, so a parent can also tick a chore off directly). Writes exactly one ledger row:
  * approving twice never pays twice.
  */
-export function approveInstance(db: DatabaseSync, homeId: string, id: string, by: By): { item: AgendaItem; awarded: number } {
+export function approveInstance(db: DatabaseSync, homeId: string, id: string, by: By, cheer: string | null = null): { item: AgendaItem; awarded: number } {
   return tx(db, () => {
     const inst = getInstance(db, homeId, id);
-    if (inst.status === 'approved') return { item: inst, awarded: 0 };
+    if (cheer) db.prepare('UPDATE chore_instances SET cheer = ? WHERE id = ?').run(cheer, id);
+    if (inst.status === 'approved') return { item: getInstance(db, homeId, id), awarded: 0 };
     db.prepare(`UPDATE chore_instances SET status = 'approved', reviewed_at = datetime('now'), reviewed_by = ?, note = NULL,
       submitted_at = COALESCE(submitted_at, datetime('now')) WHERE id = ?`).run(by.userId, id);
     writeLedger(db, { homeId, memberId: inst.memberId, amount: inst.points, kind: 'chore', reason: inst.title, date: inst.date, instanceId: id, by });
     emit(db, homeId, 'chore_approved', inst.memberId, {
-      chore: inst.title, icon: inst.icon, points: inst.points, instance_id: id, balance: balance(db, inst.memberId), by: by.name,
+      chore: inst.title, icon: inst.icon, points: inst.points, instance_id: id, balance: balance(db, inst.memberId), by: by.name, cheer,
     });
     return { item: getInstance(db, homeId, id), awarded: inst.points };
   });
@@ -303,6 +357,7 @@ export function writeLedger(db: DatabaseSync, e: {
       .all(e.memberId, before, after) as Row[];
     for (const g of hit) emit(db, e.homeId, 'goal_reached', e.memberId, { goal: g.title, goal_id: g.id, target: g.target_points, reward: g.reward, balance: after });
   }
+  if (e.amount > 0 && (e.kind === 'chore' || e.kind === 'bonus')) checkTeamGoals(db, e.homeId);
 }
 
 /**
