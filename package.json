@@ -1,6 +1,6 @@
 {
   "name": "den-duty",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "description": "Self-hosted, tablet-first family chore tracker: chores, points, goals and rewards, run by a raccoon.",
