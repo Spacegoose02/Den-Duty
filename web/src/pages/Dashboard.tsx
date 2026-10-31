@@ -12,6 +12,8 @@ import { HelpdeskCard } from '../components/Helpdesk.tsx';
 import { RemindersCard } from '../components/Reminders.tsx';
 import { confetti } from '../components/Confetti.ts';
 import { ShopOrdersCard } from '../components/Shop.tsx';
+import { PhotoThumb } from '../components/Photo.tsx';
+import { CHEERS, type CheerId } from '../../../shared/catalog.ts';
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -36,10 +38,11 @@ export function Dashboard() {
     try { await fn(); } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
     await Promise.all([reloadQueue(), reloadSummary()]);
   }
-  const approve = (i: ReviewItem) => act(async () => {
-    const r = await api<{ awarded: number }>(`${base}/instances/${i.id}/approve`, { body: {} });
+  const approve = (i: ReviewItem, cheer?: CheerId) => act(async () => {
+    const r = await api<{ awarded: number }>(`${base}/instances/${i.id}/approve`, { body: cheer ? { cheer } : {} });
     confetti({ colors: [i.kid.color], count: 90 });
-    toast(`${i.kid.name}: +${r.awarded} ${icon}`);
+    const c = cheer && CHEERS.find((x) => x.id === cheer);
+    toast(`${i.kid.name}: +${r.awarded} ${icon}${c ? ` with a ${c.icon}` : ''}`);
   });
   const reject = (i: ReviewItem) => {
     const note = prompt(`What should ${i.kid.name} fix? (optional)`, '');
@@ -84,7 +87,13 @@ export function Dashboard() {
               <div style={{ fontWeight: 700 }}>{i.title}</div>
               <div className="small muted">{i.kid.name} · {i.date === summary?.today ? 'today' : `${dayName(i.date)} ${shortDate(i.date)}`} · +{i.points} {icon}</div>
             </div>
+            {i.hasPhoto && <PhotoThumb src={`${base}/instances/${i.id}/photo`} alt={`${i.kid.name}: ${i.title}`} />}
             <button className="ghost danger" disabled={busy} onClick={() => reject(i)}>Not yet</button>
+            <span className="cheer-row" role="group" aria-label="Approve with a cheer">
+              {CHEERS.slice(0, 4).map((c) => (
+                <button key={c.id} className="ghost" disabled={busy} title={`Approve: ${c.text}`} aria-label={`Approve with ${c.text}`} onClick={() => void approve(i, c.id)}>{c.icon}</button>
+              ))}
+            </span>
             <button className="primary" disabled={busy} onClick={() => void approve(i)}>Approve</button>
           </div>
         ))}

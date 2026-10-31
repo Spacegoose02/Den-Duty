@@ -666,6 +666,14 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE homes ADD COLUMN surprise TEXT NOT NULL DEFAULT 'off' CHECK (surprise IN ('off', 'sometimes', 'often', 'daily'));
   ALTER TABLE chore_instances ADD COLUMN surprise INTEGER NOT NULL DEFAULT 0;
   `,
+  // Photo proof and cheers: a chore can ask for a photo when it's marked done, and a parent can send a cheer with the approval.
+  // Photos are files in the data folder (photos/<home>/), kept for 30 days.
+  `
+  ALTER TABLE chores ADD COLUMN photo INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE chore_instances ADD COLUMN needs_photo INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE chore_instances ADD COLUMN photo TEXT;
+  ALTER TABLE chore_instances ADD COLUMN cheer TEXT;
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

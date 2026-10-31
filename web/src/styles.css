@@ -387,6 +387,11 @@ td, th { text-align: left; padding: 8px; border-bottom: 1px solid var(--border);
 .bonus-card { display: flex; align-items: center; gap: 10px; border: 2px dashed var(--kid, var(--primary)); border-radius: 16px; padding: 10px; }
 .vote-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
 .vote-option { flex-direction: column; min-height: 130px; border-radius: 20px; border: 3px solid var(--border); gap: 4px; }
+.photo-thumb { padding: 0; min-height: 0; border-radius: 12px; overflow: hidden; border: 2px solid var(--border); flex-shrink: 0; background: var(--surface-2); }
+.photo-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cheer-row { display: flex; gap: 4px; }
+.cheer-row button { min-height: 40px; min-width: 40px; padding: 0; font-size: 1.25rem; border-radius: 99px; }
+.cheer-tag { display: inline-flex; align-items: center; gap: 4px; font-weight: 700; color: var(--kid, var(--primary)); }
 .surprise-card { padding: 0; overflow: hidden; }
 .surprise-box {
   width: 100%; justify-content: flex-start; gap: 16px; padding: 16px 20px; border: none; border-radius: inherit; text-align: left;

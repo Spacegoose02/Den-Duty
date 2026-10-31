@@ -64,7 +64,7 @@ export interface HomeDetail {
 
 export interface Chore {
   id: string; title: string; icon: string; points: number; schedule: ScheduleKind; weekdays: number[]; dueDate: string | null;
-  startDate: string; describe: string; memberIds: string[]; bonus: boolean; claimLimit: 'each' | 'one'; category: 'room' | null;
+  startDate: string; describe: string; memberIds: string[]; bonus: boolean; claimLimit: 'each' | 'one'; category: 'room' | null; photo: boolean;
 }
 
 export type ItemStatus = 'pending' | 'submitted' | 'approved' | 'rejected' | 'planned';
@@ -74,6 +74,10 @@ export interface AgendaItem {
   status: ItemStatus; note: string | null; started: boolean;
   /** A surprise bonus chore, worth double. */
   surprise?: boolean;
+  /** Photo proof: asked for, and whether one was sent. */
+  needsPhoto?: boolean; hasPhoto?: boolean;
+  /** A parent's cheer on the approval (see CHEERS). */
+  cheer?: string | null;
 }
 
 export interface ExternalItem { date: string; time: string | null; title: string; feed: string; kind: string }
