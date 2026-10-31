@@ -387,6 +387,15 @@ td, th { text-align: left; padding: 8px; border-bottom: 1px solid var(--border);
 .bonus-card { display: flex; align-items: center; gap: 10px; border: 2px dashed var(--kid, var(--primary)); border-radius: 16px; padding: 10px; }
 .vote-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
 .vote-option { flex-direction: column; min-height: 130px; border-radius: 20px; border: 3px solid var(--border); gap: 4px; }
+.team-goal { display: grid; gap: 8px; padding: 12px; border-radius: 18px; background: var(--surface-2); }
+.team-goal.reached { background: color-mix(in srgb, var(--ok) 14%, var(--surface)); }
+.team-icon { font-size: 2.4rem; line-height: 1; }
+.team-bar { display: flex; height: 18px; border-radius: 99px; overflow: hidden; background: var(--surface); box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.12); }
+.team-bar-part { height: 100%; transition: width .6s ease; }
+.team-bar-part + .team-bar-part { box-shadow: inset 2px 0 0 rgb(255 255 255 / 0.6); }
+.team-kids { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.team-kid { display: inline-flex; align-items: center; gap: 6px; font-size: .9rem; }
+.team-kid strong { color: var(--kid); }
 .shop-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 .shop-item {
   flex-direction: column; justify-content: flex-start; min-height: 170px; border-radius: 20px; border: 3px solid var(--border);

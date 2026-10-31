@@ -2,6 +2,7 @@
 // No sign-in to look (the tablet is already paired). A shared wall is careful by default: no Doctors goals, no
 // penalties and no time-out details unless a parent turns them on, and appointments only when shared with that kid.
 import type { FastifyInstance } from 'fastify';
+import { teamGoals } from '../team.ts';
 import type { DatabaseSync } from 'node:sqlite';
 import { homeCtx } from '../auth.ts';
 import type { Row } from '../db.ts';
@@ -112,6 +113,7 @@ export async function wallData(db: DatabaseSync, homeId: string) {
     home: { name: home.name, pointsName: home.pointsName, pointsIcon: home.pointsIcon, theme: home.theme, timezone: home.timezone },
     today, tomorrow, settings: { landing: settings.landing, dim: settings.dim },
     kids: kidCards, family, lunch: lunch.map((x) => ({ title: x.title, time: x.time })), polls,
+    teamGoals: teamGoals(db, homeId).filter((g) => g.status === 'active'),
   };
 }
 

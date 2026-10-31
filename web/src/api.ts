@@ -108,6 +108,13 @@ export interface Board {
 
 export interface QuickReward { id: string; title: string; icon: string; amount: number }
 
+/** A family goal everyone's earned points fill. */
+export interface TeamGoal {
+  id: string; title: string; icon: string; target: number; reward: string | null; status: 'active' | 'done';
+  progress: number; percent: number; reached: boolean; reachedAt: string | null; doneAt: string | null; createdAt: string;
+  contributions: { memberId: string; name: string; color: string; avatar: string; points: number }[];
+}
+
 /** A reward in the shop. stock is null for unlimited. */
 export interface ShopItem { id: string; title: string; icon: string; price: number; stock: number | null }
 export interface ShopOrder {

@@ -15,6 +15,7 @@ import { choreRoutes } from './routes/chores.ts';
 import { goalRoutes } from './routes/goals.ts';
 import { rewardRoutes } from './routes/rewards.ts';
 import { shopRoutes } from './routes/shop.ts';
+import { teamGoalRoutes } from './routes/teamgoals.ts';
 import { therapyRoutes } from './routes/therapy.ts';
 import { parentDutyRoutes } from './routes/parentduty.ts';
 import { timeoutRoutes } from './routes/timeouts.ts';
@@ -53,6 +54,7 @@ export async function buildApp(db: DatabaseSync, opts: { logger?: boolean; serve
   goalRoutes(app, db);
   rewardRoutes(app, db);
   shopRoutes(app, db);
+  teamGoalRoutes(app, db);
   therapyRoutes(app, db);
   parentDutyRoutes(app, db);
   timeoutRoutes(app, db);

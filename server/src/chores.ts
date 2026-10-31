@@ -4,6 +4,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { tx, type Row } from './db.ts';
 import { HttpError, newId } from './util.ts';
 import { emit } from './events.ts';
+import { checkTeamGoals } from './team.ts';
 import { addDays, dateRange, isScheduledOn, startOfWeek, todayIn, type Schedule, type ScheduleKind } from '../../shared/schedule.ts';
 
 export type InstanceStatus = 'pending' | 'submitted' | 'approved' | 'rejected';
@@ -303,6 +304,7 @@ export function writeLedger(db: DatabaseSync, e: {
       .all(e.memberId, before, after) as Row[];
     for (const g of hit) emit(db, e.homeId, 'goal_reached', e.memberId, { goal: g.title, goal_id: g.id, target: g.target_points, reward: g.reward, balance: after });
   }
+  if (e.amount > 0 && (e.kind === 'chore' || e.kind === 'bonus')) checkTeamGoals(db, e.homeId);
 }
 
 /**

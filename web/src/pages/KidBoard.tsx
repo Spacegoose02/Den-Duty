@@ -11,6 +11,7 @@ import { TimeoutCard, TimeoutForm } from '../components/Timeouts.tsx';
 import { KidHelpdesk } from '../components/Helpdesk.tsx';
 import { confetti } from '../components/Confetti.ts';
 import { KidShop } from '../components/Shop.tsx';
+import { KidTeamGoals } from '../components/TeamGoals.tsx';
 
 const IDLE_MS = 3 * 60e3;
 /** How often a kid's own board checks for chores a grown-up just approved. */
@@ -299,6 +300,8 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
           ))}
         </section>
       )}
+
+      <KidTeamGoals />
 
       <KidShop kid={kid} asParent={asParent} onBought={() => void reload()} />
 

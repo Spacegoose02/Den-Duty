@@ -644,6 +644,23 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX shop_orders_home ON shop_orders(home_id, status);
   `,
+  // Family team goals: every kid's earned points (from when the goal was set) fill one shared goal. Nothing is spent.
+  `
+  CREATE TABLE team_goals (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    icon TEXT NOT NULL DEFAULT '🏕️',
+    target INTEGER NOT NULL CHECK (target > 0),
+    reward TEXT,
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'done')),
+    reached_at TEXT,
+    done_at TEXT,
+    created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX team_goals_home ON team_goals(home_id, status);
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {
