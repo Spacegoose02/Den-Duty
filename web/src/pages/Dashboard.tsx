@@ -50,9 +50,9 @@ export function Dashboard() {
     void act(() => api(`${base}/instances/${i.id}/reject`, { body: { note } }));
   };
   const approveAll = () => act(async () => {
-    const r = await api<{ awarded: number }>(`${base}/review/approve`, { body: { ids: queue!.map((i) => i.id) } });
+    const r = await api<{ awarded: number; failed?: number }>(`${base}/review/approve`, { body: { ids: queue!.map((i) => i.id) } });
     confetti({ colors: [...new Set(queue!.map((i) => i.kid.color))], count: 200 });
-    toast(`Approved everything: ${r.awarded} ${icon} handed out`);
+    toast(r.failed ? `Approved what we could: ${r.awarded} ${icon} handed out (${r.failed} couldn't be approved)` : `Approved everything: ${r.awarded} ${icon} handed out`);
   });
 
   return (
@@ -87,7 +87,7 @@ export function Dashboard() {
               <div style={{ fontWeight: 700 }}>{i.title}</div>
               <div className="small muted">{i.kid.name} · {i.date === summary?.today ? 'today' : `${dayName(i.date)} ${shortDate(i.date)}`} · +{i.points} {icon}</div>
             </div>
-            {i.hasPhoto && <PhotoThumb src={`${base}/instances/${i.id}/photo`} alt={`${i.kid.name}: ${i.title}`} />}
+            {i.hasPhoto && <PhotoThumb src={`${base}/instances/${i.id}/photo?v=${i.photoVersion ?? ''}`} alt={`${i.kid.name}: ${i.title}`} />}
             <button className="ghost danger" disabled={busy} onClick={() => reject(i)}>Not yet</button>
             <span className="cheer-row" role="group" aria-label="Approve with a cheer">
               {CHEERS.slice(0, 4).map((c) => (

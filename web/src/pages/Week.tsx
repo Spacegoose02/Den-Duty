@@ -190,7 +190,11 @@ export function Calendar({ kidId, title = 'Calendar' }: { kidId?: string; title?
 
   async function tap(i: AgendaItem) {
     if (!i.id) return;
-    try { await api(`${base}/instances/${i.id}/${i.status === 'approved' ? 'undo' : 'done'}`, { body: {} }); await reload(); } catch (e) { toast((e as Error).message); }
+    try {
+      const r = await api<{ paid?: number; taken?: number }>(`${base}/instances/${i.id}/${i.status === 'approved' ? 'undo' : 'done'}`, { body: {} });
+      if (r.paid != null && r.taken != null && r.taken < r.paid) toast(`Took back ${r.taken} ${home?.pointsIcon ?? ''} (the rest was already spent)`);
+      await reload();
+    } catch (e) { toast((e as Error).message); }
   }
   const tick = (date: string) => async (p: PracticeItem) => {
     try {

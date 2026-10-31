@@ -43,6 +43,14 @@ export function savePhoto(db: DatabaseSync, homeId: string, instanceId: string, 
   return name;
 }
 
+/** Removes a chore's photo (a parent said "not yet", so the next one has to be new). */
+export function deletePhoto(db: DatabaseSync, homeId: string, instanceId: string): void {
+  const old = (db.prepare('SELECT photo FROM chore_instances WHERE id = ?').get(instanceId) as Row | undefined)?.photo as string | null;
+  if (!old) return;
+  db.prepare('UPDATE chore_instances SET photo = NULL WHERE id = ?').run(instanceId);
+  fs.rmSync(path.join(homeDir(homeId), path.basename(old)), { force: true });
+}
+
 export function readPhoto(homeId: string, name: string): { bytes: Buffer; type: string } | null {
   const file = path.join(homeDir(homeId), path.basename(name));
   if (!fs.existsSync(file)) return null;

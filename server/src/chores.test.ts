@@ -115,7 +115,7 @@ test('reject, retry, undo and reversals keep the ledger honest', () => {
   c.approveInstance(db, 'h', inst.id!, PARENT);
   assert.throws(() => c.unsubmitInstance(db, 'h', inst.id!), /already approved/);
 
-  const undone = c.unapproveInstance(db, 'h', inst.id!, PARENT);
+  const undone = c.unapproveInstance(db, 'h', inst.id!, PARENT).item;
   assert.equal(undone.status, 'submitted', 'back in the review queue');
   assert.equal(c.balance(db, 'ava'), 0);
   c.approveInstance(db, 'h', inst.id!, PARENT);

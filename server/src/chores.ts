@@ -6,6 +6,7 @@ import { tx, type Row } from './db.ts';
 import { HttpError, newId } from './util.ts';
 import { emit } from './events.ts';
 import { checkTeamGoals } from './team.ts';
+import { deletePhoto } from './photos.ts';
 import { addDays, dateRange, isScheduledOn, startOfWeek, todayIn, type Schedule, type ScheduleKind } from '../../shared/schedule.ts';
 
 export type InstanceStatus = 'pending' | 'submitted' | 'approved' | 'rejected';
@@ -210,6 +211,8 @@ export interface AgendaItem {
   /** Photo proof: asked for, and whether one was sent. */
   needsPhoto: boolean;
   hasPhoto: boolean;
+  /** Changes whenever a new photo is sent, so the picture's URL can skip a cached old one. */
+  photoVersion: string | null;
   /** The cheer a parent sent with the approval (see CHEERS). */
   cheer: string | null;
 }
@@ -218,7 +221,8 @@ const instanceItem = (r: Row): AgendaItem => ({
   id: r.id as string, choreId: r.chore_id as string | null, memberId: r.member_id as string, date: r.date as string,
   title: r.title as string, icon: r.icon as string, points: r.points as number, status: r.status as InstanceStatus,
   note: (r.note as string | null) ?? null, started: !!r.started_at, surprise: !!r.surprise,
-  needsPhoto: !!r.needs_photo, hasPhoto: !!r.photo, cheer: (r.cheer as string | null) ?? null,
+  needsPhoto: !!r.needs_photo, hasPhoto: !!r.photo,
+  photoVersion: r.photo ? String(r.photo).replace(/^.*-|\.\w+$/g, '') : null, cheer: (r.cheer as string | null) ?? null,
 });
 
 /** Every chore for these kids from `from` for `days` days, with stored instances up to today and planned ones after. */
@@ -237,7 +241,7 @@ export function agenda(db: DatabaseSync, homeId: string, memberIds: string[], fr
         if (c.bonus || !isScheduledOn(scheduleOf(c), day.date)) continue;
         for (const m of c.memberIds) {
           if (!wanted.has(m)) continue;
-          day.items.push({ id: null, choreId: c.id, memberId: m, date: day.date, title: c.title, icon: c.icon, points: c.points, status: 'planned', note: null, started: false, surprise: false, needsPhoto: !!c.photo, hasPhoto: false, cheer: null });
+          day.items.push({ id: null, choreId: c.id, memberId: m, date: day.date, title: c.title, icon: c.icon, points: c.points, status: 'planned', note: null, started: false, surprise: false, needsPhoto: !!c.photo, hasPhoto: false, photoVersion: null, cheer: null });
         }
       }
     }
@@ -302,7 +306,8 @@ export function approveInstance(db: DatabaseSync, homeId: string, id: string, by
     if (inst.status === 'approved') return { item: getInstance(db, homeId, id), awarded: 0 };
     db.prepare(`UPDATE chore_instances SET status = 'approved', reviewed_at = datetime('now'), reviewed_by = ?, note = NULL,
       submitted_at = COALESCE(submitted_at, datetime('now')) WHERE id = ?`).run(by.userId, id);
-    writeLedger(db, { homeId, memberId: inst.memberId, amount: inst.points, kind: 'chore', reason: inst.title, date: inst.date, instanceId: id, by });
+    // A 0-point chore (a habit like brushing teeth) still gets approved; there's just nothing to pay.
+    if (inst.points) writeLedger(db, { homeId, memberId: inst.memberId, amount: inst.points, kind: 'chore', reason: inst.title, date: inst.date, instanceId: id, by });
     emit(db, homeId, 'chore_approved', inst.memberId, {
       chore: inst.title, icon: inst.icon, points: inst.points, instance_id: id, balance: balance(db, inst.memberId), by: by.name, cheer,
     });
@@ -314,18 +319,27 @@ export function rejectInstance(db: DatabaseSync, homeId: string, id: string, by:
   const inst = getInstance(db, homeId, id);
   if (inst.status === 'approved') throw new HttpError(400, 'Undo the approval first');
   db.prepare("UPDATE chore_instances SET status = 'rejected', reviewed_at = datetime('now'), reviewed_by = ?, note = ? WHERE id = ?").run(by.userId, note, id);
+  // "Not yet" on a photo chore means a fresh photo next time, not the same one again.
+  if (inst.needsPhoto) deletePhoto(db, homeId, id);
   return getInstance(db, homeId, id);
 }
 
-/** Takes back an approval with a reversing ledger row (the ledger is never edited). The chore goes back to review. */
-export function unapproveInstance(db: DatabaseSync, homeId: string, id: string, by: By): AgendaItem {
+/**
+ * Takes back an approval with a reversing ledger row (the ledger is never edited). The chore goes back to review.
+ * If the kid already spent those points, it stops at zero like a penalty does (unless the home allows going below).
+ */
+export function unapproveInstance(db: DatabaseSync, homeId: string, id: string, by: By): { item: AgendaItem; paid: number; taken: number } {
   return tx(db, () => {
     const inst = getInstance(db, homeId, id);
     if (inst.status !== 'approved') throw new HttpError(400, "That chore isn't approved");
-    const paid = (db.prepare("SELECT COALESCE(SUM(amount), 0) AS n FROM points_ledger WHERE instance_id = ?").get(id) as Row).n as number;
-    if (paid) writeLedger(db, { homeId, memberId: inst.memberId, amount: -paid, kind: 'reversal', reason: `Approval undone: ${inst.title}`, date: inst.date, instanceId: id, by });
+    // What this approval paid (never more than the chore is worth, even after an earlier take-back stopped at zero).
+    const sum = (db.prepare("SELECT COALESCE(SUM(amount), 0) AS n FROM points_ledger WHERE instance_id = ?").get(id) as Row).n as number;
+    const paid = Math.min(sum, inst.points);
+    const allowNegative = !!(db.prepare('SELECT allow_negative FROM homes WHERE id = ?').get(homeId) as Row | undefined)?.allow_negative;
+    const taken = paid > 0 && !allowNegative ? Math.min(paid, Math.max(balance(db, inst.memberId), 0)) : paid;
+    if (taken) writeLedger(db, { homeId, memberId: inst.memberId, amount: -taken, kind: 'reversal', reason: `Approval undone: ${inst.title}`, date: inst.date, instanceId: id, by });
     db.prepare("UPDATE chore_instances SET status = 'submitted', reviewed_at = NULL, reviewed_by = NULL WHERE id = ?").run(id);
-    return getInstance(db, homeId, id);
+    return { item: getInstance(db, homeId, id), paid, taken };
   });
 }
 

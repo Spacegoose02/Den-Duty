@@ -75,7 +75,7 @@ export interface AgendaItem {
   /** A surprise bonus chore, worth double. */
   surprise?: boolean;
   /** Photo proof: asked for, and whether one was sent. */
-  needsPhoto?: boolean; hasPhoto?: boolean;
+  needsPhoto?: boolean; hasPhoto?: boolean; photoVersion?: string | null;
   /** A parent's cheer on the approval (see CHEERS). */
   cheer?: string | null;
 }
