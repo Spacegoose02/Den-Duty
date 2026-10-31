@@ -54,7 +54,7 @@ export interface Kid {
 }
 
 export interface HomeDetail {
-  id: string; name: string; pointsName: string; pointsIcon: string; theme: string; timezone: string; weekStart: 0 | 1; allowNegative?: boolean; helpdeskMaxOpen?: number;
+  id: string; name: string; pointsName: string; pointsIcon: string; theme: string; timezone: string; weekStart: 0 | 1; allowNegative?: boolean; surprise?: 'off' | 'sometimes' | 'often' | 'daily'; helpdeskMaxOpen?: number;
   viewer: 'parent' | 'kid' | 'device' | 'token';
   kids: Kid[];
   joinCode?: string;
@@ -72,6 +72,8 @@ export type ItemStatus = 'pending' | 'submitted' | 'approved' | 'rejected' | 'pl
 export interface AgendaItem {
   id: string | null; choreId: string | null; memberId: string; date: string; title: string; icon: string; points: number;
   status: ItemStatus; note: string | null; started: boolean;
+  /** A surprise bonus chore, worth double. */
+  surprise?: boolean;
 }
 
 export interface ExternalItem { date: string; time: string | null; title: string; feed: string; kind: string }
@@ -101,7 +103,7 @@ export interface BonusOffer { choreId: string; title: string; icon: string; poin
 
 export interface Board {
   today: string; weekStart: string; kid: Kid; stats: KidWeek; todayItems: AgendaItem[]; week: Day[]; goals: Goal[];
-  bonus: BonusOffer[]; level: LevelInfo; streak: Streak; achievements: Achievement[]; recent: LedgerEntry[]; timeouts: Timeout[];
+  bonus: BonusOffer[]; surprise: { state: 'waiting' } | { state: 'opened'; item: AgendaItem } | null; level: LevelInfo; streak: Streak; achievements: Achievement[]; recent: LedgerEntry[]; timeouts: Timeout[];
   /** Present only when a parent shares the kid's therapy goals with them. */
   therapy: { goals: { id: string; area: string; title: string; progress: number; rewardStep: number; rewardMet: number }[]; upcoming: { id: string; kind: string; title: string; provider: string | null; startsAt: string }[] } | null;
 }

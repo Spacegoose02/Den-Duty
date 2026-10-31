@@ -1,5 +1,6 @@
 // The core loop: chores become daily instances per kid, kids submit them, parents approve, approvals write points.
 // Everything here takes "today" as an argument so it's easy to test and always uses the home's own calendar.
+import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { tx, type Row } from './db.ts';
 import { HttpError, newId } from './util.ts';
@@ -125,17 +126,56 @@ export function bonusOffers(db: DatabaseSync, homeId: string, memberId: string, 
 }
 
 /** A kid signs up for a bonus chore today. It then works like any other chore: done, review, points. */
-export function claimBonus(db: DatabaseSync, homeId: string, choreId: string, memberId: string, today: string): AgendaItem {
+export function claimBonus(db: DatabaseSync, homeId: string, choreId: string, memberId: string, today: string, surprise = false): AgendaItem {
   return tx(db, () => {
     const offer = bonusOffers(db, homeId, memberId, today).find((o) => o.choreId === choreId);
     if (!offer) throw new HttpError(404, "That bonus chore isn't available today");
     if (offer.instanceId) return getInstance(db, homeId, offer.instanceId);
     if (offer.takenBy) throw new HttpError(409, `${offer.takenBy} already took that one today`);
     const id = newId();
-    db.prepare(`INSERT INTO chore_instances (id, home_id, chore_id, member_id, date, title, icon, points) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(id, homeId, choreId, memberId, today, offer.title, offer.icon, offer.points);
+    db.prepare(`INSERT INTO chore_instances (id, home_id, chore_id, member_id, date, title, icon, points, surprise) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(id, homeId, choreId, memberId, today, offer.title, offer.icon, offer.points * (surprise ? SURPRISE_MULTIPLIER : 1), surprise ? 1 : 0);
     return getInstance(db, homeId, id);
   });
+}
+
+// ---------- surprise bonus chores ----------
+
+export type SurpriseLevel = 'off' | 'sometimes' | 'often' | 'daily';
+export const SURPRISE_LEVELS: SurpriseLevel[] = ['off', 'sometimes', 'often', 'daily'];
+const SURPRISE_CHANCE: Record<SurpriseLevel, number> = { off: 0, sometimes: 0.3, often: 0.6, daily: 1 };
+export const SURPRISE_MULTIPLIER = 2;
+
+/** A steady number in [0, 1) for this kid and day, so the gift box doesn't come and go between page loads. */
+function dayRoll(...parts: string[]): number {
+  return createHash('sha256').update(parts.join(':')).digest().readUInt32BE(0) / 2 ** 32;
+}
+
+export type SurpriseView = { state: 'waiting' } | { state: 'opened'; item: AgendaItem } | null;
+
+/** Which bonus chore today's gift box hides for this kid, if there is one. */
+function surpriseCandidate(db: DatabaseSync, homeId: string, memberId: string, today: string): BonusOffer | null {
+  const level = ((db.prepare('SELECT surprise FROM homes WHERE id = ?').get(homeId) as Row | undefined)?.surprise ?? 'off') as SurpriseLevel;
+  if (dayRoll(homeId, memberId, today, 'gift') >= SURPRISE_CHANCE[level]) return null;
+  const open = bonusOffers(db, homeId, memberId, today).filter((o) => !o.instanceId && !o.takenBy).sort((a, b) => a.choreId.localeCompare(b.choreId));
+  if (!open.length) return null;
+  return open[Math.floor(dayRoll(homeId, memberId, today, 'pick') * open.length)];
+}
+
+/** The kid's gift box for today: still wrapped (what's inside stays a secret), opened, or none. */
+export function surpriseFor(db: DatabaseSync, homeId: string, memberId: string, today: string): SurpriseView {
+  const opened = db.prepare('SELECT * FROM chore_instances WHERE member_id = ? AND date = ? AND surprise = 1').get(memberId, today) as Row | undefined;
+  if (opened) return { state: 'opened', item: instanceItem(opened) };
+  return surpriseCandidate(db, homeId, memberId, today) ? { state: 'waiting' } : null;
+}
+
+/** Opens the gift box: the hidden bonus chore lands in the kid's To do, worth double. */
+export function openSurprise(db: DatabaseSync, homeId: string, memberId: string, today: string): AgendaItem {
+  const now = surpriseFor(db, homeId, memberId, today);
+  if (now?.state === 'opened') return now.item;
+  const pick = surpriseCandidate(db, homeId, memberId, today);
+  if (!pick) throw new HttpError(404, 'No surprise today. Maybe tomorrow!');
+  return claimBonus(db, homeId, pick.choreId, memberId, today, true);
 }
 
 /** Changed your mind? Only before it's been marked done. */
@@ -162,12 +202,14 @@ export interface AgendaItem {
   note: string | null;
   /** Kanban "Doing": the kid has started but not finished. */
   started: boolean;
+  /** A surprise bonus chore (double points). */
+  surprise: boolean;
 }
 
 const instanceItem = (r: Row): AgendaItem => ({
   id: r.id as string, choreId: r.chore_id as string | null, memberId: r.member_id as string, date: r.date as string,
   title: r.title as string, icon: r.icon as string, points: r.points as number, status: r.status as InstanceStatus,
-  note: (r.note as string | null) ?? null, started: !!r.started_at,
+  note: (r.note as string | null) ?? null, started: !!r.started_at, surprise: !!r.surprise,
 });
 
 /** Every chore for these kids from `from` for `days` days, with stored instances up to today and planned ones after. */
@@ -186,7 +228,7 @@ export function agenda(db: DatabaseSync, homeId: string, memberIds: string[], fr
         if (c.bonus || !isScheduledOn(scheduleOf(c), day.date)) continue;
         for (const m of c.memberIds) {
           if (!wanted.has(m)) continue;
-          day.items.push({ id: null, choreId: c.id, memberId: m, date: day.date, title: c.title, icon: c.icon, points: c.points, status: 'planned', note: null, started: false });
+          day.items.push({ id: null, choreId: c.id, memberId: m, date: day.date, title: c.title, icon: c.icon, points: c.points, status: 'planned', note: null, started: false, surprise: false });
         }
       }
     }

@@ -198,14 +198,14 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
                       <span className="kanban-icon" aria-hidden>{i.icon}</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div className="kanban-title">{i.title}</div>
-                        <div className="small muted">+{i.points} {icon}{isBonus && ' · bonus'}{i.date !== board.today && ` · from ${dayName(i.date)}`}</div>
+                        <div className="small muted">+{i.points} {icon}{i.surprise ? ' · 🎁 surprise ×2' : isBonus && ' · bonus'}{i.date !== board.today && ` · from ${dayName(i.date)}`}</div>
                         {i.status === 'rejected' && <div className="chore-note">🔁 {i.note ? `“${i.note}”` : 'Try again'}</div>}
                       </div>
                       <div className="kanban-actions">
                         {col.id === 'todo' && <button disabled={busy === k} onClick={() => void act(k, () => post(`/instances/${k}/start`, { started: true }))} aria-label="Start">▶</button>}
                         {(col.id === 'todo' || col.id === 'doing') && <button className="primary" disabled={busy === k} onClick={() => void done(i)} aria-label="Done">✓</button>}
                         {col.id === 'doing' && <button disabled={busy === k} onClick={() => void act(k, () => post(`/instances/${k}/start`, { started: false }))} aria-label="Back to to do">↩</button>}
-                        {col.id === 'todo' && isBonus && <button disabled={busy === k} onClick={() => void act(k, () => post(`/instances/${k}/unclaim`))} aria-label="Drop bonus">✕</button>}
+                        {col.id === 'todo' && isBonus && !i.surprise && <button disabled={busy === k} onClick={() => void act(k, () => post(`/instances/${k}/unclaim`))} aria-label="Drop bonus">✕</button>}
                         {col.id === 'waiting' && <button disabled={busy === k} onClick={() => void act(k, () => post(`/instances/${k}/undo`))}>Not yet</button>}
                         {col.id === 'done' && asParent && <button disabled={busy === k} onClick={() => void act(k, () => post(`/instances/${k}/undo`))}>Undo</button>}
                       </div>
@@ -218,6 +218,24 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
           })}
         </div>
       </section>
+
+      {board.surprise?.state === 'waiting' && (
+        <section className="card pg-chores surprise-card">
+          <button className="surprise-box" disabled={busy === 'surprise'} aria-label="Open your surprise"
+            onClick={() => void act('surprise', async () => {
+              const r = await post(`/kids/${memberId}/surprise/open`) as { item: AgendaItem };
+              confetti({ colors: [kid.color, '#ffd43b', '#ff6b6b'], count: 200 });
+              setCheer({ icon: r.item.icon, text: `Surprise! ${r.item.title} for double ${home?.pointsName ?? 'points'}: +${r.item.points} ${icon}` });
+              window.setTimeout(() => setCheer(null), 3200);
+            })}>
+            <span className="surprise-gift" aria-hidden>🎁</span>
+            <span>
+              <strong>{asParent ? `${kid.name} has a surprise waiting` : 'A surprise is waiting for you!'}</strong>
+              <span className="small muted" style={{ display: 'block' }}>{asParent ? 'It opens on their board, or tap to open it now.' : 'Tap to open it'}</span>
+            </span>
+          </button>
+        </section>
+      )}
 
       {board.bonus.length > 0 && (
         <section className="card stack pg-chores">

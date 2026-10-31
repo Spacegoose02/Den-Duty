@@ -5,7 +5,7 @@ import { tx, type Row } from '../db.ts';
 import { config } from '../config.ts';
 import { HttpError, newId, randomToken, readableCode, requireStr, sha256, str } from '../util.ts';
 import { hashPassword, limitAuth } from '../security.ts';
-import { balance, homeInfo, homeToday } from '../chores.ts';
+import { balance, homeInfo, homeToday, SURPRISE_LEVELS, type SurpriseLevel } from '../chores.ts';
 import { ageOn, pictureMode } from '../../../shared/ages.ts';
 import { DOCTOR_AREA_IDS, IDEAS_OFF_DEFAULT, KID_PAGE_IDS, offList, PRACTICE_IDEA_IDS, type DoctorArea, type KidPage, type PracticeIdea } from '../../../shared/pages.ts';
 import { defaultAvatar, isAvatar, isKidColor, KID_COLORS, POINT_ICONS } from '../../../shared/catalog.ts';
@@ -122,6 +122,7 @@ export function homeRoutes(app: FastifyInstance, db: DatabaseSync): void {
       timezone: home.timezone as string,
       weekStart: home.week_start as number,
       allowNegative: !!home.allow_negative,
+      surprise: home.surprise as string,
       helpdeskMaxOpen: (home.helpdesk_max_open as number) ?? 3,
       viewer: ctx.actor.kind,
       kids: listKids(db, ctx.homeId),
@@ -160,6 +161,7 @@ export function homeRoutes(app: FastifyInstance, db: DatabaseSync): void {
       db.prepare('UPDATE homes SET helpdesk_max_open = ? WHERE id = ?').run(n, ctx.homeId);
     }
     if (typeof b.allowNegative === 'boolean') db.prepare('UPDATE homes SET allow_negative = ? WHERE id = ?').run(b.allowNegative ? 1 : 0, ctx.homeId);
+    if (SURPRISE_LEVELS.includes(b.surprise as SurpriseLevel)) db.prepare('UPDATE homes SET surprise = ? WHERE id = ?').run(b.surprise as string, ctx.homeId);
     if (b.weekStart === 0 || b.weekStart === 1) db.prepare('UPDATE homes SET week_start = ? WHERE id = ?').run(b.weekStart, ctx.homeId);
     return { ok: true };
   });

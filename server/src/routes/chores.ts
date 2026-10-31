@@ -4,7 +4,7 @@ import { assertCanActFor, homeCtx, type HomeCtx } from '../auth.ts';
 import { tx, type Row } from '../db.ts';
 import { HttpError, newId, num, requireStr, str } from '../util.ts';
 import {
-  agenda, approveInstance, bonusOffers, kidsWithPageOff, claimBonus, getInstance, goalsFor, homeInfo, homeToday, kidWeek, ledger, rejectInstance,
+  agenda, approveInstance, bonusOffers, openSurprise, surpriseFor, kidsWithPageOff, claimBonus, getInstance, goalsFor, homeInfo, homeToday, kidWeek, ledger, rejectInstance,
   reviewQueue, setStarted, submitInstance, syncChore, todayList, unapproveInstance, unclaimBonus, unsubmitInstance, type By, type HomeInfo,
 } from '../chores.ts';
 import { achievements, doctorsStats, goalsStats, kidStats, levelOf, streaks } from '../progress.ts';
@@ -205,6 +205,7 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
       week: withDoctors(db, await withFeeds(db, ctx, on('chores') ? agenda(db, ctx.homeId, [memberId], start, 7, today) : agenda(db, ctx.homeId, [], start, 7, today), memberId), [memberId], ctx.actor.kind !== 'parent'),
       goals: on('goals') ? goalsFor(db, memberId) : [],
       bonus: on('chores') ? bonusOffers(db, ctx.homeId, memberId, today) : [],
+      surprise: on('chores') ? surpriseFor(db, ctx.homeId, memberId, today) : null,
       level: levelOf(db, memberId),
       streak: streaks(db, memberId, today),
       achievements: on('stats') ? achievements(db, memberId, today) : [],
@@ -240,6 +241,15 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const ctx = homeCtx(db, req);
     const memberId = actingKid(db, ctx, (req.body as Row)?.memberId);
     return { item: claimBonus(db, ctx.homeId, (req.params as { choreId: string }).choreId, memberId, homeToday(homeInfo(db, ctx.homeId))) };
+  });
+
+  app.post('/api/homes/:homeId/kids/:memberId/surprise/open', async (req) => {
+    const ctx = homeCtx(db, req);
+    const { memberId: wanted } = req.params as { memberId: string };
+    assertCanActFor(ctx, wanted);
+    const memberId = actingKid(db, ctx, wanted);
+    if (!pageOn(db, memberId, 'chores')) throw new HttpError(403, 'Chores are turned off');
+    return { item: openSurprise(db, ctx.homeId, memberId, homeToday(homeInfo(db, ctx.homeId))) };
   });
 
   app.post('/api/homes/:homeId/instances/:id/unclaim', async (req) => {

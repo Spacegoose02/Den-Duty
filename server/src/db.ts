@@ -661,6 +661,11 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX team_goals_home ON team_goals(home_id, status);
   `,
+  // Surprise bonus chores: on some days a kid finds a gift box that turns one of today's bonus chores into double points.
+  `
+  ALTER TABLE homes ADD COLUMN surprise TEXT NOT NULL DEFAULT 'off' CHECK (surprise IN ('off', 'sometimes', 'often', 'daily'));
+  ALTER TABLE chore_instances ADD COLUMN surprise INTEGER NOT NULL DEFAULT 0;
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {
