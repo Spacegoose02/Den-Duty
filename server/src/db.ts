@@ -674,6 +674,10 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE chore_instances ADD COLUMN photo TEXT;
   ALTER TABLE chore_instances ADD COLUMN cheer TEXT;
   `,
+  // Helpdesk: 3 open requests per kid was too tight. Homes still on that old default go to 10 (0 now means no limit).
+  `
+  UPDATE homes SET helpdesk_max_open = 10 WHERE helpdesk_max_open = 3;
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

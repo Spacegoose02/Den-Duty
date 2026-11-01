@@ -82,11 +82,11 @@ export function helpdeskRoutes(app: FastifyInstance, db: DatabaseSync): void {
     if (pick.id === 'other' && !text) throw new HttpError(400, 'Tell us what you need');
     const due = b.dueDate == null || b.dueDate === '' ? null : b.dueDate;
     if (due != null && (!isIsoDate(due) || due < homeToday(homeInfo(db, ctx.homeId)))) throw new HttpError(400, 'Pick today or a day after');
-    // No spamming the grown-ups: a cap on open requests per kid (Settings), and a few asks a minute at most.
+    // No spamming the grown-ups: a cap on open requests per kid (Settings, 0 = no limit), and a handful of asks a minute at most.
     const max = (db.prepare('SELECT helpdesk_max_open FROM homes WHERE id = ?').get(ctx.homeId) as Row).helpdesk_max_open as number;
     const open = (db.prepare("SELECT COUNT(*) AS n FROM helpdesk_requests WHERE member_id = ? AND status = 'waiting' AND closed_at IS NULL").get(memberId) as Row).n as number;
-    if (open >= max) throw new HttpError(429, `You already have ${open} waiting. Let a grown-up answer those first!`);
-    rateLimit(`helpdesk:${memberId}`, 5, 60e3);
+    if (max > 0 && open >= max) throw new HttpError(429, `You already have ${open} waiting. Let a grown-up answer those first!`);
+    rateLimit(`helpdesk:${memberId}`, 10, 60e3);
     const id = newId();
     db.prepare('INSERT INTO helpdesk_requests (id, home_id, member_id, kind, text, due_date) VALUES (?, ?, ?, ?, ?, ?)').run(id, ctx.homeId, memberId, pick.id, text, due);
     emit(db, ctx.homeId, 'helpdesk_requested', memberId, { request: text ? `${pick.label}: ${text}` : pick.label, due_date: due, request_id: id });
