@@ -16,6 +16,7 @@ import { cheerOf, pickPhoto, PhotoThumb } from '../components/Photo.tsx';
 import { KidMedicine, PracticeMode } from '../components/KidPractice.tsx';
 import { RoutineCards, RoutinePlayer } from '../components/Routines.tsx';
 import { KidJars } from '../components/Money.tsx';
+import { KidSportsCards } from '../components/Sports.tsx';
 import { SpeakButton, speak } from '../components/Speak.tsx';
 import { clockText } from '../../../shared/schedule.ts';
 import type { RoutineId } from '../../../shared/catalog.ts';
@@ -332,6 +333,8 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
       </div>
 
       {board.money && <KidJars money={board.money} color={kid.color} readAloud={readAloud} />}
+
+      <KidSportsCards memberId={memberId} simple={kid.pictureMode} readAloud={readAloud} color={kid.color} />
 
       {board.meds.length > 0 && !asParent && <KidMedicine meds={board.meds} color={kid.color} onChange={() => void reload()} />}
       {practicing && <PracticeMode goal={practicing} color={kid.color} onClose={() => setPracticing(null)} onDone={() => { setPracticing(null); void reload(); }} />}

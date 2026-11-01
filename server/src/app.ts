@@ -30,6 +30,7 @@ import { archiveRoutes } from './routes/archive.ts';
 import { installV1, v1Routes } from './routes/v1.ts';
 import { gamingRoutes } from './routes/gaming.ts';
 import { lootdenRoutes } from './routes/lootden.ts';
+import { sportsRoutes } from './routes/sports.ts';
 import { downloadRoutes } from './routes/downloads.ts';
 import { moneyRoutes } from './routes/money.ts';
 import { pushRoutes } from './routes/push.ts';
@@ -76,6 +77,7 @@ export async function buildApp(db: DatabaseSync, opts: { logger?: boolean; serve
   v1Routes(app, db);
   gamingRoutes(app, db);
   lootdenRoutes(app, db);
+  sportsRoutes(app, db);
   downloadRoutes(app);
 
   const hasWeb = opts.serveWeb !== false && fs.existsSync(path.join(config.webDist, 'index.html'));
