@@ -7,6 +7,7 @@ test('helpdesk: a kid asks, a parent says yes (a Parent Duty card) or not this t
   const { call, mom, base, ava, ben, tablet, asKid, today } = await family();
   const due = addDays(today, 3);
 
+  await call(mom, 'PATCH', base, { helpdeskMaxOpen: 3 });
   await asKid(ava);
   assert.equal((await call(tablet, 'POST', `${base}/kids/${ava.id}/helpdesk`, { kind: 'nope' })).status, 400);
   assert.equal((await call(tablet, 'POST', `${base}/kids/${ava.id}/helpdesk`, { kind: 'other' })).status, 400, 'something else needs words');
@@ -15,7 +16,7 @@ test('helpdesk: a kid asks, a parent says yes (a Parent Duty card) or not this t
   assert.equal(project.status, 'waiting');
   const shoes = (await call(tablet, 'POST', `${base}/kids/${ava.id}/helpdesk`, { kind: 'clothes', text: 'new shoes' })).body;
   await call(tablet, 'POST', `${base}/kids/${ava.id}/helpdesk`, { kind: 'talk' });
-  // The open-request cap (3 by default).
+  // The open-request cap (set to 3 here).
   assert.equal((await call(tablet, 'POST', `${base}/kids/${ava.id}/helpdesk`, { kind: 'ride' })).status, 429);
   // Kids can't see or answer each other's.
   assert.equal((await call(tablet, 'GET', `${base}/kids/${ben.id}/helpdesk`)).status, 403);
@@ -66,9 +67,31 @@ test('helpdesk: a kid asks, a parent says yes (a Parent Duty card) or not this t
   await call(mom, 'PATCH', `${base}/kids/${ava.id}`, { pagesOff: ['helpdesk'] });
   assert.deepEqual((await call(tablet, 'GET', `${base}/kids/${ava.id}/helpdesk`)).body, []);
   assert.equal((await call(tablet, 'POST', `${base}/kids/${ava.id}/helpdesk`, { kind: 'fix' })).status, 403);
-  assert.equal((await call(mom, 'PATCH', base, { helpdeskMaxOpen: 0 })).status, 400);
+  assert.equal((await call(mom, 'PATCH', base, { helpdeskMaxOpen: -1 })).status, 400);
+  assert.equal((await call(mom, 'PATCH', base, { helpdeskMaxOpen: 51 })).status, 400);
   await call(mom, 'PATCH', base, { helpdeskMaxOpen: 5 });
   assert.equal((await call(mom, 'GET', base)).body.helpdeskMaxOpen, 5);
+});
+
+test('helpdesk: kids can have 10 waiting by default, and a parent can lift the cap', async () => {
+  const { call, mom, base, ava, ben, tablet, asKid } = await family();
+  assert.equal((await call(mom, 'GET', base)).body.helpdeskMaxOpen, 10);
+  await asKid(ava);
+  const ask = () => call(tablet, 'POST', `${base}/kids/${ava.id}/helpdesk`, { kind: 'fix' });
+  for (let i = 0; i < 10; i++) assert.equal((await ask()).status, 200, `ask #${i + 1}`);
+  const over = await ask();
+  assert.equal(over.status, 429);
+  assert.match(JSON.stringify(over.body), /10 waiting/);
+
+  // 0 means no limit.
+  await call(mom, 'PATCH', base, { helpdeskMaxOpen: 1 });
+  await asKid(ben);
+  const benAsk = () => call(tablet, 'POST', `${base}/kids/${ben.id}/helpdesk`, { kind: 'ride' });
+  assert.equal((await benAsk()).status, 200);
+  assert.equal((await benAsk()).status, 429);
+  await call(mom, 'PATCH', base, { helpdeskMaxOpen: 0 });
+  assert.equal((await call(mom, 'GET', base)).body.helpdeskMaxOpen, 0);
+  assert.equal((await benAsk()).status, 200);
 });
 
 test('helpdesk: with Parent Duty off for the kid, a yes goes on the general list under their name', async () => {

@@ -142,13 +142,13 @@ function HomeSettings() {
       </p>
 
       <h3>🛎️ Helpdesk</h3>
-      <label className="row" style={{ fontWeight: 600 }}>
-        Each kid can have up to
-        <input type="number" min={1} max={20} defaultValue={home.helpdeskMaxOpen ?? 3} style={{ width: 80 }}
-          onBlur={(e) => { const n = Number(e.target.value); if (n >= 1 && n <= 20 && n !== home.helpdeskMaxOpen) void patch({ helpdeskMaxOpen: n }); }} />
-        requests waiting at once
-      </label>
-      <p className="small muted" style={{ margin: 0 }}>Keeps the asks to a manageable number. They can ask again once you answer.</p>
+      <p style={{ fontWeight: 600, margin: 0 }}>Requests each kid can have waiting at once</p>
+      <div className="chips">
+        {[...new Set([3, 5, 10, 20, home.helpdeskMaxOpen ?? 10, 0])].sort((a, b) => (a || Infinity) - (b || Infinity)).map((n) => (
+          <button key={n} className={`chip${(home.helpdeskMaxOpen ?? 10) === n ? ' on' : ''}`} onClick={() => void patch({ helpdeskMaxOpen: n })}>{n === 0 ? 'No limit' : n}</button>
+        ))}
+      </div>
+      <p className="small muted" style={{ margin: 0 }}>Keeps the asks to a manageable number. Once a kid hits it, they can ask again when you answer one.</p>
 
       <h3>Home theme</h3>
       <p className="small muted" style={{ margin: 0 }}>Used on the family tablet and by anyone who hasn't picked their own. Each kid can have their own in Kids → Edit.</p>

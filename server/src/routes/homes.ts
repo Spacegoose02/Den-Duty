@@ -24,11 +24,15 @@ export function seedQuickRewards(db: DatabaseSync, homeId: string): void {
   STARTER_QUICK_REWARDS.forEach((r, i) => ins.run(newId(), homeId, r.title, r.icon, r.amount, i));
 }
 
+/** Helpdesk: open requests a kid can have waiting at once. 0 means no limit. */
+export const HELPDESK_DEFAULT_MAX = 10;
+export const HELPDESK_MAX_CAP = 50;
+
 export function createHome(db: DatabaseSync, user: { id: string; name: string; avatar: string }, name: string, timezone?: string | null): string {
   const id = newId();
   tx(db, () => {
-    db.prepare('INSERT INTO homes (id, name, join_code, timezone) VALUES (?, ?, ?, ?)')
-      .run(id, name, readableCode(8), isTimeZone(timezone) ? timezone : config.defaultTimezone);
+    db.prepare('INSERT INTO homes (id, name, join_code, timezone, helpdesk_max_open) VALUES (?, ?, ?, ?, ?)')
+      .run(id, name, readableCode(8), isTimeZone(timezone) ? timezone : config.defaultTimezone, HELPDESK_DEFAULT_MAX);
     addParent(db, id, user);
     seedQuickRewards(db, id);
   });
@@ -130,7 +134,7 @@ export function homeRoutes(app: FastifyInstance, db: DatabaseSync): void {
       weekStart: home.week_start as number,
       allowNegative: !!home.allow_negative,
       surprise: home.surprise as string,
-      helpdeskMaxOpen: (home.helpdesk_max_open as number) ?? 3,
+      helpdeskMaxOpen: (home.helpdesk_max_open as number) ?? HELPDESK_DEFAULT_MAX,
       viewer: ctx.actor.kind,
       kids: listKids(db, ctx.homeId),
     };
@@ -164,7 +168,7 @@ export function homeRoutes(app: FastifyInstance, db: DatabaseSync): void {
     }
     if ('helpdeskMaxOpen' in b) {
       const n = Number(b.helpdeskMaxOpen);
-      if (!Number.isInteger(n) || n < 1 || n > 20) throw new HttpError(400, 'Open Helpdesk requests per kid: 1 to 20');
+      if (!Number.isInteger(n) || n < 0 || n > HELPDESK_MAX_CAP) throw new HttpError(400, `Open Helpdesk requests per kid: 1 to ${HELPDESK_MAX_CAP}, or 0 for no limit`);
       db.prepare('UPDATE homes SET helpdesk_max_open = ? WHERE id = ?').run(n, ctx.homeId);
     }
     if (typeof b.allowNegative === 'boolean') db.prepare('UPDATE homes SET allow_negative = ? WHERE id = ?').run(b.allowNegative ? 1 : 0, ctx.homeId);
