@@ -16,11 +16,14 @@ import { homeTimeouts, kidTimeouts } from './timeouts.ts';
 import { waitingRequests } from './helpdesk.ts';
 import { listReminders, remindersDue } from './reminders.ts';
 import { roomMessage } from '../roommessage.ts';
+import { kidMoney, runMoney } from '../money.ts';
+import { recap, recapWaiting } from '../recap.ts';
 import { externalBetween, refreshStale } from '../calendar.ts';
 import { cleanIcon, doctorAreasOff, getKid, kidView, listKids, pageOn } from './homes.ts';
 import type { KidPage } from '../../../shared/pages.ts';
 import { isCheer } from '../../../shared/catalog.ts';
-import { addDays, cleanWeekdays, describeSchedule, isIsoDate, startOfWeek, timeIn, type ScheduleKind } from '../../../shared/schedule.ts';
+import { addDays, cleanWeekdays, clockText, describeSchedule, isClockTime, isIsoDate, SCHEDULE_KINDS, startOfWeek, timeIn, type RotateKind, type ScheduleKind } from '../../../shared/schedule.ts';
+import { ROUTINE_IDS, type RoutineId } from '../../../shared/catalog.ts';
 
 /** Who to credit in the ledger and review history. */
 export function byOf(ctx: HomeCtx): By {
@@ -29,13 +32,19 @@ export function byOf(ctx: HomeCtx): By {
 
 function choreView(db: DatabaseSync, r: Row) {
   const weekdays = JSON.parse(r.weekdays as string) as number[];
-  const schedule = r.schedule as ScheduleKind;
+  const schedule = ((r.cadence as string | null) ?? r.schedule) as ScheduleKind;
+  const everyDays = (r.every_days as number | null) ?? null;
+  const monthDay = (r.month_day as number | null) ?? null;
+  const dueTime = (r.due_time as string | null) ?? null;
   return {
     id: r.id as string, title: r.title as string, icon: r.icon as string, points: r.points as number,
-    schedule, weekdays, dueDate: r.due_date as string | null, startDate: r.start_date as string,
-    describe: describeSchedule({ schedule, weekdays, dueDate: r.due_date as string | null }),
+    schedule, weekdays, dueDate: r.due_date as string | null, startDate: r.start_date as string, everyDays, monthDay,
+    describe: describeSchedule({ schedule, weekdays, dueDate: r.due_date as string | null, everyDays, monthDay }) + (dueTime ? ` · by ${clockText(dueTime)}` : ''),
     bonus: !!r.bonus, claimLimit: r.claim_limit as 'each' | 'one', photo: !!r.photo, category: (r.category as string | null) ?? null,
-    memberIds: (db.prepare('SELECT member_id FROM chore_assignments WHERE chore_id = ?').all(r.id as string) as Row[]).map((a) => a.member_id as string),
+    dueTime, latePoints: (r.late_points as number | null) ?? null,
+    routine: (r.routine as RoutineId | null) ?? null, routinePos: (r.routine_pos as number) ?? 0, minutes: (r.minutes as number | null) ?? null,
+    rotate: (r.rotate as RotateKind | null) ?? null, autoApprove: !!r.auto_approve,
+    memberIds: (db.prepare('SELECT member_id FROM chore_assignments WHERE chore_id = ? ORDER BY position, rowid').all(r.id as string) as Row[]).map((a) => a.member_id as string),
   };
 }
 
@@ -55,8 +64,18 @@ function choreInput(db: DatabaseSync, homeId: string, b: Row, today: string, cur
     if (p == null || !Number.isInteger(p) || p < 0 || p > 10000) throw new HttpError(400, 'Points must be a whole number from 0 to 10000');
     points = p;
   }
-  const schedule = (b.schedule ?? cur?.schedule ?? 'daily') as ScheduleKind;
-  if (!['daily', 'weekly', 'once'].includes(schedule)) throw new HttpError(400, 'Schedule must be daily, weekly or once');
+  const schedule = (b.schedule ?? cur?.cadence ?? cur?.schedule ?? 'daily') as ScheduleKind;
+  if (!SCHEDULE_KINDS.includes(schedule)) throw new HttpError(400, 'Schedule must be daily, weekly, once, interval or monthly');
+  let everyDays: number | null = null;
+  if (schedule === 'interval') {
+    everyDays = num('everyDays' in b ? b.everyDays : cur?.every_days);
+    if (everyDays == null || !Number.isInteger(everyDays) || everyDays < 2 || everyDays > 365) throw new HttpError(400, 'Every how many days? 2 to 365');
+  }
+  let monthDay: number | null = null;
+  if (schedule === 'monthly') {
+    monthDay = num('monthDay' in b ? b.monthDay : cur?.month_day);
+    if (monthDay == null || !Number.isInteger(monthDay) || monthDay < 1 || monthDay > 31) throw new HttpError(400, 'Pick a day of the month, 1 to 31');
+  }
   const weekdays = 'weekdays' in b ? cleanWeekdays(b.weekdays) : cur ? (JSON.parse(cur.weekdays as string) as number[]) : [];
   if (schedule === 'weekly' && !weekdays.length) throw new HttpError(400, 'Pick at least one day of the week');
   let dueDate = 'dueDate' in b ? (b.dueDate as string | null) : (cur?.due_date as string | null) ?? null;
@@ -78,8 +97,31 @@ function choreInput(db: DatabaseSync, homeId: string, b: Row, today: string, cur
   }
   const category = 'category' in b ? (b.category === 'room' ? 'room' : null) : (cur?.category as string | null) ?? null;
   const photo = 'photo' in b ? !!b.photo : !!cur?.photo;
-  return { title, icon, points, schedule, weekdays, dueDate, memberIds, bonus, claimLimit, category, photo };
+  const dueTime: unknown = 'dueTime' in b ? (b.dueTime == null || b.dueTime === '' ? null : b.dueTime) : (cur?.due_time as string | null) ?? null;
+  if (dueTime != null && !isClockTime(dueTime)) throw new HttpError(400, 'Due times look like 07:30');
+  let latePoints = 'latePoints' in b ? (b.latePoints == null || b.latePoints === '' ? null : num(b.latePoints)) : (cur?.late_points as number | null) ?? null;
+  if (latePoints != null && (!Number.isInteger(latePoints) || latePoints < 0 || latePoints > points)) throw new HttpError(400, `Late points: a whole number from 0 to ${points}`);
+  if (!dueTime) latePoints = null;
+  const routine = ('routine' in b ? (b.routine || null) : (cur?.routine as string | null) ?? null) as RoutineId | null;
+  if (routine != null && !ROUTINE_IDS.includes(routine)) throw new HttpError(400, 'Routine must be morning, afterschool or bedtime');
+  let routinePos = 'routinePos' in b ? num(b.routinePos) ?? 0 : (cur?.routine_pos as number | undefined) ?? 0;
+  if (!Number.isInteger(routinePos) || routinePos < 0 || routinePos > 99) routinePos = 0;
+  const minutes = 'minutes' in b ? (b.minutes == null || b.minutes === '' ? null : num(b.minutes)) : (cur?.minutes as number | null) ?? null;
+  if (minutes != null && (!Number.isInteger(minutes) || minutes < 1 || minutes > 120)) throw new HttpError(400, 'Timer: 1 to 120 minutes');
+  const rotate = ('rotate' in b ? (b.rotate || null) : (cur?.rotate as string | null) ?? null) as string | null;
+  if (rotate != null && rotate !== 'daily' && rotate !== 'weekly') throw new HttpError(400, 'Taking turns is daily or weekly');
+  if (rotate && bonus) throw new HttpError(400, "Bonus chores can't take turns");
+  if (rotate && schedule === 'once') throw new HttpError(400, "A one-time chore can't take turns");
+  const autoApprove = 'autoApprove' in b ? !!b.autoApprove : !!cur?.auto_approve;
+  return {
+    title, icon, points, schedule, weekdays, dueDate, memberIds, bonus, claimLimit, category, photo, everyDays, monthDay,
+    dueTime: bonus ? null : (dueTime as string | null), latePoints: bonus ? null : latePoints, routine: bonus ? null : routine, routinePos, minutes,
+    rotate: rotate as RotateKind | null, autoApprove,
+  };
 }
+
+/** The old schedule column only knows daily, weekly and once; the newer kinds live in cadence. */
+const storedSchedule = (k: ScheduleKind) => (k === 'interval' || k === 'monthly' ? { schedule: 'daily', cadence: k } : { schedule: k, cadence: null });
 
 /** Only a kid's own things for kids; parents can act for any kid in the home. */
 function actingKid(db: DatabaseSync, ctx: HomeCtx, requested: unknown): string {
@@ -88,10 +130,11 @@ function actingKid(db: DatabaseSync, ctx: HomeCtx, requested: unknown): string {
   return getKid(db, ctx, requireStr(requested, 'Kid', 60)).id as string;
 }
 
+/** The order kids are picked in is the order they take turns. */
 function setAssignments(db: DatabaseSync, choreId: string, memberIds: string[]): void {
   db.prepare('DELETE FROM chore_assignments WHERE chore_id = ?').run(choreId);
-  const ins = db.prepare('INSERT INTO chore_assignments (chore_id, member_id) VALUES (?, ?)');
-  for (const m of memberIds) ins.run(choreId, m);
+  const ins = db.prepare('INSERT INTO chore_assignments (chore_id, member_id, position) VALUES (?, ?, ?)');
+  memberIds.forEach((m, i) => ins.run(choreId, m, i));
 }
 
 /** Who the agenda is for: kids only ever see themselves. */
@@ -136,11 +179,14 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const today = homeToday(homeInfo(db, ctx.homeId));
     const c = choreInput(db, ctx.homeId, (req.body ?? {}) as Row, today);
     const id = newId();
+    const st = storedSchedule(c.schedule);
     tx(db, () => {
-      db.prepare(`INSERT INTO chores (id, home_id, title, icon, points, schedule, weekdays, due_date, start_date, created_by, bonus, claim_limit, category, photo)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(id, ctx.homeId, c.title, c.icon, c.points, c.schedule, JSON.stringify(c.weekdays), c.dueDate,
-          c.dueDate && c.dueDate < today ? c.dueDate : today, ctx.user?.id ?? null, c.bonus ? 1 : 0, c.claimLimit, c.category, c.photo ? 1 : 0);
+      db.prepare(`INSERT INTO chores (id, home_id, title, icon, points, schedule, weekdays, due_date, start_date, created_by, bonus, claim_limit, category, photo,
+          cadence, every_days, month_day, due_time, late_points, routine, routine_pos, minutes, rotate, auto_approve)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(id, ctx.homeId, c.title, c.icon, c.points, st.schedule, JSON.stringify(c.weekdays), c.dueDate,
+          c.dueDate && c.dueDate < today ? c.dueDate : today, ctx.user?.id ?? null, c.bonus ? 1 : 0, c.claimLimit, c.category, c.photo ? 1 : 0,
+          st.cadence, c.everyDays, c.monthDay, c.dueTime, c.latePoints, c.routine, c.routinePos, c.minutes, c.rotate, c.autoApprove ? 1 : 0);
       setAssignments(db, id, c.memberIds!);
     });
     syncChore(db, ctx.homeId, id, today);
@@ -152,10 +198,16 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const today = homeToday(homeInfo(db, ctx.homeId));
     const cur = getChore(db, ctx.homeId, (req.params as { choreId: string }).choreId);
     const c = choreInput(db, ctx.homeId, (req.body ?? {}) as Row, today, cur);
+    const st = storedSchedule(c.schedule);
+    // Every N days counts from the start date, so changing to (or the N of) an interval starts the count today.
+    const restart = c.schedule === 'interval' && (cur.cadence !== 'interval' || cur.every_days !== c.everyDays) ? today : null;
     tx(db, () => {
       db.prepare(`UPDATE chores SET title = ?, icon = ?, points = ?, schedule = ?, weekdays = ?, due_date = ?, bonus = ?, claim_limit = ?, category = ?, photo = ?,
-        start_date = MIN(start_date, COALESCE(?, start_date)), updated_at = datetime('now') WHERE id = ?`)
-        .run(c.title, c.icon, c.points, c.schedule, JSON.stringify(c.weekdays), c.dueDate, c.bonus ? 1 : 0, c.claimLimit, c.category, c.photo ? 1 : 0, c.dueDate, cur.id as string);
+        cadence = ?, every_days = ?, month_day = ?, due_time = ?, late_points = ?, routine = ?, routine_pos = ?, minutes = ?, rotate = ?, auto_approve = ?,
+        start_date = COALESCE(?, MIN(start_date, COALESCE(?, start_date))), updated_at = datetime('now') WHERE id = ?`)
+        .run(c.title, c.icon, c.points, st.schedule, JSON.stringify(c.weekdays), c.dueDate, c.bonus ? 1 : 0, c.claimLimit, c.category, c.photo ? 1 : 0,
+          st.cadence, c.everyDays, c.monthDay, c.dueTime, c.latePoints, c.routine, c.routinePos, c.minutes, c.rotate, c.autoApprove ? 1 : 0,
+          restart, c.dueDate, cur.id as string);
       if (c.memberIds) setAssignments(db, cur.id as string, c.memberIds);
     });
     syncChore(db, ctx.homeId, cur.id as string, today);
@@ -219,6 +271,8 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
       // Medicines a parent lets this kid tick off themselves.
       meds: kidMeds(db, memberId, today, timeIn(home.timezone)),
       timeouts: on('timeout') ? kidTimeouts(db, memberId) : [],
+      // Allowance and jars, when the home uses them (with Goals & rewards on for this kid).
+      money: on('goals') ? (runMoney(db, ctx.homeId, today), kidMoney(db, ctx.homeId, memberId)) : null,
     };
   });
 
@@ -306,7 +360,8 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
     if (ctx.actor.kind === 'parent') return approveInstance(db, ctx.homeId, id, byOf(ctx));
     if (ctx.actor.kind !== 'kid') throw new HttpError(403, 'Tap your avatar first');
     assertCanActFor(ctx, inst.memberId);
-    return { item: submitInstance(db, ctx.homeId, id, homeToday(homeInfo(db, ctx.homeId))), awarded: 0 };
+    const item = submitInstance(db, ctx.homeId, id, homeToday(homeInfo(db, ctx.homeId)));
+    return { item, awarded: item.status === 'approved' && item.auto ? item.points : 0 };
   });
 
   app.post('/api/homes/:homeId/instances/:id/undo', async (req) => {
@@ -388,6 +443,25 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
     return { item: rejectInstance(db, ctx.homeId, (req.params as { id: string }).id, byOf(ctx), str((req.body as Row)?.note, 200)) };
   });
 
+  // ---------- weekly recap ----------
+  app.get('/api/homes/:homeId/recap', async (req) => {
+    const ctx = homeCtx(db, req, 'parent');
+    const home = homeInfo(db, ctx.homeId);
+    const today = homeToday(home);
+    const q = (req.query as { week?: string }).week;
+    const week = q ? startOfWeek(startParam(q, today), home.weekStart) : undefined;
+    if (week && week >= startOfWeek(today, home.weekStart)) throw new HttpError(400, 'That week isn\'t over yet');
+    return recap(db, home, today, week);
+  });
+
+  app.post('/api/homes/:homeId/recap/seen', async (req) => {
+    const ctx = homeCtx(db, req, 'parent');
+    const home = homeInfo(db, ctx.homeId);
+    const week = startOfWeek(addDays(startOfWeek(homeToday(home), home.weekStart), -7), home.weekStart);
+    db.prepare('UPDATE homes SET recap_seen = ? WHERE id = ?').run(week, ctx.homeId);
+    return { ok: true };
+  });
+
   // ---------- summaries ----------
   app.get('/api/homes/:homeId/summary', async (req) => {
     const ctx = homeCtx(db, req, 'parent');
@@ -399,6 +473,8 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
       weekStart,
       weekEnd: addDays(weekStart, 6),
       waiting: reviewQueue(db, ctx.homeId).length,
+      // Last week's recap, until a parent opens it.
+      recapWeek: recapWaiting(db, home, today),
       timeouts: homeTimeouts(db, ctx.homeId),
       helpdesk: waitingRequests(db, ctx.homeId),
       // Overdue, due today and the next week (undated ones live on the Reminders page).

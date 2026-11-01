@@ -21,6 +21,8 @@ import { ApiDocs } from './pages/ApiDocs.tsx';
 import { DownloadsPage } from './pages/Downloads.tsx';
 import { SharePage } from './pages/SharePage.tsx';
 import { VisitSummaryPage } from './pages/doctors/Summary.tsx';
+import { Recap } from './pages/Recap.tsx';
+import { AllowancePage } from './components/Money.tsx';
 
 const NAV = [
   { to: '/', ico: '🏠', label: 'Home', end: true },
@@ -28,6 +30,7 @@ const NAV = [
   { to: '/chores', ico: '🧹', label: 'Chores' },
   { to: '/kids', ico: '🦝', label: 'Kids' },
   { to: '/rewards', ico: '🎁', label: 'Rewards' },
+  { to: '/allowance', ico: '💰', label: 'Allowance' },
   { to: '/stats', ico: '📊', label: 'Stats' },
   { to: '/doctors', ico: '🩺', label: 'Doctors' },
   { to: '/parent-duty', ico: '📝', label: 'Parent Duty' },
@@ -36,7 +39,7 @@ const NAV = [
 ];
 
 /** Which per-kid page each nav entry belongs to (see shared/pages.ts). */
-const NAV_PAGE: Record<string, KidPage> = { '/chores': 'chores', '/parent-duty': 'parentduty', '/rewards': 'goals', '/stats': 'stats', '/doctors': 'doctors' };
+const NAV_PAGE: Record<string, KidPage> = { '/chores': 'chores', '/parent-duty': 'parentduty', '/rewards': 'goals', '/allowance': 'goals', '/stats': 'stats', '/doctors': 'doctors' };
 
 function Nav({ className }: { className: string }) {
   const { who, home } = useApp();
@@ -96,6 +99,8 @@ export function App() {
           <Route path="/kids" element={<Kids />} />
           <Route path="/kids/:memberId" element={<ParentKidBoard />} />
           <Route path="/rewards" element={<Rewards />} />
+          <Route path="/allowance" element={<AllowancePage />} />
+          <Route path="/recap" element={<Recap />} />
           <Route path="/stats" element={<Stats />} />
           <Route path="/doctors" element={<Doctors />} />
           <Route path="/doctors/summary/:memberId" element={<VisitSummaryPage />} />

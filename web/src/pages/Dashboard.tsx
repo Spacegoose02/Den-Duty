@@ -75,6 +75,14 @@ export function Dashboard() {
         </div>
       )}
 
+      {summary?.recapWeek && (
+        <Link to="/recap" className="card row recap-banner">
+          <span style={{ fontSize: '2rem' }} aria-hidden>📊</span>
+          <span style={{ flex: 1 }}><strong>Last week's recap is ready</strong><span className="small muted" style={{ display: 'block' }}>See how everyone did, and who to cheer on</span></span>
+          <span className="btn primary">Open</span>
+        </Link>
+      )}
+
       <section className={`card stack review-card${queue?.length ? ' has-items' : ''}`}>
         <div className="row">
           <h2 style={{ margin: 0, flex: 1 }}>To review {!!queue?.length && <span className="pill warn">{queue.length}</span>}</h2>
@@ -86,7 +94,7 @@ export function Dashboard() {
             <span className="review-icon" aria-hidden>{i.icon}</span>
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 700 }}>{i.title}</div>
-              <div className="small muted">{i.kid.name} · {i.date === summary?.today ? 'today' : `${dayName(i.date)} ${shortDate(i.date)}`} · +{i.points} {icon}</div>
+              <div className="small muted">{i.kid.name} · {i.date === summary?.today ? 'today' : `${dayName(i.date)} ${shortDate(i.date)}`} · +{i.points} {icon}{i.late && ' · ⏰ late'}</div>
             </div>
             {i.hasPhoto && <PhotoThumb src={`${base}/instances/${i.id}/photo?v=${i.photoVersion ?? ''}`} alt={`${i.kid.name}: ${i.title}`} />}
             <button className="ghost danger" disabled={busy} onClick={() => reject(i)}>Not yet</button>

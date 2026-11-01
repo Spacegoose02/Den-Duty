@@ -832,6 +832,89 @@ export const MIGRATIONS: string[] = [
   `
   UPDATE homes SET helpdesk_max_open = 10 WHERE helpdesk_max_open = 3;
   `,
+  // More schedules (every N days, monthly), a due time with fewer points when late, routines (ordered steps with a
+  // timer), kids taking turns, and chores that approve themselves.
+  `
+  ALTER TABLE chores ADD COLUMN cadence TEXT CHECK (cadence IN ('interval', 'monthly'));
+  ALTER TABLE chores ADD COLUMN every_days INTEGER;
+  ALTER TABLE chores ADD COLUMN month_day INTEGER;
+  ALTER TABLE chores ADD COLUMN due_time TEXT;
+  ALTER TABLE chores ADD COLUMN late_points INTEGER;
+  ALTER TABLE chores ADD COLUMN routine TEXT CHECK (routine IN ('morning', 'afterschool', 'bedtime'));
+  ALTER TABLE chores ADD COLUMN routine_pos INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE chores ADD COLUMN minutes INTEGER;
+  ALTER TABLE chores ADD COLUMN rotate TEXT CHECK (rotate IN ('daily', 'weekly'));
+  ALTER TABLE chores ADD COLUMN auto_approve INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE chore_assignments ADD COLUMN position INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE chore_instances ADD COLUMN due_time TEXT;
+  ALTER TABLE chore_instances ADD COLUMN late_points INTEGER;
+  ALTER TABLE chore_instances ADD COLUMN late INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE chore_instances ADD COLUMN routine TEXT;
+  ALTER TABLE chore_instances ADD COLUMN routine_pos INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE chore_instances ADD COLUMN minutes INTEGER;
+  ALTER TABLE chore_instances ADD COLUMN auto INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE members ADD COLUMN read_aloud TEXT NOT NULL DEFAULT 'auto' CHECK (read_aloud IN ('auto', 'on', 'off'));
+  `,
+  // Allowance and money jars: points turn into money split across Spend, Save and Give, a weekly allowance and
+  // monthly interest on savings. Same rules as the points ledger: append-only, balances are sums.
+  `
+  ALTER TABLE homes ADD COLUMN money_enabled INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE homes ADD COLUMN money_symbol TEXT NOT NULL DEFAULT '$';
+  ALTER TABLE homes ADD COLUMN cents_per_point INTEGER NOT NULL DEFAULT 10;
+  ALTER TABLE homes ADD COLUMN jar_split TEXT NOT NULL DEFAULT '{"spend":70,"save":20,"give":10}';
+  ALTER TABLE homes ADD COLUMN save_interest INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE members ADD COLUMN allowance_cents INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE members ADD COLUMN allowance_day INTEGER NOT NULL DEFAULT 6;
+  ALTER TABLE members ADD COLUMN allowance_since TEXT;
+  CREATE TABLE money_ledger (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    jar TEXT NOT NULL CHECK (jar IN ('spend', 'save', 'give')),
+    cents INTEGER NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('cashout', 'allowance', 'interest', 'withdraw', 'deposit', 'move')),
+    reason TEXT NOT NULL,
+    date TEXT NOT NULL,
+    by_name TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX money_ledger_member ON money_ledger(member_id, jar);
+  CREATE TRIGGER money_ledger_no_update BEFORE UPDATE ON money_ledger
+  BEGIN SELECT RAISE(ABORT, 'money_ledger is append-only'); END;
+  CREATE TRIGGER money_ledger_no_delete BEFORE DELETE ON money_ledger
+  WHEN EXISTS (SELECT 1 FROM members WHERE id = OLD.member_id) AND EXISTS (SELECT 1 FROM homes WHERE id = OLD.home_id)
+  BEGIN SELECT RAISE(ABORT, 'money_ledger is append-only'); END;
+  -- Allowance and interest run once per kid per period, even if the server checks many times.
+  CREATE TABLE money_runs (
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    period TEXT NOT NULL,
+    PRIMARY KEY (member_id, kind, period)
+  );
+  `,
+  // Push notifications (Web Push) for parents' phones and the family tablet, and the weekly recap.
+  `
+  CREATE TABLE push_subscriptions (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+    device_id TEXT,
+    endpoint TEXT NOT NULL UNIQUE,
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    last_ok_at TEXT
+  );
+  CREATE INDEX push_subscriptions_home ON push_subscriptions(home_id);
+  -- Things sent once (a due-soon nudge, a weekly recap), so a restart or a second check never repeats them.
+  CREATE TABLE push_sent (
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    key TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (home_id, key)
+  );
+  ALTER TABLE homes ADD COLUMN recap_seen TEXT;
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {
@@ -870,8 +953,9 @@ function migrate(db: DatabaseSync): void {
   }
 }
 
-/** Runs fn inside a transaction. */
+/** Runs fn inside a transaction. Inside another one it just joins it (the outer one commits or rolls back). */
 export function tx<T>(db: DatabaseSync, fn: () => T): T {
+  if (db.isTransaction) return fn();
   db.exec('BEGIN');
   try {
     const out = fn();

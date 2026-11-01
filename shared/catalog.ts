@@ -115,3 +115,38 @@ export const ROOM_TEMPLATES = [
   { title: 'Water your plant', icon: '🌱' },
   { title: 'Lights off when you leave', icon: '💡' },
 ] as const;
+
+// ---------- routines ----------
+/** Ordered checklists kids run through at set times of day, one step at a time with a timer. */
+export const ROUTINES = [
+  { id: 'morning', title: 'Morning routine', icon: '🌅' },
+  { id: 'afterschool', title: 'After school', icon: '🎒' },
+  { id: 'bedtime', title: 'Bedtime routine', icon: '🌙' },
+] as const;
+export type RoutineId = (typeof ROUTINES)[number]['id'];
+export const ROUTINE_IDS: RoutineId[] = ROUTINES.map((r) => r.id);
+export const routineOf = (id: string | null | undefined) => ROUTINES.find((r) => r.id === id) ?? null;
+
+/** Ready-made steps for each routine, with a timer in minutes. */
+export const ROUTINE_TEMPLATES: Record<RoutineId, { title: string; icon: string; minutes: number }[]> = {
+  morning: [
+    { title: 'Get dressed', icon: '👕', minutes: 5 },
+    { title: 'Make your bed', icon: '🛏️', minutes: 3 },
+    { title: 'Eat breakfast', icon: '🥣', minutes: 15 },
+    { title: 'Brush your teeth', icon: '🪥', minutes: 2 },
+    { title: 'Pack your backpack', icon: '🎒', minutes: 3 },
+  ],
+  afterschool: [
+    { title: 'Unpack your backpack', icon: '🎒', minutes: 3 },
+    { title: 'Have a snack', icon: '🍎', minutes: 10 },
+    { title: 'Homework', icon: '📚', minutes: 20 },
+    { title: 'Read for 20 minutes', icon: '📖', minutes: 20 },
+  ],
+  bedtime: [
+    { title: 'Tidy your toys', icon: '🧸', minutes: 5 },
+    { title: 'Bath or shower', icon: '🛁', minutes: 10 },
+    { title: 'Pajamas on', icon: '🩳', minutes: 3 },
+    { title: 'Brush your teeth', icon: '🪥', minutes: 2 },
+    { title: 'Pick tomorrow\'s clothes', icon: '👟', minutes: 3 },
+  ],
+};

@@ -14,6 +14,11 @@ import { KidShop } from '../components/Shop.tsx';
 import { KidTeamGoals } from '../components/TeamGoals.tsx';
 import { cheerOf, pickPhoto, PhotoThumb } from '../components/Photo.tsx';
 import { KidMedicine, PracticeMode } from '../components/KidPractice.tsx';
+import { RoutineCards, RoutinePlayer } from '../components/Routines.tsx';
+import { KidJars } from '../components/Money.tsx';
+import { SpeakButton, speak } from '../components/Speak.tsx';
+import { clockText } from '../../../shared/schedule.ts';
+import type { RoutineId } from '../../../shared/catalog.ts';
 
 const IDLE_MS = 3 * 60e3;
 /** How often a kid's own board checks for chores a grown-up just approved. */
@@ -90,6 +95,7 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
   const [cheer, setCheer] = useState<{ icon: string; text: string } | null>(null);
   const [picking, setPicking] = useState(false);
   const [newTimeout, setNewTimeout] = useState(false);
+  const [routine, setRoutine] = useState<RoutineId | null>(null);
   const seenApproved = useRef<Set<string> | null>(null);
 
   // On the kid's own screen, keep an eye out for approvals so the party happens while they're still looking.
@@ -140,7 +146,9 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
     else { confetti({ colors: [kid.color], count: left === 1 ? 220 : 90 }); celebrate(i.icon, left === 1 ? 'Last one! You did them all! 🎉' : 'Nice work! Sent to a grown-up.'); }
   });
 
-  const byColumn = (c: Column) => board.todayItems.filter((i) => columnOf(i) === c);
+  // Routine steps live in their routine cards, not the kanban.
+  const byColumn = (c: Column) => board.todayItems.filter((i) => !i.routine && columnOf(i) === c);
+  const readAloud = kid.readAloud;
   const earned = board.achievements.filter((a) => a.earned);
   const openPolls = polls?.filter((p) => p.status === 'open') ?? [];
   const decided = polls?.filter((p) => p.status === 'closed').slice(0, 2) ?? [];
@@ -174,7 +182,8 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
       {denNote && (
         <div className="den-note pg-chores" aria-live="polite">
           <RaccoonAvatar variant={kid.avatar} size={44} />
-          <span>{denNote.text}</span>
+          <span style={{ flex: 1 }}>{denNote.text}</span>
+          {readAloud && <SpeakButton text={denNote.text} />}
         </div>
       )}
 
@@ -192,8 +201,14 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
 
       {newTimeout && <TimeoutForm kidId={memberId} kidName={kid.name} onClose={() => setNewTimeout(false)} onDone={() => { setNewTimeout(false); void reload(); }} />}
 
+      <RoutineCards items={board.todayItems} color={kid.color} icon={icon} readAloud={readAloud} onStart={setRoutine} />
+      {routine && <RoutinePlayer routine={routine} items={board.todayItems} color={kid.color} readAloud={readAloud} onDone={(i) => done(i)} onClose={() => setRoutine(null)} />}
+
       <section className="pg-chores">
-        <h2>Today</h2>
+        <div className="row">
+          <h2 style={{ flex: 1 }}>Today</h2>
+          {readAloud && !asParent && left > 0 && <button className="speak-btn" aria-label="Read my chores" onClick={() => speak(`You have ${left} chore${left === 1 ? '' : 's'} left. ${board.todayItems.filter((i) => !i.routine && (i.status === 'pending' || i.status === 'rejected')).map((i) => i.title).join('. ')}`)}>🔊 My chores</button>}
+        </div>
         <div className="kanban">
           {COLUMNS.map((col) => {
             const items = byColumn(col.id);
@@ -207,8 +222,10 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
                     <div key={k} className={`kanban-card ${i.status}`}>
                       <span className="kanban-icon" aria-hidden>{i.icon}</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div className="kanban-title">{i.title}</div>
-                        <div className="small muted">+{i.points} {icon}{i.surprise ? ' · 🎁 surprise ×2' : isBonus && ' · bonus'}{i.date !== board.today && ` · from ${dayName(i.date)}`}</div>
+                        <div className="kanban-title">{i.title} {readAloud && <SpeakButton text={i.title} />}</div>
+                        <div className="small muted">+{i.points} {icon}{i.surprise ? ' · 🎁 surprise ×2' : isBonus && ' · bonus'}{i.date !== board.today && ` · from ${dayName(i.date)}`}{i.auto && ' · ✨ auto'}</div>
+                        {i.dueTime && (col.id === 'todo' || col.id === 'doing') && <div className="due-tag">⏰ by {clockText(i.dueTime)}{i.latePoints != null && i.latePoints < i.points && ` (then +${i.latePoints})`}</div>}
+                        {i.late && <div className="due-tag late">⏰ late</div>}
                         {i.status === 'rejected' && <div className="chore-note">🔁 {i.note ? `“${i.note}”` : 'Try again'}</div>}
                         {needsSnap(i) && (col.id === 'todo' || col.id === 'doing') && <div className="small">📸 {i.status === 'rejected' ? 'Snap a new photo when it\'s done' : 'Snap a photo when it\'s done'}</div>}
                         {cheerOf(i.cheer) && <div className="cheer-tag">{cheerOf(i.cheer)!.icon} {cheerOf(i.cheer)!.text}</div>}
@@ -313,6 +330,8 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
           )}
         </section>
       </div>
+
+      {board.money && <KidJars money={board.money} color={kid.color} readAloud={readAloud} />}
 
       {board.meds.length > 0 && !asParent && <KidMedicine meds={board.meds} color={kid.color} onChange={() => void reload()} />}
       {practicing && <PracticeMode goal={practicing} color={kid.color} onClose={() => setPracticing(null)} onDone={() => { setPracticing(null); void reload(); }} />}
