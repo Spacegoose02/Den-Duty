@@ -7,7 +7,7 @@ import { HttpError, newId } from './util.ts';
 import { emit } from './events.ts';
 import { checkTeamGoals } from './team.ts';
 import { deletePhoto } from './photos.ts';
-import { addDays, dateRange, isScheduledOn, startOfWeek, todayIn, type Schedule, type ScheduleKind } from '../../shared/schedule.ts';
+import { addDays, dateRange, isScheduledOn, startOfWeek, timeIn, todayIn, turnFor, type RotateKind, type Schedule } from '../../shared/schedule.ts';
 
 export type InstanceStatus = 'pending' | 'submitted' | 'approved' | 'rejected';
 export type LedgerKind = 'chore' | 'bonus' | 'adjust' | 'redeem' | 'reversal';
@@ -29,7 +29,12 @@ export function homeInfo(db: DatabaseSync, homeId: string): HomeInfo {
 export const homeToday = (home: Pick<HomeInfo, 'timezone'>, now = new Date()): string => todayIn(home.timezone, now);
 
 interface ChoreRow {
-  id: string; title: string; icon: string; points: number; schedule: ScheduleKind; weekdays: string; due_date: string | null; start_date: string;
+  id: string; title: string; icon: string; points: number; schedule: 'daily' | 'weekly' | 'once'; weekdays: string; due_date: string | null; start_date: string;
+  /** Overrides schedule for the newer kinds (the old column's CHECK only knows the first three). */
+  cadence: 'interval' | 'monthly' | null; every_days: number | null; month_day: number | null;
+  due_time: string | null; late_points: number | null;
+  routine: string | null; routine_pos: number; minutes: number | null;
+  rotate: RotateKind | null; auto_approve: number;
   /** Bonus chores are opt-in: nothing is created until a kid claims one. */
   bonus: number;
   /** Ask for a photo when it's marked done. */
@@ -37,15 +42,29 @@ interface ChoreRow {
   claim_limit: 'each' | 'one';
 }
 
-const scheduleOf = (c: ChoreRow): Schedule => ({
-  schedule: c.schedule, weekdays: JSON.parse(c.weekdays) as number[], dueDate: c.due_date, startDate: c.start_date,
+export const scheduleOf = (c: Pick<ChoreRow, 'schedule' | 'weekdays' | 'due_date' | 'start_date' | 'cadence' | 'every_days' | 'month_day'>): Schedule => ({
+  schedule: c.cadence ?? c.schedule, weekdays: JSON.parse(c.weekdays) as number[], dueDate: c.due_date, startDate: c.start_date,
+  everyDays: c.every_days, monthDay: c.month_day,
 });
 
-function activeChores(db: DatabaseSync, homeId: string, choreId?: string): (ChoreRow & { memberIds: string[] })[] {
-  const rows = db.prepare(`SELECT id, title, icon, points, schedule, weekdays, due_date, start_date, bonus, claim_limit, photo FROM chores
+type ActiveChore = ChoreRow & { memberIds: string[] };
+
+function activeChores(db: DatabaseSync, homeId: string, choreId?: string): ActiveChore[] {
+  const rows = db.prepare(`SELECT id, title, icon, points, schedule, weekdays, due_date, start_date, bonus, claim_limit, photo,
+      cadence, every_days, month_day, due_time, late_points, routine, routine_pos, minutes, rotate, auto_approve FROM chores
     WHERE home_id = ? AND active = 1 ${choreId ? 'AND id = ?' : ''}`).all(...(choreId ? [homeId, choreId] : [homeId])) as unknown as ChoreRow[];
-  const assigned = db.prepare('SELECT member_id FROM chore_assignments WHERE chore_id = ?');
+  const assigned = db.prepare('SELECT member_id FROM chore_assignments WHERE chore_id = ? ORDER BY position, rowid');
   return rows.map((c) => ({ ...c, memberIds: (assigned.all(c.id) as Row[]).map((r) => r.member_id as string) }));
+}
+
+/** The week start a home uses, for chores that take turns by the week. */
+function weekStartOf(db: DatabaseSync, homeId: string): number {
+  return ((db.prepare('SELECT week_start FROM homes WHERE id = ?').get(homeId) as Row | undefined)?.week_start as number) ?? 0;
+}
+
+/** Kids a regular chore is for on a date: everyone assigned, or whoever's turn it is. */
+export function kidsOn(c: ActiveChore, date: string, weekStart: number): string[] {
+  return turnFor(scheduleOf(c), c.rotate, c.memberIds, date, weekStart);
 }
 
 /** Kids in a home with a page switched off (see shared/pages.ts). */
@@ -62,17 +81,21 @@ export function kidsWithPageOff(db: DatabaseSync, homeId: string, page: string):
 export function materialize(db: DatabaseSync, homeId: string, from: string, to: string, today: string): void {
   const last = to < today ? to : today;
   if (from > last) return;
-  const ins = db.prepare(`INSERT OR IGNORE INTO chore_instances (id, home_id, chore_id, member_id, date, title, icon, points, needs_photo)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  const ins = db.prepare(`INSERT OR IGNORE INTO chore_instances (id, home_id, chore_id, member_id, date, title, icon, points, needs_photo,
+      due_time, late_points, routine, routine_pos, minutes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   tx(db, () => {
     const paused = kidsWithPageOff(db, homeId, 'chores');
+    const weekStart = weekStartOf(db, homeId);
     for (const c of activeChores(db, homeId)) {
       if (!c.memberIds.length || c.bonus) continue;
       const s = scheduleOf(c);
       const start = from > c.start_date ? from : c.start_date;
       for (const date of dateRange(start, last)) {
         if (!isScheduledOn(s, date)) continue;
-        for (const m of c.memberIds) if (!paused.has(m)) ins.run(newId(), homeId, c.id, m, date, c.title, c.icon, c.points, c.photo);
+        for (const m of kidsOn(c, date, weekStart)) {
+          if (!paused.has(m)) ins.run(newId(), homeId, c.id, m, date, c.title, c.icon, c.points, c.photo, c.due_time, c.late_points, c.routine, c.routine_pos, c.minutes);
+        }
       }
     }
   });
@@ -86,19 +109,24 @@ export function syncChore(db: DatabaseSync, homeId: string, choreId: string, tod
   const [chore] = activeChores(db, homeId, choreId);
   const open = db.prepare("SELECT id, member_id, date FROM chore_instances WHERE chore_id = ? AND date >= ? AND status IN ('pending', 'rejected')")
     .all(choreId, today) as Row[];
+  const weekStart = weekStartOf(db, homeId);
   tx(db, () => {
     for (const i of open) {
-      const keep = chore && bonusEligible(chore, i.member_id as string) && isScheduledOn(scheduleOf(chore), i.date as string);
+      const date = i.date as string;
+      const keep = chore && isScheduledOn(scheduleOf(chore), date)
+        && (chore.bonus ? bonusEligible(chore, i.member_id as string) : kidsOn(chore, date, weekStart).includes(i.member_id as string));
       if (!keep) db.prepare('DELETE FROM chore_instances WHERE id = ?').run(i.id as string);
-      else db.prepare('UPDATE chore_instances SET title = ?, icon = ?, points = ? * (CASE WHEN surprise = 1 THEN ? ELSE 1 END), needs_photo = ? WHERE id = ?')
-        .run(chore.title, chore.icon, chore.points, SURPRISE_MULTIPLIER, chore.photo, i.id as string);
+      else db.prepare(`UPDATE chore_instances SET title = ?, icon = ?, points = ? * (CASE WHEN surprise = 1 THEN ? ELSE 1 END), needs_photo = ?,
+          due_time = ?, late_points = ?, routine = ?, routine_pos = ?, minutes = ? WHERE id = ?`)
+        .run(chore.title, chore.icon, chore.points, SURPRISE_MULTIPLIER, chore.photo,
+          chore.bonus ? null : chore.due_time, chore.bonus ? null : chore.late_points, chore.bonus ? null : chore.routine, chore.routine_pos, chore.minutes, i.id as string);
     }
   });
   materialize(db, homeId, today, today, today);
 }
 
 /** Regular chores go to their assigned kids. A bonus chore with nobody picked is open to every kid. */
-function bonusEligible(c: ChoreRow & { memberIds: string[] }, memberId: string): boolean {
+function bonusEligible(c: ActiveChore, memberId: string): boolean {
   return c.memberIds.includes(memberId) || (!!c.bonus && !c.memberIds.length);
 }
 
@@ -215,6 +243,17 @@ export interface AgendaItem {
   photoVersion: string | null;
   /** The cheer a parent sent with the approval (see CHEERS). */
   cheer: string | null;
+  /** Due by this time of day ('HH:MM'), and what it's worth when finished after that. */
+  dueTime: string | null;
+  latePoints: number | null;
+  /** Finished after its due time (points were the late points). */
+  late: boolean;
+  /** Part of a routine: which one, its place in it and a timer in minutes. */
+  routine: string | null;
+  routinePos: number;
+  minutes: number | null;
+  /** Approved by itself (the chore is set to auto-approve). */
+  auto: boolean;
 }
 
 const instanceItem = (r: Row): AgendaItem => ({
@@ -223,6 +262,8 @@ const instanceItem = (r: Row): AgendaItem => ({
   note: (r.note as string | null) ?? null, started: !!r.started_at, surprise: !!r.surprise,
   needsPhoto: !!r.needs_photo, hasPhoto: !!r.photo,
   photoVersion: r.photo ? String(r.photo).replace(/^.*-|\.\w+$/g, '') : null, cheer: (r.cheer as string | null) ?? null,
+  dueTime: (r.due_time as string | null) ?? null, latePoints: (r.late_points as number | null) ?? null, late: !!r.late,
+  routine: (r.routine as string | null) ?? null, routinePos: (r.routine_pos as number) ?? 0, minutes: (r.minutes as number | null) ?? null, auto: !!r.auto,
 });
 
 /** Every chore for these kids from `from` for `days` days, with stored instances up to today and planned ones after. */
@@ -235,13 +276,18 @@ export function agenda(db: DatabaseSync, homeId: string, memberIds: string[], fr
   const out = dateRange(from, to).map((date) => ({ date, items: stored.filter((i) => i.date === date) }));
   if (to > today) {
     const chores = activeChores(db, homeId);
+    const weekStart = weekStartOf(db, homeId);
     for (const day of out) {
       if (day.date <= today) continue;
       for (const c of chores) {
         if (c.bonus || !isScheduledOn(scheduleOf(c), day.date)) continue;
-        for (const m of c.memberIds) {
+        for (const m of kidsOn(c, day.date, weekStart)) {
           if (!wanted.has(m)) continue;
-          day.items.push({ id: null, choreId: c.id, memberId: m, date: day.date, title: c.title, icon: c.icon, points: c.points, status: 'planned', note: null, started: false, surprise: false, needsPhoto: !!c.photo, hasPhoto: false, photoVersion: null, cheer: null });
+          day.items.push({
+            id: null, choreId: c.id, memberId: m, date: day.date, title: c.title, icon: c.icon, points: c.points, status: 'planned', note: null,
+            started: false, surprise: false, needsPhoto: !!c.photo, hasPhoto: false, photoVersion: null, cheer: null,
+            dueTime: c.due_time, latePoints: c.late_points, late: false, routine: c.routine, routinePos: c.routine_pos, minutes: c.minutes, auto: false,
+          });
         }
       }
     }
@@ -254,8 +300,8 @@ export function todayList(db: DatabaseSync, homeId: string, memberId: string, to
   materialize(db, homeId, addDays(today, -6), today, today);
   const rows = db.prepare(`
     SELECT i.* FROM chore_instances i LEFT JOIN chores c ON c.id = i.chore_id
-    WHERE i.member_id = ? AND (i.date = ? OR (i.date < ? AND i.status IN ('pending', 'rejected') AND c.schedule = 'once' AND c.active = 1))
-    ORDER BY i.date, i.title`).all(memberId, today, today) as Row[];
+    WHERE i.member_id = ? AND (i.date = ? OR (i.date < ? AND i.status IN ('pending', 'rejected') AND c.schedule = 'once' AND c.cadence IS NULL AND c.active = 1))
+    ORDER BY i.date, i.routine_pos, i.title`).all(memberId, today, today) as Row[];
   return rows.map(instanceItem);
 }
 
@@ -267,15 +313,38 @@ export function getInstance(db: DatabaseSync, homeId: string, id: string): Agend
   return { ...instanceItem(r), homeId };
 }
 
-/** A kid says "done!": it waits for a parent. Rejected chores can be tried again. */
-export function submitInstance(db: DatabaseSync, homeId: string, id: string, today: string): AgendaItem {
-  const inst = getInstance(db, homeId, id);
-  if (inst.date > today) throw new HttpError(400, "That chore isn't due yet");
-  if (inst.status === 'submitted' || inst.status === 'approved') return inst;
-  if (inst.needsPhoto && !inst.hasPhoto) throw new HttpError(400, 'Snap a photo first! 📸');
-  db.prepare("UPDATE chore_instances SET status = 'submitted', submitted_at = datetime('now'), note = NULL WHERE id = ?").run(id);
-  emit(db, homeId, 'chore_submitted', inst.memberId, { chore: inst.title, icon: inst.icon, points: inst.points, instance_id: id });
-  return getInstance(db, homeId, id);
+/** Past its due time: an earlier day, or today after the time. Chores without a due time are never late. */
+export function isLate(item: Pick<AgendaItem, 'date' | 'dueTime'>, today: string, nowTime: string): boolean {
+  if (!item.dueTime) return false;
+  return item.date < today || (item.date === today && nowTime > item.dueTime);
+}
+
+export const AUTO_BY: By = { userId: null, name: '✨ Auto-approved' };
+
+/**
+ * A kid says "done!": it waits for a parent (or approves itself when the chore is set to). Rejected chores can be
+ * tried again. Finishing after the due time marks it late, and a late chore is worth its late points.
+ */
+export function submitInstance(db: DatabaseSync, homeId: string, id: string, today: string, now = new Date()): AgendaItem {
+  return tx(db, () => {
+    const inst = getInstance(db, homeId, id);
+    if (inst.date > today) throw new HttpError(400, "That chore isn't due yet");
+    if (inst.status === 'submitted' || inst.status === 'approved') return inst;
+    if (inst.needsPhoto && !inst.hasPhoto) throw new HttpError(400, 'Snap a photo first! 📸');
+    const tz = homeInfo(db, homeId).timezone;
+    const late = isLate(inst, today, timeIn(tz, now));
+    // Late points apply once, when it's first marked late (a "try again" keeps what it was).
+    const points = late && !inst.late && inst.latePoints != null ? Math.min(inst.latePoints, inst.points) : inst.points;
+    db.prepare("UPDATE chore_instances SET status = 'submitted', submitted_at = datetime('now'), note = NULL, late = ?, points = ? WHERE id = ?")
+      .run(late || inst.late ? 1 : 0, points, id);
+    const auto = inst.choreId && (db.prepare('SELECT auto_approve FROM chores WHERE id = ?').get(inst.choreId) as Row | undefined)?.auto_approve;
+    if (auto) {
+      db.prepare('UPDATE chore_instances SET auto = 1 WHERE id = ?').run(id);
+      return approveInstance(db, homeId, id, AUTO_BY).item;
+    }
+    emit(db, homeId, 'chore_submitted', inst.memberId, { chore: inst.title, icon: inst.icon, points, instance_id: id, late: late || undefined });
+    return getInstance(db, homeId, id);
+  });
 }
 
 /** Kanban: move a chore to "Doing" (or back to "To do" with started = false). */

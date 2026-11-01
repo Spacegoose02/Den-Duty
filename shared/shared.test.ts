@@ -65,3 +65,23 @@ test('themes', () => {
   const css = themeCss();
   for (const id of THEME_IDS) assert.ok(css.includes(`[data-theme='${id}']`), id);
 });
+
+test('interval, monthly and turn-taking schedules', async () => {
+  const { isScheduledOn: on, occurrenceIndex, turnFor, describeSchedule: describe } = await import('./schedule.ts');
+  const monthly = { schedule: 'monthly' as const, weekdays: [], dueDate: null, startDate: '2026-01-15', monthDay: 31 };
+  assert.ok(on(monthly, '2026-01-31') && on(monthly, '2026-02-28') && !on(monthly, '2026-02-27') && on(monthly, '2024-02-29') === false);
+  assert.equal(occurrenceIndex(monthly, '2026-01-31'), 0);
+  assert.equal(occurrenceIndex(monthly, '2026-03-31'), 2);
+  const late = { ...monthly, monthDay: 10 };
+  assert.equal(occurrenceIndex(late, '2026-02-10'), 0, 'the 10th had passed when it started, so February is the first');
+  assert.equal(describe(monthly), 'Monthly on the 31st');
+  const every = { schedule: 'interval' as const, weekdays: [], dueDate: null, startDate: '2026-10-01', everyDays: 3 };
+  assert.ok(on(every, '2026-10-01') && on(every, '2026-10-04') && !on(every, '2026-10-05') && !on(every, '2026-09-28'));
+  assert.equal(occurrenceIndex(every, '2026-10-07'), 2);
+  // Mon/Wed/Fri with two kids alternates by occurrence, not by date.
+  const mwf = { schedule: 'weekly' as const, weekdays: [1, 3, 5], dueDate: null, startDate: '2026-10-19' };
+  const order = ['2026-10-19', '2026-10-21', '2026-10-23', '2026-10-26', '2026-10-28'].map((d) => turnFor(mwf, 'daily', ['a', 'b'], d)[0]);
+  assert.deepEqual(order, ['a', 'b', 'a', 'b', 'a']);
+  assert.deepEqual(turnFor(mwf, null, ['a', 'b'], '2026-10-19'), ['a', 'b']);
+  assert.deepEqual(turnFor(mwf, 'weekly', ['a', 'b'], '2026-10-28', 0), ['b']);
+});
