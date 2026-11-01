@@ -31,6 +31,8 @@ import { installV1, v1Routes } from './routes/v1.ts';
 import { gamingRoutes } from './routes/gaming.ts';
 import { lootdenRoutes } from './routes/lootden.ts';
 import { downloadRoutes } from './routes/downloads.ts';
+import { moneyRoutes } from './routes/money.ts';
+import { pushRoutes } from './routes/push.ts';
 
 export async function buildApp(db: DatabaseSync, opts: { logger?: boolean; serveWeb?: boolean } = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 1024 * 1024, trustProxy: config.trustProxy });
@@ -54,6 +56,8 @@ export async function buildApp(db: DatabaseSync, opts: { logger?: boolean; serve
   homeRoutes(app, db);
   kioskRoutes(app, db);
   choreRoutes(app, db);
+  moneyRoutes(app, db);
+  pushRoutes(app, db);
   goalRoutes(app, db);
   rewardRoutes(app, db);
   shopRoutes(app, db);

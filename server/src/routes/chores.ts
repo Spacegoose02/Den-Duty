@@ -16,6 +16,8 @@ import { homeTimeouts, kidTimeouts } from './timeouts.ts';
 import { waitingRequests } from './helpdesk.ts';
 import { listReminders, remindersDue } from './reminders.ts';
 import { roomMessage } from '../roommessage.ts';
+import { kidMoney, runMoney } from '../money.ts';
+import { recap, recapWaiting } from '../recap.ts';
 import { externalBetween, refreshStale } from '../calendar.ts';
 import { cleanIcon, doctorAreasOff, getKid, kidView, listKids, pageOn } from './homes.ts';
 import type { KidPage } from '../../../shared/pages.ts';
@@ -269,6 +271,8 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
       // Medicines a parent lets this kid tick off themselves.
       meds: kidMeds(db, memberId, today, timeIn(home.timezone)),
       timeouts: on('timeout') ? kidTimeouts(db, memberId) : [],
+      // Allowance and jars, when the home uses them (with Goals & rewards on for this kid).
+      money: on('goals') ? (runMoney(db, ctx.homeId, today), kidMoney(db, ctx.homeId, memberId)) : null,
     };
   });
 
@@ -439,6 +443,25 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
     return { item: rejectInstance(db, ctx.homeId, (req.params as { id: string }).id, byOf(ctx), str((req.body as Row)?.note, 200)) };
   });
 
+  // ---------- weekly recap ----------
+  app.get('/api/homes/:homeId/recap', async (req) => {
+    const ctx = homeCtx(db, req, 'parent');
+    const home = homeInfo(db, ctx.homeId);
+    const today = homeToday(home);
+    const q = (req.query as { week?: string }).week;
+    const week = q ? startOfWeek(startParam(q, today), home.weekStart) : undefined;
+    if (week && week >= startOfWeek(today, home.weekStart)) throw new HttpError(400, 'That week isn\'t over yet');
+    return recap(db, home, today, week);
+  });
+
+  app.post('/api/homes/:homeId/recap/seen', async (req) => {
+    const ctx = homeCtx(db, req, 'parent');
+    const home = homeInfo(db, ctx.homeId);
+    const week = startOfWeek(addDays(startOfWeek(homeToday(home), home.weekStart), -7), home.weekStart);
+    db.prepare('UPDATE homes SET recap_seen = ? WHERE id = ?').run(week, ctx.homeId);
+    return { ok: true };
+  });
+
   // ---------- summaries ----------
   app.get('/api/homes/:homeId/summary', async (req) => {
     const ctx = homeCtx(db, req, 'parent');
@@ -450,6 +473,8 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
       weekStart,
       weekEnd: addDays(weekStart, 6),
       waiting: reviewQueue(db, ctx.homeId).length,
+      // Last week's recap, until a parent opens it.
+      recapWeek: recapWaiting(db, home, today),
       timeouts: homeTimeouts(db, ctx.homeId),
       helpdesk: waitingRequests(db, ctx.homeId),
       // Overdue, due today and the next week (undated ones live on the Reminders page).

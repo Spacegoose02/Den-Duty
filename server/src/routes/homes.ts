@@ -57,7 +57,10 @@ export function kidView(db: DatabaseSync, r: Row) {
     id: r.id as string, name: r.name as string, avatar: r.avatar as string, color: r.color as string,
     theme: (r.theme as string | null) ?? null, hasPin: !!r.pin_hash, balance: balance(db, r.id as string),
     birthdate, age, pictureModeSetting: setting, pictureMode: pictureMode(setting, age),
-    pagesOff: offList(r.pages_off, KID_PAGE_IDS), doctorAreasOff: offList(r.doctor_areas_off, DOCTOR_AREA_IDS),
+    pagesOff: offList(r.pages_off, KID_PAGE_IDS),
+    // Read chores and messages out loud: 'auto' does it for kids on the picture board.
+    readAloudSetting: ((r.read_aloud as string | null) ?? 'auto') as 'auto' | 'on' | 'off',
+    readAloud: r.read_aloud === 'on' || ((r.read_aloud ?? 'auto') === 'auto' && pictureMode(setting, age)), doctorAreasOff: offList(r.doctor_areas_off, DOCTOR_AREA_IDS),
     ideasOff: r.ideas_off == null ? IDEAS_OFF_DEFAULT : offList(r.ideas_off, PRACTICE_IDEA_IDS),
     aiOn: !r.ai_off,
   };
@@ -75,6 +78,10 @@ function applyKidProfile(db: DatabaseSync, id: string, b: Row, today: string): v
   if ('doctorAreasOff' in b) db.prepare('UPDATE members SET doctor_areas_off = ? WHERE id = ?').run(JSON.stringify(offList(b.doctorAreasOff, DOCTOR_AREA_IDS)), id);
   if (typeof b.aiOn === 'boolean') db.prepare('UPDATE members SET ai_off = ? WHERE id = ?').run(b.aiOn ? 0 : 1, id);
   if ('ideasOff' in b) db.prepare('UPDATE members SET ideas_off = ? WHERE id = ?').run(JSON.stringify(offList(b.ideasOff, PRACTICE_IDEA_IDS)), id);
+  if ('readAloud' in b) {
+    if (!['auto', 'on', 'off'].includes(String(b.readAloud))) throw new HttpError(400, 'readAloud must be auto, on or off');
+    db.prepare('UPDATE members SET read_aloud = ? WHERE id = ?').run(String(b.readAloud), id);
+  }
   if ('pictureMode' in b) {
     if (!['auto', 'on', 'off'].includes(String(b.pictureMode))) throw new HttpError(400, 'pictureMode must be auto, on or off');
     db.prepare('UPDATE members SET picture_mode = ? WHERE id = ?').run(String(b.pictureMode), id);

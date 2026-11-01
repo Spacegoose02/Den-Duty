@@ -861,6 +861,7 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE homes ADD COLUMN save_interest INTEGER NOT NULL DEFAULT 0;
   ALTER TABLE members ADD COLUMN allowance_cents INTEGER NOT NULL DEFAULT 0;
   ALTER TABLE members ADD COLUMN allowance_day INTEGER NOT NULL DEFAULT 6;
+  ALTER TABLE members ADD COLUMN allowance_since TEXT;
   CREATE TABLE money_ledger (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,

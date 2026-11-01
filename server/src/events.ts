@@ -2,6 +2,7 @@
 // Every event is stored (HA can poll /ha/events) and, if the home has a webhook URL, also POSTed to it.
 import type { DatabaseSync } from 'node:sqlite';
 import type { Row } from './db.ts';
+import { pushForEvent } from './push.ts';
 
 export type EventType = 'chore_submitted' | 'chore_approved' | 'goal_reached' | 'goal_redeemed' | 'points_changed'
   | 'timeout_started' | 'timeout_ended' | 'timeout_buy_requested' | 'timeout_time_bought'
@@ -22,6 +23,8 @@ export function emit(db: DatabaseSync, homeId: string, type: EventType, memberId
   const id = Number(r.lastInsertRowid);
   // Keep the table small: a few thousand events per home is plenty for polling.
   if (id % 200 === 0) db.prepare('DELETE FROM events WHERE home_id = ? AND id < ?').run(homeId, id - 5000);
+  // Phones and the family tablet, for the events worth a buzz (sent after the transaction, see notify()).
+  try { pushForEvent(db, homeId, type, memberId, data); } catch { /* never let a push break the action */ }
   const url = (db.prepare('SELECT ha_webhook_url FROM homes WHERE id = ?').get(homeId) as Row | undefined)?.ha_webhook_url as string | null;
   if (!url) return;
   // After the current transaction: only send events that were actually committed.
