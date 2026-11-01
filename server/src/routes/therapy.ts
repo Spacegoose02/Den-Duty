@@ -2,8 +2,9 @@
 // Parents only. A parent can choose to show a kid their own active goals and upcoming appointments (never notes).
 import type { FastifyInstance } from 'fastify';
 import type { DatabaseSync } from 'node:sqlite';
-import { homeCtx, type HomeCtx } from '../auth.ts';
+import { assertCanActFor, homeCtx, type HomeCtx } from '../auth.ts';
 import { tx, type Row } from '../db.ts';
+import { emit } from '../events.ts';
 import { HttpError, newId, num, parseJson, requireStr, str } from '../util.ts';
 import { homeInfo, homeToday, writeLedger } from '../chores.ts';
 import { byOf } from './chores.ts';
@@ -51,7 +52,26 @@ const appointmentView = (r: Row) => ({
   id: r.id as string, memberId: r.member_id as string, kind: r.kind as string, title: r.title as string, provider: r.provider as string | null,
   location: r.location as string | null, startsAt: r.starts_at as string, durationMinutes: r.duration_minutes as number | null,
   status: r.status as string, notes: r.notes as string | null,
+  questions: cleanQuestions(parseJson(r.questions, [])), summary: (r.summary as string | null) ?? null,
 });
+
+/** Questions to ask at an appointment, ticked off at the visit. */
+export function cleanQuestions(v: unknown): { text: string; done: boolean }[] {
+  if (!Array.isArray(v)) return [];
+  return v.slice(0, 30).map((q) => {
+    const o = (typeof q === 'string' ? { text: q, done: false } : q ?? {}) as Row;
+    return { text: String(o.text ?? '').trim().slice(0, 300), done: o.done === true };
+  }).filter((q) => q.text);
+}
+
+/** Picture steps for kid practice mode: an emoji and a few words each. */
+export function cleanSteps(v: unknown): { icon: string; text: string }[] {
+  if (!Array.isArray(v)) return [];
+  return v.slice(0, 12).map((x) => {
+    const o = (x ?? {}) as Row;
+    return { icon: String(o.icon ?? '⭐').trim().slice(0, 16) || '⭐', text: String(o.text ?? '').trim().slice(0, 160) };
+  }).filter((x) => x.text);
+}
 
 function goalView(db: DatabaseSync, r: Row) {
   const history = (db.prepare('SELECT date, progress FROM therapy_notes WHERE goal_id = ? AND progress IS NOT NULL ORDER BY date, created_at').all(r.id as string) as Row[])
@@ -61,6 +81,7 @@ function goalView(db: DatabaseSync, r: Row) {
     targetDate: r.target_date as string | null, status: r.status as string, progress: r.progress as number,
     createdAt: r.created_at as string, metAt: r.met_at as string | null, history,
     rewardStep: (r.reward_step as number) ?? 0, rewardMet: (r.reward_met as number) ?? 0, rewardMetPaid: !!r.reward_met_paid,
+    steps: cleanSteps(parseJson(r.steps, [])), practiceMinutes: (r.practice_minutes as number | null) ?? null, kidPractice: !!r.kid_practice,
     practice: r.practice_schedule ? {
       schedule: r.practice_schedule as 'weekly' | 'once', weekdays: cleanWeekdays(parseJson(r.practice_weekdays, [])),
       date: r.practice_date as string | null, time: r.practice_time as string | null,
@@ -70,6 +91,13 @@ function goalView(db: DatabaseSync, r: Row) {
 
 /** Practice schedule from a goal form: none, some weekdays (optionally at a time), or one date. */
 function applyPractice(db: DatabaseSync, id: string, b: Row): void {
+  if ('steps' in b) db.prepare('UPDATE therapy_goals SET steps = ? WHERE id = ?').run(JSON.stringify(cleanSteps(b.steps)), id);
+  if ('kidPractice' in b) db.prepare('UPDATE therapy_goals SET kid_practice = ? WHERE id = ?').run(b.kidPractice === true ? 1 : 0, id);
+  if ('practiceMinutes' in b) {
+    const m = b.practiceMinutes == null || b.practiceMinutes === '' ? null : num(b.practiceMinutes);
+    if (m != null && (!Number.isInteger(m) || m < 1 || m > 60)) throw new HttpError(400, 'Practice timers run 1 to 60 minutes');
+    db.prepare('UPDATE therapy_goals SET practice_minutes = ? WHERE id = ?').run(m, id);
+  }
   if (!('practiceSchedule' in b)) return;
   const kind = b.practiceSchedule == null || b.practiceSchedule === 'none' || b.practiceSchedule === '' ? null : String(b.practiceSchedule);
   if (kind && kind !== 'weekly' && kind !== 'once') throw new HttpError(400, 'Practice schedule is none, weekly or once');
@@ -95,11 +123,17 @@ export function kidTherapyView(db: DatabaseSync, memberId: string, today: string
   if (!m?.therapy_kid_visible) return null;
   const off = doctorAreasOff(db, memberId);
   return {
-    goals: (db.prepare("SELECT id, area, title, progress, reward_step, reward_met FROM therapy_goals WHERE member_id = ? AND status = 'active' ORDER BY created_at").all(memberId) as Row[])
+    goals: (db.prepare("SELECT id, area, title, progress, reward_step, reward_met, steps, practice_minutes, kid_practice FROM therapy_goals WHERE member_id = ? AND status = 'active' ORDER BY created_at").all(memberId) as Row[])
       .filter((g) => goalAreaOn(g.area as string, off))
       .map((g) => ({
         id: g.id as string, area: g.area as string, title: g.title as string, progress: g.progress as number,
         rewardStep: g.reward_step as number, rewardMet: g.reward_met as number,
+        // Practice mode: only when a parent turned it on for this goal.
+        practiceMode: g.kid_practice ? {
+          steps: cleanSteps(parseJson(g.steps, [])), minutes: (g.practice_minutes as number | null) ?? null,
+          waiting: !!db.prepare("SELECT 1 FROM practice_requests WHERE goal_id = ? AND date = ? AND status = 'waiting'").get(g.id as string, today),
+          doneToday: (db.prepare("SELECT COUNT(*) AS n FROM practice_requests WHERE goal_id = ? AND date = ? AND status = 'approved'").get(g.id as string, today) as Row).n as number,
+        } : null,
       })),
     upcoming: (db.prepare(`SELECT id, kind, title, provider, starts_at FROM therapy_appointments
       WHERE member_id = ? AND status = 'scheduled' AND starts_at >= ? ORDER BY starts_at LIMIT 20`).all(memberId, today) as Row[])
@@ -162,6 +196,7 @@ export function therapyRoutes(app: FastifyInstance, db: DatabaseSync): void {
     db.prepare(`INSERT INTO therapy_appointments (id, home_id, member_id, kind, title, provider, location, starts_at, duration_minutes, notes, created_by)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, ctx.homeId, kid.id as string, oneOf(APPOINTMENT_KINDS, b.kind, 'Kind', 'other'),
       requireStr(b.title, 'Title', 100), str(b.provider, 100), str(b.location, 200), b.startsAt, num(b.durationMinutes), str(b.notes, 2000), ctx.user?.id ?? null);
+    if ('questions' in b) db.prepare('UPDATE therapy_appointments SET questions = ? WHERE id = ?').run(JSON.stringify(cleanQuestions(b.questions)), id);
     return appointmentView(ownRow(db, 'therapy_appointments', ctx, id));
   });
 
@@ -180,6 +215,8 @@ export function therapyRoutes(app: FastifyInstance, db: DatabaseSync): void {
       'status' in b ? oneOf(STATUSES, b.status, 'Status') : cur.status as string,
       'notes' in b ? str(b.notes, 2000) : cur.notes as string | null,
       cur.id as string);
+    if ('questions' in b) db.prepare('UPDATE therapy_appointments SET questions = ? WHERE id = ?').run(JSON.stringify(cleanQuestions(b.questions)), cur.id as string);
+    if ('summary' in b) db.prepare('UPDATE therapy_appointments SET summary = ? WHERE id = ?').run(str(b.summary, 4000), cur.id as string);
     return appointmentView(ownRow(db, 'therapy_appointments', ctx, cur.id as string));
   });
 
@@ -360,11 +397,86 @@ export function therapyRoutes(app: FastifyInstance, db: DatabaseSync): void {
     return { ok: true, reversed: n.awarded as number };
   });
 
+  // ----- kid practice mode -----
+  // The kid follows the picture steps (and timer) on their screen and taps "I did it!". It waits for a parent, like a chore.
+  app.post('/api/homes/:homeId/therapy/goals/:id/kid-practice', async (req) => {
+    const ctx = homeCtx(db, req);
+    if (ctx.actor.kind !== 'kid' && ctx.actor.kind !== 'parent') throw new HttpError(403, 'Tap your avatar first');
+    const g = ownRow(db, 'therapy_goals', ctx, (req.params as { id: string }).id);
+    assertCanActFor(ctx, g.member_id as string);
+    if (!pageOn(db, g.member_id as string, 'doctors') || g.status !== 'active' || !g.kid_practice) throw new HttpError(400, "This goal isn't set up for practice on the tablet");
+    if (ctx.actor.kind === 'kid' && !kidTherapyView(db, g.member_id as string, '')) throw new HttpError(403, 'Ask a grown-up to share your goals first');
+    const today = homeToday(homeInfo(db, ctx.homeId));
+    if (db.prepare("SELECT 1 FROM practice_requests WHERE goal_id = ? AND date = ? AND status = 'waiting'").get(g.id as string, today)) {
+      throw new HttpError(400, 'Already waiting for a grown-up to check');
+    }
+    const m = num((req.body as Row | undefined)?.minutes);
+    const minutes = m != null && Number.isInteger(m) && m >= 0 && m <= 120 ? m : null;
+    const id = newId();
+    db.prepare('INSERT INTO practice_requests (id, home_id, member_id, goal_id, date, minutes) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(id, ctx.homeId, g.member_id as string, g.id as string, today, minutes);
+    emit(db, ctx.homeId, 'practice_waiting', g.member_id as string, { goal_id: g.id, minutes });
+    return { id, status: 'waiting' };
+  });
+
+  app.get('/api/homes/:homeId/therapy/practice-requests', async (req) => {
+    const ctx = homeCtx(db, req, 'parent');
+    return waitingPractices(db, ctx.homeId);
+  });
+
+  app.post('/api/homes/:homeId/therapy/practice-requests/:id/:action', async (req) => {
+    const ctx = homeCtx(db, req, 'parent');
+    const { id, action } = req.params as { id: string; action: string };
+    if (action !== 'approve' && action !== 'reject') throw new HttpError(404, 'Not found');
+    const r = db.prepare("SELECT * FROM practice_requests WHERE id = ? AND home_id = ?").get(id, ctx.homeId) as Row | undefined;
+    if (!r) throw new HttpError(404, 'That practice is gone');
+    if (r.status !== 'waiting') throw new HttpError(400, 'Already checked');
+    if (action === 'reject') {
+      db.prepare("UPDATE practice_requests SET status = 'rejected', closed_at = datetime('now') WHERE id = ?").run(id);
+      return { ok: true, awarded: 0 };
+    }
+    const g = ownRow(db, 'therapy_goals', ctx, r.goal_id as string);
+    const date = r.date as string;
+    // Counts as the day's scheduled practice when there is one that isn't ticked off yet.
+    const scheduled = g.status === 'active' && practiceSlots(db, g, date, date).some((s) => s.date === date && !s.skipped)
+      && !db.prepare('SELECT 1 FROM therapy_notes WHERE goal_id = ? AND date = ? AND practice = 1').get(g.id as string, date);
+    const noteId = newId();
+    let awarded = 0;
+    tx(db, () => {
+      const body = `✅ Practiced on the tablet${r.minutes ? ` (${r.minutes} min)` : ''}`;
+      db.prepare(`INSERT INTO therapy_notes (id, home_id, member_id, goal_id, body, date, by_name, created_by, practice) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(noteId, ctx.homeId, g.member_id as string, g.id as string, body, date, ctx.user?.name ?? null, ctx.user?.id ?? null, scheduled ? 1 : 0);
+      const pts = g.reward_step as number;
+      if (pts > 0 && g.status === 'active') {
+        writeLedger(db, {
+          homeId: ctx.homeId, memberId: g.member_id as string, amount: pts, kind: 'bonus',
+          reason: rewardReason(db, g.member_id as string, g.title as string, false), date: homeToday(homeInfo(db, ctx.homeId)), by: byOf(ctx),
+        });
+        db.prepare('UPDATE therapy_notes SET awarded = ? WHERE id = ?').run(pts, noteId);
+        awarded = pts;
+      }
+      db.prepare("UPDATE practice_requests SET status = 'approved', note_id = ?, closed_at = datetime('now') WHERE id = ?").run(noteId, id);
+    });
+    return { ok: true, awarded };
+  });
+
   app.delete('/api/homes/:homeId/therapy/notes/:id', async (req) => {
     const ctx = homeCtx(db, req, 'parent');
     db.prepare('DELETE FROM therapy_notes WHERE id = ? AND home_id = ?').run((req.params as { id: string }).id, ctx.homeId);
     return { ok: true };
   });
+}
+
+/** Kid practices waiting for a parent, for the Doctors page and the parent home. */
+export function waitingPractices(db: DatabaseSync, homeId: string) {
+  return (db.prepare(`SELECT r.*, g.title AS goal_title, g.area, g.reward_step, m.name AS kid_name, m.avatar AS kid_avatar FROM practice_requests r
+    JOIN therapy_goals g ON g.id = r.goal_id JOIN members m ON m.id = r.member_id
+    WHERE r.home_id = ? AND r.status = 'waiting' ORDER BY r.created_at`).all(homeId) as Row[])
+    .filter((r) => pageOn(db, r.member_id as string, 'doctors'))
+    .map((r) => ({
+      id: r.id as string, memberId: r.member_id as string, goalId: r.goal_id as string, goalTitle: r.goal_title as string, area: r.area as string,
+      date: r.date as string, minutes: r.minutes as number | null, points: r.reward_step as number, kidName: r.kid_name as string, kidAvatar: r.kid_avatar as string,
+    }));
 }
 
 // ---------- practices and appointments on the calendars ----------

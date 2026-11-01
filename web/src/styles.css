@@ -620,3 +620,19 @@ button.link { background: none; border: none; padding: 0; min-height: 0; color: 
 .agenda-item.skipped { opacity: 0.55; text-decoration: line-through; }
 .check-row { font-weight: 600; flex-wrap: nowrap; }
 .check-row input[type=checkbox] { width: 24px; min-height: 24px; height: 24px; flex: none; }
+
+/* ---------- Doctors: health card, visit summary, practice mode ---------- */
+.doctor-tabs { padding: 2px 0; }
+.summary-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+.summary-table th, .summary-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.summary-table th { color: var(--muted); font-weight: 700; font-size: 0.8rem; }
+.practice-step { display: grid; gap: 8px; padding: 18px; border-radius: 20px; background: var(--surface-2); width: 100%; }
+
+@media print {
+  .rail, .bottom-bar, .no-print, .toast, .doctor-tabs { display: none !important; }
+  body, .layout, .main { background: #fff !important; color: #000 !important; }
+  .main { padding: 0 !important; max-width: none !important; }
+  .card { box-shadow: none !important; border: 1px solid #ccc !important; break-inside: avoid; }
+  .summary-goal { break-inside: avoid; }
+  a[href^="tel:"]::after { content: ""; }
+}

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { api, type AgendaItem, type Board, type LedgerEntry, type Poll } from '../api.ts';
+import { api, type AgendaItem, type Board, type KidTherapyGoal, type LedgerEntry, type Poll } from '../api.ts';
 import { useApp, useLoad } from '../state.tsx';
 import { AvatarPicker, RaccoonAvatar } from '../components/Raccoon.tsx';
 import { Modal, ProgressBar, dayName } from '../components/Bits.tsx';
@@ -13,6 +13,7 @@ import { confetti } from '../components/Confetti.ts';
 import { KidShop } from '../components/Shop.tsx';
 import { KidTeamGoals } from '../components/TeamGoals.tsx';
 import { cheerOf, pickPhoto, PhotoThumb } from '../components/Photo.tsx';
+import { KidMedicine, PracticeMode } from '../components/KidPractice.tsx';
 
 const IDLE_MS = 3 * 60e3;
 /** How often a kid's own board checks for chores a grown-up just approved. */
@@ -82,6 +83,7 @@ function recentLine(e: LedgerEntry, icon: string): { mark: string; text: string;
 function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent: boolean; onExit?: () => void }) {
   const { base, home, toast, refresh } = useApp();
   const [board, reload] = useLoad<Board>(`${base}/kids/${memberId}/board`);
+  const [practicing, setPracticing] = useState<KidTherapyGoal | null>(null);
   const [polls, reloadPolls] = useLoad<Poll[]>(`${base}/polls`);
   const [denNote] = useLoad<{ text: string; source: string } | null>(`${base}/kids/${memberId}/room-message`, [memberId]);
   const [busy, setBusy] = useState<string | null>(null);
@@ -312,6 +314,9 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
         </section>
       </div>
 
+      {board.meds.length > 0 && !asParent && <KidMedicine meds={board.meds} color={kid.color} onChange={() => void reload()} />}
+      {practicing && <PracticeMode goal={practicing} color={kid.color} onClose={() => setPracticing(null)} onDone={() => { setPracticing(null); void reload(); }} />}
+
       {board.therapy && (board.therapy.goals.length > 0 || board.therapy.upcoming.length > 0) && (
         <section className="card stack">
           <h2 style={{ margin: 0 }}>🌈 My big goals</h2>
@@ -325,6 +330,11 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
                 <span className="small">{g.progress}%</span>
               </div>
               <ProgressBar percent={g.progress} color={kid.color} />
+              {g.practiceMode && !asParent && (
+                g.practiceMode.waiting
+                  ? <span className="pill warn" style={{ alignSelf: 'flex-start' }}>⏳ Waiting for a grown-up to check your practice</span>
+                  : <button className="primary" style={{ alignSelf: 'flex-start', marginTop: 6 }} onClick={() => setPracticing(g)}>▶️ Practice{g.practiceMode.doneToday ? ` again (${g.practiceMode.doneToday} today)` : ''}</button>
+              )}
             </div>
           ))}
           {board.therapy.upcoming.map((a) => (

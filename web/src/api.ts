@@ -109,7 +109,55 @@ export interface Board {
   today: string; weekStart: string; kid: Kid; stats: KidWeek; todayItems: AgendaItem[]; week: Day[]; goals: Goal[];
   bonus: BonusOffer[]; surprise: { state: 'waiting' } | { state: 'opened'; item: AgendaItem } | null; level: LevelInfo; streak: Streak; achievements: Achievement[]; recent: LedgerEntry[]; timeouts: Timeout[];
   /** Present only when a parent shares the kid's therapy goals with them. */
-  therapy: { goals: { id: string; area: string; title: string; progress: number; rewardStep: number; rewardMet: number }[]; upcoming: { id: string; kind: string; title: string; provider: string | null; startsAt: string }[] } | null;
+  therapy: { goals: KidTherapyGoal[]; upcoming: { id: string; kind: string; title: string; provider: string | null; startsAt: string }[] } | null;
+  /** Medicines a parent lets this kid tick off themselves, with today's doses. */
+  meds: { id: string; name: string; dose: string | null; slots: { slot: string; status: DoseStatus }[] }[];
+}
+
+export type DoseStatus = 'due' | 'late' | 'given' | 'skipped';
+export interface PracticeStep { icon: string; text: string }
+export interface KidTherapyGoal {
+  id: string; area: string; title: string; progress: number; rewardStep: number; rewardMet: number;
+  /** Practice mode on the kid's screen, when a parent turned it on for this goal. */
+  practiceMode: { steps: PracticeStep[]; minutes: number | null; waiting: boolean; doneToday: number } | null;
+}
+
+export interface MedDay {
+  slots: { slot: string; time: string; status: DoseStatus; by: string | null; byKid: boolean; at: string | null }[];
+  extra: { slot: string; status: 'given' | 'skipped'; at: string; by: string | null; byKid: boolean; note: string | null }[];
+}
+export interface Medicine {
+  id: string; memberId: string; name: string; dose: string | null; instructions: string | null; times: string[]; asNeeded: boolean;
+  startDate: string | null; endDate: string | null; supply: number | null; refillAt: number | null; low: boolean; kidCanMark: boolean; active: boolean;
+}
+export interface Adherence { given: number; skipped: number; missed: number; asNeeded: number; percent: number | null }
+export type HomeMedicine = Medicine & { kidName: string; kidAvatar: string; today: MedDay };
+
+export interface PracticeWaiting {
+  id: string; memberId: string; goalId: string; goalTitle: string; area: string; date: string; minutes: number | null; points: number; kidName: string; kidAvatar: string;
+}
+
+export type LogKind = 'mood' | 'symptom' | 'behavior' | 'sleep' | 'other';
+export interface LogEntry {
+  id: string; kind: LogKind; label: string; date: string; time: string | null; severity: number | null; minutes: number | null; trigger: string | null; note: string | null; by: string | null;
+}
+
+export interface VisitSummary {
+  kid: { name: string; age: number | null; birthdate: string | null };
+  from: string; to: string; today: string;
+  profile: { allergies: string | null; conditions: string | null; bloodType: string | null } | null;
+  growth: { date: string; heightCm: number | null; weightKg: number | null }[];
+  goals: {
+    id: string; area: string; title: string; description: string | null; status: string; progress: number; startProgress: number | null; targetDate: string | null;
+    metAt: string | null; history: { date: string; progress: number }[]; practiced: number; scheduled: number | null;
+  }[];
+  notes: { date: string; body: string; goalTitle: string | null; progress: number | null; by: string | null }[];
+  appointments: { date: string; kind: string; title: string; provider: string | null; status: string; summary: string | null }[];
+  next: { startsAt: string; kind: string; title: string; provider: string | null; questions: { text: string; done: boolean }[] } | null;
+  meds: (Medicine & { adherence: Adherence })[];
+  log: { total: number; groups: { kind: LogKind; label: string; count: number; avgSeverity: number | null; avgMinutes: number | null }[]; recent: LogEntry[] } | null;
+  /** Only on a shared link. */
+  link?: { label: string; expiresAt: string; allowNotes: boolean };
 }
 
 export interface QuickReward { id: string; title: string; icon: string; amount: number }
