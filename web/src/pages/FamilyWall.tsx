@@ -9,6 +9,7 @@ import { timeLeft } from '../components/Timeouts.tsx';
 import type { KidPage } from '../../../shared/pages.ts';
 import type { TeamGoal } from '../api.ts';
 import { TeamBar } from '../components/TeamGoals.tsx';
+import { WallSports, type KidSports } from '../components/Sports.tsx';
 
 interface WallKid {
   id: string; name: string; avatar: string; color: string; theme: string | null; hasPin: boolean; pagesOff: KidPage[]; balance: number;
@@ -19,6 +20,8 @@ interface WallKid {
   timeouts: { id: string; what: string; state: string; endsAt: string; startsAt: string; minutesLeft: number }[];
   penalties: { reason: string; amount: number }[];
   doctorGoals: { id: string; title: string; area: string; progress: number }[];
+  /** Their followed teams from the sports tracker, when linked. */
+  sports?: KidSports;
 }
 interface WallDay { date: string; kids: { kidId: string; chores: number; done: number; practices: number; appointments: { id: string; kind: string; title: string; time: string }[] }[] }
 interface Wall {
@@ -163,6 +166,7 @@ export function FamilyWall() {
               ))}
               {k.penalties.map((p, i) => <div key={i} className="wall-note">🌱 Working on: {p.reason}</div>)}
               {k.doctorGoals.slice(0, 2).map((g) => <div key={g.id} className="wall-note">{AREA_ICONS[g.area] ?? '🌈'} {g.title} · {g.progress}%</div>)}
+              <WallSports sports={k.sports} />
               {k.denMessage && <div className="wall-den">{k.denMessage}</div>}
             </button>
           ))}

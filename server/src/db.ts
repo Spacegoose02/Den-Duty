@@ -915,6 +915,12 @@ export const MIGRATIONS: string[] = [
   );
   ALTER TABLE homes ADD COLUMN recap_seen TEXT;
   `,
+  // Sports: each kid's followed teams from the family's sports tracker. The tracker's address per home, and each
+  // kid's private key from their tracker account (sealed like the other keys).
+  `
+  ALTER TABLE homes ADD COLUMN sports_url TEXT;
+  ALTER TABLE members ADD COLUMN sports_key TEXT;
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

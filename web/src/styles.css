@@ -686,3 +686,43 @@ button.link { background: none; border: none; padding: 0; min-height: 0; color: 
 .delta { font-size: .8rem; font-weight: 800; margin-left: 4px; }
 .delta.up { color: var(--ok); }
 .delta.down { color: var(--danger); }
+
+/* My teams: followed teams from the family's sports tracker, in each team's colors */
+.sp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 12px; }
+.sp-card {
+  display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 18px; background: var(--surface);
+  border: 2px solid color-mix(in srgb, var(--team) 35%, var(--border)); border-top: 8px solid var(--team);
+  background-image: linear-gradient(160deg, color-mix(in srgb, var(--team) 12%, transparent), transparent 55%);
+  animation: rise 0.3s ease both;
+}
+.sp-card.live { border-color: var(--team); box-shadow: 0 0 0 3px color-mix(in srgb, var(--team) 25%, transparent); }
+.sp-card.gameday { border-color: color-mix(in srgb, var(--team) 70%, var(--border)); }
+.sp-head { display: flex; align-items: center; gap: 10px; }
+.sp-logo { object-fit: contain; flex-shrink: 0; }
+.sp-logo-text { display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; color: #fff; font-weight: 900; text-shadow: 0 1px 2px rgb(0 0 0 / 0.4); }
+.sp-name { font-weight: 900; font-size: 1.1rem; line-height: 1.15; overflow-wrap: break-word; min-width: 0; }
+.sp-rank { color: var(--muted); font-weight: 800; margin-right: 4px; font-size: 0.95rem; }
+.sp-sub { color: var(--muted); font-size: 0.85rem; font-weight: 600; }
+.sp-body { display: flex; flex-direction: column; gap: 4px; }
+.sp-live { display: flex; align-items: center; gap: 6px; font-weight: 900; color: var(--danger); letter-spacing: 0.04em; }
+.sp-detail { color: var(--text); font-weight: 700; letter-spacing: 0; }
+.sp-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--danger); animation: sp-pulse 1.4s ease-in-out infinite; vertical-align: middle; }
+@keyframes sp-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.35; transform: scale(0.75); } }
+.sp-score { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 4px 0; }
+.sp-score-side { display: inline-flex; align-items: center; gap: 8px; }
+.sp-score-num { font-size: 2.3rem; font-weight: 900; font-variant-numeric: tabular-nums; line-height: 1; }
+.sp-score-dash { font-size: 1.6rem; color: var(--muted); font-weight: 700; }
+.sp-next { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.sp-count { font-size: 1.25rem; font-weight: 900; color: var(--team); filter: saturate(1.1); }
+.sp-card.gameday .sp-count { animation: wiggle 1.2s ease-in-out 2; display: inline-block; align-self: flex-start; }
+.sp-last { font-size: 0.9rem; font-weight: 700; padding: 4px 8px; border-radius: 10px; background: var(--surface-2); align-self: flex-start; }
+.sp-last.W { background: color-mix(in srgb, var(--ok) 16%, var(--surface)); }
+.sp-last.W .sp-result { color: var(--ok); }
+.sp-last.L .sp-result { color: var(--muted); }
+.sp-result { font-weight: 900; }
+.board.picture .sp-count { font-size: 1.6rem; }
+@media (prefers-reduced-motion: reduce) { .sp-dot, .sp-card.gameday .sp-count, .sp-card { animation: none; } }
+
+.wall-sports { display: flex; flex-direction: column; gap: 4px; }
+.wall-sport { display: flex; align-items: center; gap: 8px; font-size: 0.98rem; padding: 3px 8px; border-radius: 10px; border-left: 5px solid var(--team); background: color-mix(in srgb, var(--team) 8%, var(--surface)); }
+.wall-sport.live { background: color-mix(in srgb, var(--team) 18%, var(--surface)); }

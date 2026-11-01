@@ -15,6 +15,7 @@ import { kidTherapyView, doctorsCalendar } from './therapy.ts';
 import { kidTimeouts } from './timeouts.ts';
 import { listKids } from './homes.ts';
 import { lootdenWall } from './lootden.ts';
+import { kidSports } from './sports.ts';
 import { addDays } from '../../../shared/schedule.ts';
 
 export interface WallSettings {
@@ -83,6 +84,8 @@ export async function wallData(db: DatabaseSync, homeId: string) {
         : [],
       penalties,
       doctorGoals: therapy?.goals.map((g) => ({ id: g.id, title: g.title, area: g.area, progress: g.progress })) ?? [],
+      // Their followed teams from the sports tracker (when linked): live scores and the next game.
+      sports: await kidSports(db, homeId, k.id),
     };
   }));
 

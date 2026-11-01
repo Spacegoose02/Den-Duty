@@ -368,6 +368,59 @@ function LootDenCard() {
   );
 }
 
+/** The family's sports tracker: its address, and each kid's private key so their followed teams show on their board. */
+function SportsCard() {
+  const { base, toast } = useApp();
+  const [s, reload] = useLoad<{ url: string; kids: { id: string; name: string; hasKey: boolean }[] }>(`${base}/sports`);
+  const [url, setUrl] = useState<string | null>(null);
+  const [keys, setKeys] = useState<Record<string, string>>({});
+  if (!s) return null;
+  const saveUrl = async (value: string) => {
+    try {
+      await api(`${base}/sports`, { method: 'PUT', body: { url: value } });
+      toast(value ? 'Sports tracker saved' : 'Sports tracker unlinked');
+      setUrl(null);
+      await reload();
+    } catch (e) { toast((e as Error).message); }
+  };
+  const saveKey = async (kid: { id: string; name: string }, key: string | null) => {
+    try {
+      const r = await api<{ hasKey: boolean; check: { ok: true; teams: number } | { ok: false; reason: string } | null }>(`${base}/kids/${kid.id}/sports`, { method: 'PUT', body: { key } });
+      toast(!r.hasKey ? `${kid.name}'s teams are off their board`
+        : !r.check ? `Key saved for ${kid.name}. Add the tracker's address to show their teams.`
+          : r.check.ok ? `${kid.name}'s ${r.check.teams} team${r.check.teams === 1 ? '' : 's'} now show on their board 🏟️`
+            : `Saved, but: ${r.check.reason}`);
+      setKeys((k) => ({ ...k, [kid.id]: '' }));
+      await reload();
+    } catch (e) { toast((e as Error).message); }
+  };
+  return (
+    <div className="card stack" id="sports">
+      <h2 style={{ margin: 0 }}>🏟️ Sports tracker</h2>
+      <p className="small muted" style={{ margin: 0 }}>
+        Show each kid's favorite teams on their board and the family wall: live scores, a countdown to the next game and the last result.
+        Give each kid an account on your sports tracker and follow their teams there, then copy the private key from
+        their <strong>Account</strong> page (<strong>Connect other apps</strong>) into their row below.
+      </p>
+      <div className="row">
+        <input placeholder="https://sports.example.com" value={url ?? s.url} onChange={(e) => setUrl(e.target.value)} style={{ flex: 2, minWidth: 220 }} aria-label="Sports tracker's address" />
+        <button className="primary" onClick={() => void saveUrl((url ?? s.url).trim())}>Save</button>
+        {s.url && <button className="ghost" onClick={() => void saveUrl('')}>Unlink</button>}
+      </div>
+      {s.kids.map((k) => (
+        <div key={k.id} className="row">
+          <strong style={{ minWidth: 110 }}>{k.name}</strong>
+          <input type="password" placeholder={k.hasKey ? 'Key saved' : 'Their tracker key'} value={keys[k.id] ?? ''} onChange={(e) => setKeys((all) => ({ ...all, [k.id]: e.target.value }))}
+            style={{ flex: 1, minWidth: 160 }} aria-label={`${k.name}'s sports tracker key`} autoComplete="off" />
+          <button disabled={!(keys[k.id] ?? '').trim()} onClick={() => void saveKey(k, (keys[k.id] ?? '').trim())}>Save key</button>
+          {k.hasKey && <button className="ghost" onClick={() => void saveKey(k, null)}>Remove</button>}
+        </div>
+      ))}
+      {!s.kids.length && <p className="small muted" style={{ margin: 0 }}>Add your kids first (Kids → Add a kid).</p>}
+    </div>
+  );
+}
+
 export function Settings() {
   const { who } = useApp();
   // Links like /settings#ai jump to that card once it has loaded.
@@ -383,6 +436,7 @@ export function Settings() {
       <PushSettings />
       <FamilyWallCard />
       <LootDenCard />
+      <SportsCard />
       <HomeSettings />
       <CalendarsCard />
       <AiCard />
