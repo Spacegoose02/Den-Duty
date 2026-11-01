@@ -170,10 +170,10 @@ export interface TeamGoal {
 }
 
 /** A reward in the shop. stock is null for unlimited. */
-export interface ShopItem { id: string; title: string; icon: string; price: number; stock: number | null }
+export interface ShopItem { id: string; title: string; icon: string; price: number; stock: number | null; /** Game time LootDen hands out by itself. */ gameMinutes?: number | null }
 export interface ShopOrder {
   id: string; memberId: string; kidName: string; itemId: string | null; title: string; icon: string; price: number;
-  status: 'waiting' | 'given' | 'refunded'; createdAt: string; closedAt: string | null; closedBy: string | null;
+  status: 'waiting' | 'given' | 'refunded'; createdAt: string; closedAt: string | null; closedBy: string | null; gameMinutes?: number | null;
 }
 
 export interface Poll {
@@ -220,6 +220,8 @@ export interface TimeoutRequest { id: string; timeoutId: string; units: number; 
 export interface Timeout {
   id: string; memberId: string; what: string; reason: string | null; startsAt: string; endsAt: string; endedAt: string | null;
   state: 'upcoming' | 'active' | 'over'; minutesLeft: number;
+  /** Also locks games in LootDen: all of them, or just Roblox. */
+  games?: 'all' | 'roblox' | null;
   buy: { unit: 'hour' | 'day'; price: number; maxMinutes: number; boughtMinutes: number; unitsLeft: number } | null;
   pending: TimeoutRequest | null;
 }
