@@ -828,6 +828,10 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX share_links_member ON share_links(member_id);
   `,
+  // Helpdesk: 3 open requests per kid was too tight. Homes still on that old default go to 10 (0 now means no limit).
+  `
+  UPDATE homes SET helpdesk_max_open = 10 WHERE helpdesk_max_open = 3;
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {
