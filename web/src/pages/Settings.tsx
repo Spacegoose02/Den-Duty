@@ -332,6 +332,41 @@ function FamilyWallCard() {
   );
 }
 
+/** LootDen, the family's game library: what the family wall shows from it, and the address and token to get it. */
+function LootDenCard() {
+  const { base, toast } = useApp();
+  const [s, reload] = useLoad<{ url: string; hasToken: boolean; wall: unknown | null }>(`${base}/lootden`);
+  const [url, setUrl] = useState<string | null>(null);
+  const [token, setToken] = useState('');
+  if (!s) return null;
+  const save = async (body: { url: string; token?: string | null }) => {
+    try {
+      const r = await api<{ reachable: boolean }>(`${base}/lootden`, { method: 'PUT', body });
+      toast(!body.url ? 'LootDen unlinked' : r.reachable ? 'LootDen linked: the family wall shows it now' : "Saved, but LootDen didn't answer. Check the address and token.");
+      setToken('');
+      setUrl(null);
+      await reload();
+    } catch (e) { toast((e as Error).message); }
+  };
+  return (
+    <div className="card stack" id="lootden">
+      <h2 style={{ margin: 0 }}>🎮 LootDen</h2>
+      <p className="small muted" style={{ margin: 0 }}>
+        Link LootDen, the family's game library, to show who's playing what, the next game night and the family's screenshots on the family wall.
+        In LootDen, sign in as a <strong>kid profile</strong>, open Profile, Devices and tokens and make a token, so only kid-safe games and pictures show here.
+        LootDen links back on its side (Settings, Den Duty) for time-outs that lock games, chores first and game time from the shop.
+      </p>
+      <div className="row">
+        <input placeholder="http://192.168.1.10:8080" value={url ?? s.url} onChange={(e) => setUrl(e.target.value)} style={{ flex: 2, minWidth: 220 }} aria-label="LootDen's address" />
+        <input type="password" placeholder={s.hasToken ? 'Token saved' : 'LootDen token'} value={token} onChange={(e) => setToken(e.target.value)} style={{ flex: 1, minWidth: 160 }} aria-label="LootDen token" autoComplete="off" />
+        <button className="primary" onClick={() => void save({ url: (url ?? s.url).trim(), ...(token.trim() ? { token: token.trim() } : {}) })}>Save</button>
+        {s.url && <button className="ghost" onClick={() => void save({ url: '' })}>Unlink</button>}
+      </div>
+      {s.url && <p className="small" style={{ margin: 0 }}>{s.wall ? '✅ LootDen answers. It shows on the family wall.' : "⚠️ LootDen isn't answering right now."}</p>}
+    </div>
+  );
+}
+
 export function Settings() {
   const { who } = useApp();
   // Links like /settings#ai jump to that card once it has loaded.
@@ -345,6 +380,7 @@ export function Settings() {
       <div className="topbar"><h1>Settings</h1></div>
       <FamilyTablets />
       <FamilyWallCard />
+      <LootDenCard />
       <HomeSettings />
       <CalendarsCard />
       <AiCard />

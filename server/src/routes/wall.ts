@@ -14,6 +14,7 @@ import { roomMessage } from '../roommessage.ts';
 import { kidTherapyView, doctorsCalendar } from './therapy.ts';
 import { kidTimeouts } from './timeouts.ts';
 import { listKids } from './homes.ts';
+import { lootdenWall } from './lootden.ts';
 import { addDays } from '../../../shared/schedule.ts';
 
 export interface WallSettings {
@@ -114,6 +115,8 @@ export async function wallData(db: DatabaseSync, homeId: string) {
     today, tomorrow, settings: { landing: settings.landing, dim: settings.dim },
     kids: kidCards, family, lunch: lunch.map((x) => ({ title: x.title, time: x.time })), polls,
     teamGoals: teamGoals(db, homeId).filter((g) => g.status === 'active'),
+    // LootDen, the family's game library: who's playing, the next game night and screenshots (when linked).
+    lootden: await lootdenWall(db, homeId),
   };
 }
 
