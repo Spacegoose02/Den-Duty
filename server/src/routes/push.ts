@@ -11,7 +11,9 @@ export function pushRoutes(app: FastifyInstance, db: DatabaseSync): void {
   // A parent's browser, or the family tablet (signed in as the tablet, with or without a kid tapped in).
   app.post('/api/homes/:homeId/push', async (req) => {
     const ctx = homeCtx(db, req);
-    const who = ctx.actor.kind === 'parent' && ctx.user ? { userId: ctx.user.id, deviceId: null }
+    // A parent signed in on the family tablet can turn on the tablet's (kid) notifications instead of their own.
+    const asTablet = (req.body as Row)?.as === 'tablet' && req.device?.homeId === ctx.homeId;
+    const who = ctx.actor.kind === 'parent' && ctx.user && !asTablet ? { userId: ctx.user.id, deviceId: null }
       : req.device?.homeId === ctx.homeId ? { userId: null, deviceId: req.device.id } : null;
     if (!who) throw new HttpError(403, 'Only parents and the family tablet can get notifications');
     try { saveSubscription(db, ctx.homeId, who, (req.body as Row)?.subscription); } catch (e) { throw new HttpError(400, (e as Error).message); }

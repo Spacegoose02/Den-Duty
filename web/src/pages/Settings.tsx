@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { PushSettings } from '../components/Push.tsx';
 import { Link } from 'react-router-dom';
 import { api } from '../api.ts';
 import { useApp, useLoad } from '../state.tsx';
@@ -379,6 +380,7 @@ export function Settings() {
     <div className="stack" style={{ maxWidth: 960 }}>
       <div className="topbar"><h1>Settings</h1></div>
       <FamilyTablets />
+      <PushSettings />
       <FamilyWallCard />
       <LootDenCard />
       <HomeSettings />

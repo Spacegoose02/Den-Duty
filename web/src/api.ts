@@ -1,4 +1,5 @@
 import type { ScheduleKind } from '../../shared/schedule.ts';
+import type { RoutineId } from '../../shared/catalog.ts';
 import type { Achievement, LevelInfo } from '../../shared/progress.ts';
 import type { DoctorArea, KidPage, PracticeIdea } from '../../shared/pages.ts';
 
@@ -51,6 +52,8 @@ export interface Kid {
   ideasOff: PracticeIdea[];
   /** The per-kid AI master switch (on by default). */
   aiOn: boolean;
+  /** Read chores and messages out loud ('auto' = on with the picture board). */
+  readAloudSetting: 'auto' | 'on' | 'off'; readAloud: boolean;
 }
 
 export interface HomeDetail {
@@ -65,6 +68,8 @@ export interface HomeDetail {
 export interface Chore {
   id: string; title: string; icon: string; points: number; schedule: ScheduleKind; weekdays: number[]; dueDate: string | null;
   startDate: string; describe: string; memberIds: string[]; bonus: boolean; claimLimit: 'each' | 'one'; category: 'room' | null; photo: boolean;
+  everyDays: number | null; monthDay: number | null; dueTime: string | null; latePoints: number | null;
+  routine: RoutineId | null; routinePos: number; minutes: number | null; rotate: 'daily' | 'weekly' | null; autoApprove: boolean;
 }
 
 export type ItemStatus = 'pending' | 'submitted' | 'approved' | 'rejected' | 'planned';
@@ -78,6 +83,12 @@ export interface AgendaItem {
   needsPhoto?: boolean; hasPhoto?: boolean; photoVersion?: string | null;
   /** A parent's cheer on the approval (see CHEERS). */
   cheer?: string | null;
+  /** Due by a time of day, worth latePoints after it; late once finished after it. */
+  dueTime?: string | null; latePoints?: number | null; late?: boolean;
+  /** A step in a routine, in order, with a timer. */
+  routine?: RoutineId | null; routinePos?: number; minutes?: number | null;
+  /** Approved by itself. */
+  auto?: boolean;
 }
 
 export interface ExternalItem { date: string; time: string | null; title: string; feed: string; kind: string }
@@ -112,6 +123,28 @@ export interface Board {
   therapy: { goals: KidTherapyGoal[]; upcoming: { id: string; kind: string; title: string; provider: string | null; startsAt: string }[] } | null;
   /** Medicines a parent lets this kid tick off themselves, with today's doses. */
   meds: { id: string; name: string; dose: string | null; slots: { slot: string; status: DoseStatus }[] }[];
+  /** Allowance and jars, when the home uses them. */
+  money: KidMoney | null;
+}
+
+export type Jar = 'spend' | 'save' | 'give';
+export type Jars = Record<Jar, number>;
+export interface MoneyEntry { id: number; jar: Jar; cents: number; kind: string; reason: string; date: string; by: string | null; createdAt: string }
+export interface KidMoney { symbol: string; centsPerPoint: number; interest: number; jars: Jars; total: number; allowanceCents: number; allowanceDay: number; recent: MoneyEntry[] }
+export interface MoneySettings { enabled: boolean; symbol: string; centsPerPoint: number; split: Jars; interest: number }
+export interface MoneyPage {
+  today: string; settings: MoneySettings;
+  kids: { id: string; name: string; avatar: string; color: string; balance: number; jars: Jars; total: number; allowanceCents: number; allowanceDay: number; history: MoneyEntry[] }[];
+}
+
+export interface KidRecap {
+  id: string; name: string; avatar: string; color: string; points: number; prevPoints: number; done: number; due: number; prevDone: number; prevDue: number;
+  rate: number | null; prevRate: number | null; perfectDays: number; streak: number; bonusDone: number; late: number; spent: number;
+  best: { title: string; icon: string; done: number } | null; missed: { title: string; icon: string; missed: number } | null;
+}
+export interface Recap {
+  weekStart: string; weekEnd: string; kids: KidRecap[]; total: { points: number; done: number; due: number; prevPoints: number; rate: number | null };
+  highlights: string[]; workOn: string[];
 }
 
 export type DoseStatus = 'due' | 'late' | 'given' | 'skipped';
@@ -240,6 +273,6 @@ export interface Reminder {
   timesDone: number; state: 'done' | 'someday' | 'overdue' | 'today' | 'upcoming';
 }
 
-export interface Summary { today: string; weekStart: string; weekEnd: string; waiting: number; timeouts: HomeTimeout[]; helpdesk: HomeHelpRequest[]; reminders: Reminder[]; kids: (Kid & KidWeek & { goals: Goal[]; streak: Streak; level: LevelInfo })[] }
+export interface Summary { today: string; weekStart: string; weekEnd: string; waiting: number; recapWeek: string | null; timeouts: HomeTimeout[]; helpdesk: HomeHelpRequest[]; reminders: Reminder[]; kids: (Kid & KidWeek & { goals: Goal[]; streak: Streak; level: LevelInfo })[] }
 
 export interface LedgerEntry { id: number; amount: number; kind: string; reason: string; date: string; by: string | null; createdAt: string }
