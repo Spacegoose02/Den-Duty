@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../api.ts';
 import { useApp, useLoad } from '../state.tsx';
 import { RaccoonAvatar } from '../components/Raccoon.tsx';
@@ -9,9 +10,16 @@ import { TherapyHelperCard } from '../components/TherapyHelper.tsx';
 import { AskDoctorCard } from '../components/AskDoctor.tsx';
 import { appointmentOn, goalAreaOn, type DoctorArea } from '../../../shared/pages.ts';
 import { WEEKDAY_SHORT } from '../../../shared/schedule.ts';
+import type { PracticeStep, PracticeWaiting } from '../api.ts';
+import { MedsTab } from './doctors/Meds.tsx';
+import { HealthTab, type HealthData } from './doctors/Health.tsx';
+import { LogTab } from './doctors/HealthLog.tsx';
+import { ShareTab } from './doctors/Share.tsx';
 
-interface Appointment { id: string; kind: string; title: string; provider: string | null; location: string | null; startsAt: string; durationMinutes: number | null; status: string; notes: string | null }
+interface Question { text: string; done: boolean }
+interface Appointment { id: string; kind: string; title: string; provider: string | null; location: string | null; startsAt: string; durationMinutes: number | null; status: string; notes: string | null; questions: Question[]; summary: string | null }
 interface TGoal { id: string; area: string; title: string; description: string | null; targetDate: string | null; status: string; progress: number; metAt: string | null; history: { date: string; progress: number }[]; rewardStep: number; rewardMet: number; rewardMetPaid: boolean;
+  steps: PracticeStep[]; practiceMinutes: number | null; kidPractice: boolean;
   practice: { schedule: 'weekly' | 'once'; weekdays: number[]; date: string | null; time: string | null } | null }
 interface TNote { id: string; goalId: string | null; goalTitle: string | null; body: string; progress: number | null; date: string; by: string | null }
 interface TherapyData { kidVisible: boolean; appointments: Appointment[]; goals: TGoal[]; notes: TNote[] }
@@ -103,6 +111,7 @@ function GoalCard({ goal, color, onChange, base }: { goal: TGoal; color: string;
       {goal.description && <p className="small" style={{ margin: 0 }}>{goal.description}</p>}
       <RewardEditor goal={goal} onSaved={onChange} goalUrl={goalUrl(base, goal.id)} />
       <PracticeEditor goal={goal} onSaved={onChange} goalUrl={goalUrl(base, goal.id)} />
+      <PracticeModeEditor goal={goal} onSaved={onChange} goalUrl={goalUrl(base, goal.id)} />
       <ProgressBar percent={goal.progress} color={goal.status === 'met' ? 'var(--ok)' : color} />
       {goal.history.length >= 2 && (
         <LineChart height={150} unit="%" labels={history.map((h) => shortDate(h.date))} series={[{ id: goal.id, name: 'Progress', color, values: history.map((h) => h.progress) }]} />
@@ -224,6 +233,175 @@ function RewardEditor({ goal, goalUrl, onSaved }: { goal: TGoal; goalUrl: string
   );
 }
 
+const STEP_ICONS = ['👀', '👂', '👄', '🐍', '🎈', '✋', '🧩', '🥄', '🪥', '🏃', '🫁', '⭐'];
+
+/** Kid practice mode: picture steps and a timer on the kid's screen; "I did it!" waits for a parent. */
+function PracticeModeEditor({ goal, goalUrl, onSaved }: { goal: TGoal; goalUrl: string; onSaved: () => Promise<void> }) {
+  const { toast } = useApp();
+  const [open, setOpen] = useState(false);
+  const [f, setF] = useState({ kidPractice: goal.kidPractice, practiceMinutes: goal.practiceMinutes ?? 5, steps: goal.steps.length ? goal.steps : [{ icon: '⭐', text: '' }] });
+  if (!open) {
+    return (
+      <button className="ghost small" style={{ alignSelf: 'flex-start' }} onClick={() => setOpen(true)}>
+        ▶️ {goal.kidPractice ? `Practice mode on · ${goal.steps.length} step${goal.steps.length === 1 ? '' : 's'}${goal.practiceMinutes ? ` · ${goal.practiceMinutes} min timer` : ''}` : 'Set up practice mode for the tablet'}
+      </button>
+    );
+  }
+  const setStep = (i: number, p: Partial<PracticeStep>) => setF({ ...f, steps: f.steps.map((x, j) => (j === i ? { ...x, ...p } : x)) });
+  return (
+    <form className="stack card" style={{ background: 'var(--surface-2)' }} onSubmit={async (e) => {
+      e.preventDefault();
+      try { await api(goalUrl, { method: 'PATCH', body: { ...f, steps: f.steps.filter((x) => x.text.trim()) } }); toast('Practice mode saved'); setOpen(false); await onSaved(); } catch (err) { toast((err as Error).message); }
+    }}>
+      <label className="row small"><input type="checkbox" checked={f.kidPractice} onChange={(e) => setF({ ...f, kidPractice: e.target.checked })} style={{ width: 22, minHeight: 22 }} /> Show a ▶️ Practice button on the kid's screen</label>
+      <p className="small muted" style={{ margin: 0 }}>They follow the steps, watch the timer, and tap “I did it!”. It waits for you on the home screen; approving it counts as the practice (and pays the practice points). Needs Doctors shared with them.</p>
+      <label className="row small">Timer <input type="number" min={1} max={60} value={f.practiceMinutes} onChange={(e) => setF({ ...f, practiceMinutes: Math.max(1, Math.min(60, Number(e.target.value) || 1)) })} style={{ width: 80 }} /> minutes</label>
+      <strong className="small">Steps</strong>
+      {f.steps.map((st, i) => (
+        <div key={i} className="row" style={{ gap: 6 }}>
+          <select value={st.icon} onChange={(e) => setStep(i, { icon: e.target.value })} aria-label={`Step ${i + 1} picture`} style={{ width: 70 }}>
+            {[...new Set([st.icon, ...STEP_ICONS])].map((ic) => <option key={ic} value={ic}>{ic}</option>)}
+          </select>
+          <input placeholder={`Step ${i + 1}, e.g. Hiss like a snake 5 times`} value={st.text} onChange={(e) => setStep(i, { text: e.target.value })} style={{ flex: 1, minWidth: 160 }} maxLength={160} />
+          <button type="button" className="ghost" aria-label="Remove step" onClick={() => setF({ ...f, steps: f.steps.filter((_, j) => j !== i) })}>✕</button>
+        </div>
+      ))}
+      {f.steps.length < 12 && <button type="button" className="ghost small" style={{ alignSelf: 'flex-start' }} onClick={() => setF({ ...f, steps: [...f.steps, { icon: '⭐', text: '' }] })}>＋ Step</button>}
+      <div className="row"><span className="spacer" /><button type="button" className="ghost" onClick={() => setOpen(false)}>Cancel</button><button className="primary">Save</button></div>
+    </form>
+  );
+}
+
+/** Questions to ask at the next visit. */
+function PrepModal({ appt, url, onClose, onSaved }: { appt: Appointment; url: string; onClose: () => void; onSaved: () => Promise<void> }) {
+  const { toast } = useApp();
+  const [qs, setQs] = useState<Question[]>(appt.questions);
+  const [text, setText] = useState('');
+  const add = () => { if (text.trim()) { setQs([...qs, { text: text.trim(), done: false }]); setText(''); } };
+  return (
+    <Modal onClose={onClose}>
+      <form className="stack" onSubmit={async (e) => {
+        e.preventDefault();
+        const all = text.trim() ? [...qs, { text: text.trim(), done: false }] : qs;
+        try { await api(url, { method: 'PATCH', body: { questions: all } }); toast('Questions saved'); onClose(); await onSaved(); } catch (err) { toast((err as Error).message); }
+      }}>
+        <h2 style={{ margin: 0 }}>❓ Questions for {appt.title}</h2>
+        <p className="small muted" style={{ margin: 0 }}>Jot them down as they come up. At the visit, tick them off as you ask; they also print on the visit summary.</p>
+        {qs.map((q, i) => (
+          <div key={i} className="row">
+            <input type="checkbox" checked={q.done} onChange={(e) => setQs(qs.map((x, j) => (j === i ? { ...x, done: e.target.checked } : x)))} style={{ width: 22, minHeight: 22 }} aria-label="Asked" />
+            <span style={{ flex: 1, textDecoration: q.done ? 'line-through' : undefined }}>{q.text}</span>
+            <button type="button" className="ghost" aria-label="Remove" onClick={() => setQs(qs.filter((_, j) => j !== i))}>✕</button>
+          </div>
+        ))}
+        <div className="row">
+          <input placeholder="e.g. Is 3-word sentences on track for 4?" value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } }} style={{ flex: 1, minWidth: 200 }} />
+          <button type="button" onClick={add} disabled={!text.trim()}>Add</button>
+        </div>
+        <div className="row"><span className="spacer" /><button type="button" className="ghost" onClick={onClose}>Cancel</button><button className="primary">Save</button></div>
+      </form>
+    </Modal>
+  );
+}
+
+/** After a visit: what the provider said, which questions got answered, and quick goal updates. */
+function FollowUpModal({ appt, url, goals, notesUrl, onClose, onSaved }: {
+  appt: Appointment; url: string; goals: TGoal[]; notesUrl: string; onClose: () => void; onSaved: () => Promise<void>;
+}) {
+  const { toast } = useApp();
+  const [summary, setSummary] = useState(appt.summary ?? '');
+  const [qs, setQs] = useState<Question[]>(appt.questions);
+  const active = goals.filter((g) => g.status === 'active');
+  const [prog, setProg] = useState<Record<string, number>>(Object.fromEntries(active.map((g) => [g.id, g.progress])));
+  return (
+    <Modal onClose={onClose}>
+      <form className="stack" onSubmit={async (e) => {
+        e.preventDefault();
+        try {
+          await api(url, { method: 'PATCH', body: { status: 'done', summary, questions: qs } });
+          for (const g of active) {
+            if (prog[g.id] !== g.progress) {
+              await api(notesUrl, { body: { goalId: g.id, appointmentId: appt.id, progress: prog[g.id], body: `Updated after ${appt.title}`, noReward: true } });
+            }
+          }
+          toast('Visit saved');
+          onClose();
+          await onSaved();
+        } catch (err) { toast((err as Error).message); }
+      }}>
+        <h2 style={{ margin: 0 }}>✓ How did {appt.title} go?</h2>
+        <textarea placeholder="What did they say? e.g. Great progress on S sounds; start on L next. Come back in 6 weeks." value={summary} onChange={(e) => setSummary(e.target.value)} style={{ minHeight: 100 }} autoFocus />
+        {qs.length > 0 && (
+          <>
+            <strong className="small">Questions you planned to ask</strong>
+            {qs.map((q, i) => (
+              <label key={i} className="row small">
+                <input type="checkbox" checked={q.done} onChange={(e) => setQs(qs.map((x, j) => (j === i ? { ...x, done: e.target.checked } : x)))} style={{ width: 22, minHeight: 22 }} />
+                {q.text}
+              </label>
+            ))}
+          </>
+        )}
+        {active.length > 0 && (
+          <>
+            <strong className="small">Update goals (optional)</strong>
+            {active.map((g) => (
+              <div key={g.id} className="row small">
+                <span style={{ flex: 1, minWidth: 140 }}>{AREA_ICONS[g.area] ?? '📌'} {g.title}</span>
+                <input type="range" min={0} max={100} step={5} value={prog[g.id]} onChange={(e) => setProg({ ...prog, [g.id]: Number(e.target.value) })} style={{ width: 140, minHeight: 0 }} aria-label={`${g.title} progress`} />
+                <strong style={{ width: 44, textAlign: 'right' }}>{prog[g.id]}%</strong>
+              </div>
+            ))}
+          </>
+        )}
+        <p className="small muted" style={{ margin: 0 }}>Need a follow-up visit? Add it with ＋ Appointment, or set a reminder to call and book it.</p>
+        <div className="row"><span className="spacer" /><button type="button" className="ghost" onClick={onClose}>Cancel</button><button className="primary">Save</button></div>
+      </form>
+    </Modal>
+  );
+}
+
+/** Practices kids finished on the tablet, waiting for a parent. Also on the parents' home. */
+export function PracticeWaitingCard({ kidId, onChange }: { kidId?: string; onChange?: () => Promise<void> }) {
+  const { base, toast, home } = useApp();
+  const [list, reload] = useLoad<PracticeWaiting[]>(`${base}/therapy/practice-requests`, [base]);
+  const shown = (list ?? []).filter((p) => !kidId || p.memberId === kidId);
+  if (!shown.length) return null;
+  const act = async (id: string, action: 'approve' | 'reject') => {
+    try {
+      const r = await api<{ awarded: number }>(`${base}/therapy/practice-requests/${id}/${action}`, { method: 'POST' });
+      toast(action === 'reject' ? 'Not this time' : r.awarded ? `Nice! +${r.awarded} ${home?.pointsIcon ?? ''}` : 'Practice counted');
+      await reload();
+      await onChange?.();
+    } catch (e) { toast((e as Error).message); }
+  };
+  return (
+    <section className="card stack review-card has-items">
+      <h2 style={{ margin: 0 }}>▶️ Practice to check ({shown.length})</h2>
+      {shown.map((p) => (
+        <div key={p.id} className="list-item">
+          <RaccoonAvatar variant={p.kidAvatar} size={32} />
+          <div style={{ flex: 1 }}>
+            <strong>{p.kidName}</strong> practiced <strong>{AREA_ICONS[p.area] ?? ''} {p.goalTitle}</strong>
+            <div className="small muted">{shortDate(p.date)}{p.minutes ? ` · ${p.minutes} min on the timer` : ''}{p.points ? ` · +${p.points} ${home?.pointsIcon ?? ''}` : ''}</div>
+          </div>
+          <button className="primary" onClick={() => void act(p.id, 'approve')}>✓ Yes</button>
+          <button className="ghost" onClick={() => void act(p.id, 'reject')}>Not yet</button>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+export const DOCTOR_TABS = [
+  { id: 'therapy', icon: '🌈', label: 'Goals & visits' },
+  { id: 'meds', icon: '💊', label: 'Medicines' },
+  { id: 'health', icon: '🪪', label: 'Health card' },
+  { id: 'log', icon: '📓', label: 'Log' },
+  { id: 'share', icon: '🔗', label: 'Summary & sharing' },
+] as const;
+type DoctorTab = (typeof DOCTOR_TABS)[number]['id'];
+
 /** base is /api/homes/:id/kids/:kid/therapy; goal edits live at /api/homes/:id/therapy/goals/:goal. */
 const goalUrl = (base: string, id: string) => base.replace(/\/kids\/[^/]+\/therapy$/, `/therapy/goals/${id}`);
 
@@ -239,6 +417,12 @@ export function Doctors() {
   const [goal, setGoal] = useState({ area: 'speech', title: '', description: '', targetDate: '', rewardStep: 0, rewardMet: 0, ...NO_PRACTICE });
   const [note, setNote] = useState('');
   const [showPast, setShowPast] = useState(false);
+  const [params, setParams] = useSearchParams();
+  const tab: DoctorTab = DOCTOR_TABS.some((t) => t.id === params.get('tab')) ? params.get('tab') as DoctorTab : 'therapy';
+  const hBase = kid && (tab === 'meds' || tab === 'health') ? `${base}/kids/${kid.id}/health` : null;
+  const [health, reloadHealth] = useLoad<HealthData>(hBase, [hBase]);
+  const [prep, setPrep] = useState<Appointment | null>(null);
+  const [followUp, setFollowUp] = useState<Appointment | null>(null);
   if (!home) return null;
   const run = async (fn: () => Promise<unknown>, msg?: string) => { try { await fn(); if (msg) toast(msg); await reload(); } catch (e) { toast((e as Error).message); } };
   const now = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
@@ -263,8 +447,23 @@ export function Doctors() {
         ))}
       </div>
 
-      {kid && data && (
+      {kid && (
+        <div className="chips doctor-tabs" role="tablist">
+          {DOCTOR_TABS.map((t) => (
+            <button key={t.id} role="tab" aria-selected={tab === t.id} className={`chip${tab === t.id ? ' on' : ''}`}
+              onClick={() => setParams(t.id === 'therapy' ? {} : { tab: t.id }, { replace: true })}>{t.icon} {t.label}</button>
+          ))}
+        </div>
+      )}
+
+      {kid && tab === 'meds' && health && <MedsTab kid={kid} data={health.meds} today={health.today} reload={reloadHealth} />}
+      {kid && tab === 'health' && health && <HealthTab kid={kid} data={health} reload={reloadHealth} color={color} />}
+      {kid && tab === 'log' && <LogTab key={kid.id} kid={kid} today={health?.today ?? now.slice(0, 10)} dark={dark} />}
+      {kid && tab === 'share' && data && <ShareTab key={kid.id} kid={kid} goals={data.goals} />}
+
+      {kid && data && tab === 'therapy' && (
         <>
+          <PracticeWaitingCard kidId={kid.id} onChange={reload} />
           <label className="row card" style={{ fontWeight: 600 }}>
             <input type="checkbox" checked={data.kidVisible} style={{ width: 24, minHeight: 24 }}
               onChange={(e) => void run(() => api(tBase!, { method: 'PATCH', body: { kidVisible: e.target.checked } }), e.target.checked ? `${kid.name} can see their goals and appointments` : 'Hidden again')} />
@@ -283,8 +482,10 @@ export function Doctors() {
                   <strong>{a.title}</strong>{a.provider && <span className="muted"> with {a.provider}</span>}
                   <div className="small muted">{whenText(a.startsAt)}{a.durationMinutes ? ` · ${a.durationMinutes} min` : ''}{a.location && ` · ${a.location}`}</div>
                   {a.notes && <div className="small">{a.notes}</div>}
+                  {a.questions.length > 0 && <div className="small">❓ {a.questions.filter((q) => !q.done).length} question{a.questions.filter((q) => !q.done).length === 1 ? '' : 's'} to ask: {a.questions.filter((q) => !q.done).map((q) => q.text).join(' · ')}</div>}
                 </div>
-                <button className="ghost" onClick={() => void run(() => api(apptUrl(a.id), { method: 'PATCH', body: { status: 'done' } }), 'Marked done')}>✓ Done</button>
+                <button className="ghost" onClick={() => setPrep(a)}>❓ Questions</button>
+                <button className="ghost" onClick={() => setFollowUp(a)}>✓ Done</button>
                 <button className="ghost danger" onClick={() => void run(() => api(apptUrl(a.id), { method: 'PATCH', body: { status: 'cancelled' } }), 'Cancelled')}>Cancel</button>
               </div>
             ))}
@@ -293,9 +494,10 @@ export function Doctors() {
             {showPast && past.map((a) => (
               <div key={a.id} className="list-item small">
                 <span>{KIND_ICONS[a.kind] ?? '📌'}</span>
-                <span style={{ flex: 1 }}>{a.title} · {whenText(a.startsAt)}</span>
+                <span style={{ flex: 1 }}>{a.title} · {whenText(a.startsAt)}{a.summary && <span className="muted"> · “{a.summary}”</span>}</span>
+                {a.status === 'done' && !a.summary && <button className="ghost" onClick={() => setFollowUp(a)}>Add what they said</button>}
                 <span className={`pill${a.status === 'done' ? ' ok' : a.status === 'scheduled' ? ' warn' : ''}`}>{a.status === 'scheduled' ? 'not marked' : a.status}</span>
-                {a.status === 'scheduled' && <button className="ghost" onClick={() => void run(() => api(apptUrl(a.id), { method: 'PATCH', body: { status: 'done' } }))}>Done</button>}
+                {a.status === 'scheduled' && <button className="ghost" onClick={() => setFollowUp(a)}>Done</button>}
                 {a.status === 'scheduled' && <button className="ghost" onClick={() => void run(() => api(apptUrl(a.id), { method: 'PATCH', body: { status: 'missed' } }))}>Missed</button>}
                 <button className="ghost danger" onClick={() => { if (confirm('Delete this appointment?')) void run(() => api(apptUrl(a.id), { method: 'DELETE' })); }}>✕</button>
               </div>
@@ -340,6 +542,8 @@ export function Doctors() {
         </>
       )}
 
+      {prep && <PrepModal appt={prep} url={apptUrl(prep.id)} onClose={() => setPrep(null)} onSaved={reload} />}
+      {followUp && tBase && data && <FollowUpModal appt={followUp} url={apptUrl(followUp.id)} goals={data.goals} notesUrl={`${tBase}/notes`} onClose={() => setFollowUp(null)} onSaved={reload} />}
       {adding === 'appointment' && tBase && (
         <AppointmentForm areasOff={areasOff} onClose={() => setAdding(null)} onSave={(a) => run(async () => { await api(`${tBase}/appointments`, { body: a }); setAdding(null); }, 'Appointment added')} />
       )}

@@ -10,6 +10,7 @@ import {
 } from '../chores.ts';
 import { achievements, doctorsStats, goalsStats, kidStats, levelOf, streaks } from '../progress.ts';
 import { kidTherapyView, withDoctors } from './therapy.ts';
+import { kidMeds } from './health.ts';
 import { dutyDue } from './parentduty.ts';
 import { homeTimeouts, kidTimeouts } from './timeouts.ts';
 import { waitingRequests } from './helpdesk.ts';
@@ -19,7 +20,7 @@ import { externalBetween, refreshStale } from '../calendar.ts';
 import { cleanIcon, doctorAreasOff, getKid, kidView, listKids, pageOn } from './homes.ts';
 import type { KidPage } from '../../../shared/pages.ts';
 import { isCheer } from '../../../shared/catalog.ts';
-import { addDays, cleanWeekdays, describeSchedule, isIsoDate, startOfWeek, type ScheduleKind } from '../../../shared/schedule.ts';
+import { addDays, cleanWeekdays, describeSchedule, isIsoDate, startOfWeek, timeIn, type ScheduleKind } from '../../../shared/schedule.ts';
 
 /** Who to credit in the ledger and review history. */
 export function byOf(ctx: HomeCtx): By {
@@ -215,6 +216,8 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
       recent: ledger(db, memberId, 8),
       // Only when a parent chose to share it; parents see the full therapy section on its own page.
       therapy: on('doctors') ? kidTherapyView(db, memberId, today) : null,
+      // Medicines a parent lets this kid tick off themselves.
+      meds: kidMeds(db, memberId, today, timeIn(home.timezone)),
       timeouts: on('timeout') ? kidTimeouts(db, memberId) : [],
     };
   });

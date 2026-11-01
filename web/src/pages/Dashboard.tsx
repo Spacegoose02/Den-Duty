@@ -4,7 +4,8 @@ import { api, type QuickReward, type ReviewItem, type Summary } from '../api.ts'
 import { useApp, useLoad } from '../state.tsx';
 import { RaccoonAvatar } from '../components/Raccoon.tsx';
 import { Modal, ProgressBar, dayName, shortDate } from '../components/Bits.tsx';
-import { KIND_ICONS, whenText } from './Doctors.tsx';
+import { KIND_ICONS, PracticeWaitingCard, whenText } from './Doctors.tsx';
+import { MedsTodayCard } from './doctors/Meds.tsx';
 import { IdeasButton } from '../components/Ideas.tsx';
 import { TodaysTipsCard } from '../components/TherapyHelper.tsx';
 import { TimeoutCard, TimeoutForm } from '../components/Timeouts.tsx';
@@ -100,6 +101,8 @@ export function Dashboard() {
         {queue && !queue.length && <p className="muted" style={{ margin: 0 }}>Nothing waiting. 🦝 The raccoons are on it.</p>}
       </section>
 
+      <PracticeWaitingCard onChange={reloadSummary} />
+      <MedsTodayCard />
       {summary && <RemindersCard items={summary.reminders} onChange={() => void reloadSummary()} />}
       {summary && <HelpdeskCard items={summary.helpdesk} onChange={() => void reloadSummary()} />}
       {home && <ShopOrdersCard kids={home.kids} onChange={() => void reloadSummary()} />}

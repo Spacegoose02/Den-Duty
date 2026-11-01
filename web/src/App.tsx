@@ -19,6 +19,8 @@ import { Reminders } from './pages/Reminders.tsx';
 import { KidBoard, ParentKidBoard } from './pages/KidBoard.tsx';
 import { ApiDocs } from './pages/ApiDocs.tsx';
 import { DownloadsPage } from './pages/Downloads.tsx';
+import { SharePage } from './pages/SharePage.tsx';
+import { VisitSummaryPage } from './pages/doctors/Summary.tsx';
 
 const NAV = [
   { to: '/', ico: '🏠', label: 'Home', end: true },
@@ -61,6 +63,8 @@ export function App() {
   const { who, loading, homeId } = useApp();
   const loc = useLocation();
 
+  // A link a parent shared with a therapist or doctor: open to whoever holds it.
+  if (loc.pathname.startsWith('/share/')) return <SharePage token={loc.pathname.slice('/share/'.length)} />;
   if (loading) {
     return <div className="center-screen"><RaccoonAvatar variant="ninja" size={96} title="Loading" /></div>;
   }
@@ -94,6 +98,7 @@ export function App() {
           <Route path="/rewards" element={<Rewards />} />
           <Route path="/stats" element={<Stats />} />
           <Route path="/doctors" element={<Doctors />} />
+          <Route path="/doctors/summary/:memberId" element={<VisitSummaryPage />} />
           <Route path="/therapy" element={<Navigate to="/doctors" replace />} />
           <Route path="/parent-duty" element={<ParentDuty />} />
           <Route path="/den" element={<Navigate to="/parent-duty" replace />} />
