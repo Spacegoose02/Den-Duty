@@ -674,6 +674,15 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE chore_instances ADD COLUMN photo TEXT;
   ALTER TABLE chore_instances ADD COLUMN cheer TEXT;
   `,
+  // LootDen link: a time-out can lock the kid's games in LootDen (all of them, or just Roblox), a shop reward can be
+  // game time LootDen hands out by itself, and the family wall can show LootDen's Now Playing, screenshots and game night.
+  `
+  ALTER TABLE timeouts ADD COLUMN games TEXT CHECK (games IN ('all', 'roblox'));
+  ALTER TABLE shop_items ADD COLUMN game_minutes INTEGER CHECK (game_minutes IS NULL OR game_minutes BETWEEN 5 AND 600);
+  ALTER TABLE shop_orders ADD COLUMN game_minutes INTEGER;
+  ALTER TABLE homes ADD COLUMN lootden_url TEXT;
+  ALTER TABLE homes ADD COLUMN lootden_token TEXT;
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

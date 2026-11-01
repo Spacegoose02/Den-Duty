@@ -121,7 +121,7 @@ export function ShopManager() {
   const { base, home, toast } = useApp();
   const [items, reload] = useLoad<ShopItem[]>(`${base}/shop`);
   const [orders] = useLoad<ShopOrder[]>(`${base}/shop/orders`);
-  const blank = { title: '', icon: '🎁', price: 20, stock: '' };
+  const blank = { title: '', icon: '🎁', price: 20, stock: '', gameMinutes: '' };
   const [d, setD] = useState(blank);
   const icon = home?.pointsIcon ?? '✨';
   const save = async (it: ShopItem, patch: Partial<{ price: number; stock: number | string | null }>) => {
@@ -133,12 +133,12 @@ export function ShopManager() {
     <section className="card stack">
       <h2 style={{ margin: 0 }}>🛍️ Rewards shop</h2>
       <p className="small muted" style={{ margin: 0 }}>
-        Rewards kids can buy with their {home?.pointsName ?? 'points'} on their own board. The points come off when they buy, and the reward shows up on Home for you to hand over (or refund).
+        Rewards kids can buy with their {home?.pointsName ?? 'points'} on their own board. The points come off when they buy, and the reward shows up on Home for you to hand over (or refund). Fill in 🎮 minutes for game time: with LootDen linked, it adds the time by itself.
       </p>
       {items?.map((it) => (
         <div key={it.id} className="row">
           <span style={{ fontSize: '1.6rem' }} aria-hidden>{it.icon}</span>
-          <strong style={{ flex: 1, minWidth: 140 }}>{it.title}</strong>
+          <strong style={{ flex: 1, minWidth: 140 }}>{it.title}{it.gameMinutes ? <span className="small muted"> · 🎮 {it.gameMinutes} min in LootDen</span> : null}</strong>
           <label className="row small" style={{ gap: 4 }}>
             <input type="number" min={1} defaultValue={it.price} style={{ width: 80 }} aria-label={`Price of ${it.title}`}
               onBlur={(e) => { const v = Math.round(Number(e.target.value)); if (v >= 1 && v !== it.price) void save(it, { price: v }); }} /> {icon}
@@ -153,7 +153,7 @@ export function ShopManager() {
       {items && !items.length && <p className="muted" style={{ margin: 0 }}>The shop is empty. Add a few rewards, from small treats to big ones worth saving up for.</p>}
       <form className="row" onSubmit={async (e) => {
         e.preventDefault();
-        try { await api(`${base}/shop`, { body: { ...d, stock: d.stock === '' ? null : Number(d.stock) } }); setD(blank); await reload(); } catch (err) { toast((err as Error).message); }
+        try { await api(`${base}/shop`, { body: { ...d, stock: d.stock === '' ? null : Number(d.stock), gameMinutes: d.gameMinutes === '' ? null : Number(d.gameMinutes) } }); setD(blank); await reload(); } catch (err) { toast((err as Error).message); }
       }}>
         <select value={d.icon} onChange={(e) => setD({ ...d, icon: e.target.value })} style={{ width: 80 }} aria-label="Icon">
           {SHOP_ICONS.map((i) => <option key={i}>{i}</option>)}
@@ -161,6 +161,8 @@ export function ShopManager() {
         <input placeholder="e.g. Stay up 30 minutes late" value={d.title} onChange={(e) => setD({ ...d, title: e.target.value })} style={{ flex: 1, minWidth: 180 }} />
         <input type="number" min={1} value={d.price} onChange={(e) => setD({ ...d, price: Math.max(1, Math.round(Number(e.target.value))) })} style={{ width: 90 }} aria-label="Price" />
         <input type="number" min={0} placeholder="∞ left" value={d.stock} onChange={(e) => setD({ ...d, stock: e.target.value })} style={{ width: 90 }} aria-label="How many (blank for unlimited)" />
+        <input type="number" min={5} max={600} placeholder="🎮 min" value={d.gameMinutes} onChange={(e) => setD({ ...d, gameMinutes: e.target.value })} style={{ width: 90 }}
+          aria-label="Game time in LootDen, in minutes (blank for an ordinary reward)" title="Game time LootDen hands out by itself, in minutes. Blank for an ordinary reward." />
         <button disabled={!d.title.trim()}>Add</button>
       </form>
       {recent.length > 0 && (
