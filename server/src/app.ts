@@ -17,6 +17,7 @@ import { rewardRoutes } from './routes/rewards.ts';
 import { shopRoutes } from './routes/shop.ts';
 import { teamGoalRoutes } from './routes/teamgoals.ts';
 import { therapyRoutes } from './routes/therapy.ts';
+import { healthRoutes } from './routes/health.ts';
 import { parentDutyRoutes } from './routes/parentduty.ts';
 import { timeoutRoutes } from './routes/timeouts.ts';
 import { wallRoutes } from './routes/wall.ts';
@@ -27,6 +28,8 @@ import { calendarRoutes } from './routes/calendars.ts';
 import { aiRoutes } from './routes/ai.ts';
 import { archiveRoutes } from './routes/archive.ts';
 import { installV1, v1Routes } from './routes/v1.ts';
+import { gamingRoutes } from './routes/gaming.ts';
+import { lootdenRoutes } from './routes/lootden.ts';
 import { downloadRoutes } from './routes/downloads.ts';
 
 export async function buildApp(db: DatabaseSync, opts: { logger?: boolean; serveWeb?: boolean } = {}): Promise<FastifyInstance> {
@@ -56,6 +59,7 @@ export async function buildApp(db: DatabaseSync, opts: { logger?: boolean; serve
   shopRoutes(app, db);
   teamGoalRoutes(app, db);
   therapyRoutes(app, db);
+  healthRoutes(app, db);
   parentDutyRoutes(app, db);
   timeoutRoutes(app, db);
   wallRoutes(app, db);
@@ -66,6 +70,8 @@ export async function buildApp(db: DatabaseSync, opts: { logger?: boolean; serve
   aiRoutes(app, db);
   archiveRoutes(app, db);
   v1Routes(app, db);
+  gamingRoutes(app, db);
+  lootdenRoutes(app, db);
   downloadRoutes(app);
 
   const hasWeb = opts.serveWeb !== false && fs.existsSync(path.join(config.webDist, 'index.html'));

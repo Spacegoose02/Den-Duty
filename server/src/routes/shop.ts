@@ -26,13 +26,23 @@ function stock(v: unknown): number | null {
   return n;
 }
 
+/** Game time LootDen hands out by itself when it's bought: blank for an ordinary reward. */
+function gameMinutes(v: unknown): number | null {
+  if (v == null || v === '' || v === 0) return null;
+  const n = num(v);
+  if (n == null || !Number.isInteger(n) || n < 5 || n > 600) throw new HttpError(400, 'Game time is 5 to 600 minutes, or blank');
+  return n;
+}
+
 const itemView = (r: Row) => ({
   id: r.id as string, title: r.title as string, icon: r.icon as string, price: r.price as number, stock: r.stock as number | null,
+  gameMinutes: (r.game_minutes ?? null) as number | null,
 });
 
 const orderView = (r: Row) => ({
   id: r.id as string, memberId: r.member_id as string, kidName: r.kid_name as string, itemId: r.item_id as string | null,
   title: r.title as string, icon: r.icon as string, price: r.price as number, status: r.status as 'waiting' | 'given' | 'refunded',
+  gameMinutes: (r.game_minutes ?? null) as number | null,
   createdAt: r.created_at as string, closedAt: r.closed_at as string | null, closedBy: r.closed_by as string | null,
 });
 
@@ -63,8 +73,8 @@ export function shopRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const count = (db.prepare('SELECT COUNT(*) AS n FROM shop_items WHERE home_id = ?').get(ctx.homeId) as Row).n as number;
     if (count >= SHOP_MAX_ITEMS) throw new HttpError(400, `The shop is full (${SHOP_MAX_ITEMS} rewards max)`);
     const id = newId();
-    db.prepare('INSERT INTO shop_items (id, home_id, title, icon, price, stock, position) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(id, ctx.homeId, requireStr(b.title, 'Reward', 60), cleanIcon(b.icon, '🎁'), price(b.price), stock(b.stock), count);
+    db.prepare('INSERT INTO shop_items (id, home_id, title, icon, price, stock, position, game_minutes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(id, ctx.homeId, requireStr(b.title, 'Reward', 60), cleanIcon(b.icon, '🎁'), price(b.price), stock(b.stock), count, gameMinutes(b.gameMinutes));
     return itemView(getItem(db, ctx, id));
   });
 
@@ -76,6 +86,7 @@ export function shopRoutes(app: FastifyInstance, db: DatabaseSync): void {
     if ('icon' in b) db.prepare('UPDATE shop_items SET icon = ? WHERE id = ?').run(cleanIcon(b.icon, item.icon as string), item.id as string);
     if ('price' in b) db.prepare('UPDATE shop_items SET price = ? WHERE id = ?').run(price(b.price), item.id as string);
     if ('stock' in b) db.prepare('UPDATE shop_items SET stock = ? WHERE id = ?').run(stock(b.stock), item.id as string);
+    if ('gameMinutes' in b) db.prepare('UPDATE shop_items SET game_minutes = ? WHERE id = ?').run(gameMinutes(b.gameMinutes), item.id as string);
     return itemView(getItem(db, ctx, item.id as string));
   });
 
@@ -105,8 +116,8 @@ export function shopRoutes(app: FastifyInstance, db: DatabaseSync): void {
         homeId: ctx.homeId, memberId, amount: -cost, kind: 'redeem', reason: `Bought: ${item.icon} ${item.title}`,
         date: homeToday(homeInfo(db, ctx.homeId)), by,
       });
-      db.prepare('INSERT INTO shop_orders (id, home_id, member_id, item_id, title, icon, price) VALUES (?, ?, ?, ?, ?, ?, ?)')
-        .run(orderId, ctx.homeId, memberId, item.id as string, item.title as string, item.icon as string, cost);
+      db.prepare('INSERT INTO shop_orders (id, home_id, member_id, item_id, title, icon, price, game_minutes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(orderId, ctx.homeId, memberId, item.id as string, item.title as string, item.icon as string, cost, (item.game_minutes ?? null) as number | null);
       if (item.stock != null) db.prepare('UPDATE shop_items SET stock = stock - 1 WHERE id = ?').run(item.id as string);
       emit(db, ctx.homeId, 'reward_bought', memberId, { reward: item.title, icon: item.icon, price: cost, order_id: orderId, balance: have - cost });
       return { order: orderView(db.prepare(`${ORDER_SELECT} WHERE o.id = ?`).get(orderId) as Row), balance: have - cost };

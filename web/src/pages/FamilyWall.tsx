@@ -28,6 +28,29 @@ interface Wall {
   kids: WallKid[]; family: WallDay[]; lunch: { title: string; time: string | null }[];
   polls: { id: string; title: string; options: { id: string; title: string; icon: string }[]; voted: number }[];
   teamGoals: TeamGoal[];
+  /** From LootDen, the family's game library, when it's linked. */
+  lootden?: LootDenWall | null;
+}
+interface LootDenWall {
+  nowPlaying: { name: string; title: string; device: string; playedFor: string }[];
+  nextGameNight: { id: number; title: string; date: string; time: string; game: { title: string } | null; players: { name: string }[]; goal: { icon: string; title: string } | null } | null;
+  screenshots: { id: number; imageUrl: string; by: string; game: string | null; caption: string | null }[];
+}
+
+/** The family's screenshots from LootDen, one at a time, a new one every ten seconds. */
+function ShotShow({ shots }: { shots: LootDenWall['screenshots'] }) {
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    const t = window.setInterval(() => setI((x) => x + 1), 10e3);
+    return () => window.clearInterval(t);
+  }, []);
+  const s = shots[i % shots.length];
+  return (
+    <figure className="wall-shot">
+      <img src={s.imageUrl} alt={s.caption ?? `${s.by}'s screenshot`} />
+      <figcaption className="wall-sub">📸 {s.by}{s.game ? ` · ${s.game}` : ''}{s.caption ? ` · “${s.caption}”` : ''}</figcaption>
+    </figure>
+  );
 }
 
 const REFRESH_MS = 60e3;
@@ -177,6 +200,20 @@ export function FamilyWall() {
               <div className="wall-sub">{g.reached ? '🎉 The family made it!' : `${g.progress} / ${g.target} together`}</div>
             </div>
           ))}
+          {wall.lootden?.nowPlaying.length ? (
+            <div className="wall-day">
+              <div className="wall-day-title">🎮 Playing now</div>
+              {wall.lootden.nowPlaying.map((p, i) => <div key={i} className="wall-line"><strong>{p.name}</strong> · {p.title} <span className="wall-sub">· {p.playedFor}</span></div>)}
+            </div>
+          ) : null}
+          {wall.lootden?.nextGameNight && (
+            <div className="wall-day">
+              <div className="wall-day-title">🎲 {wall.lootden.nextGameNight.title}</div>
+              <div className="wall-line">{dayName(wall.lootden.nextGameNight.date)} at {wall.lootden.nextGameNight.time}{wall.lootden.nextGameNight.game ? ` · ${wall.lootden.nextGameNight.game.title}` : ''}</div>
+              <div className="wall-sub">{wall.lootden.nextGameNight.players.map((p) => p.name).join(', ')}{wall.lootden.nextGameNight.goal ? ` · earned with ${wall.lootden.nextGameNight.goal.icon} ${wall.lootden.nextGameNight.goal.title}` : ''}</div>
+            </div>
+          )}
+          {wall.lootden?.screenshots.length ? <div className="wall-day"><ShotShow shots={wall.lootden.screenshots} /></div> : null}
           {wall.polls.map((p) => (
             <div key={p.id} className="wall-day">
               <div className="wall-day-title">🗳️ {p.title}</div>

@@ -674,6 +674,160 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE chore_instances ADD COLUMN photo TEXT;
   ALTER TABLE chore_instances ADD COLUMN cheer TEXT;
   `,
+  // LootDen link: a time-out can lock the kid's games in LootDen (all of them, or just Roblox), a shop reward can be
+  // game time LootDen hands out by itself, and the family wall can show LootDen's Now Playing, screenshots and game night.
+  `
+  ALTER TABLE timeouts ADD COLUMN games TEXT CHECK (games IN ('all', 'roblox'));
+  ALTER TABLE shop_items ADD COLUMN game_minutes INTEGER CHECK (game_minutes IS NULL OR game_minutes BETWEEN 5 AND 600);
+  ALTER TABLE shop_orders ADD COLUMN game_minutes INTEGER;
+  ALTER TABLE homes ADD COLUMN lootden_url TEXT;
+  ALTER TABLE homes ADD COLUMN lootden_token TEXT;
+  `,
+  // Doctors, the health side: a kid's health card (allergies, conditions, insurance), care team, vaccines, growth,
+  // medicines with dose check-offs, a symptom / mood / behavior log, appointment prep and follow-up, kid practice mode
+  // (picture steps and a timer, approved by a parent) and read-only links for a therapist. Parents only, like the rest.
+  `
+  CREATE TABLE health_profiles (
+    member_id TEXT PRIMARY KEY REFERENCES members(id) ON DELETE CASCADE,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    allergies TEXT,
+    conditions TEXT,
+    blood_type TEXT,
+    insurance TEXT,
+    insurance_member TEXT,
+    insurance_group TEXT,
+    emergency TEXT,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE care_team (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    role TEXT,
+    phone TEXT,
+    email TEXT,
+    address TEXT,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX care_team_member ON care_team(member_id);
+  CREATE TABLE vaccines (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    date TEXT NOT NULL,
+    dose TEXT,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX vaccines_member ON vaccines(member_id, date);
+  -- Stored metric (cm, kg); the app shows inches and pounds when a parent prefers.
+  CREATE TABLE growth (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    date TEXT NOT NULL,
+    height_cm REAL,
+    weight_kg REAL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX growth_member ON growth(member_id, date);
+  CREATE TABLE medications (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    dose TEXT,
+    instructions TEXT,
+    -- Dose times each day, e.g. ["08:00","19:30"]; empty with as_needed = 1 for "only when needed".
+    times TEXT NOT NULL DEFAULT '[]',
+    as_needed INTEGER NOT NULL DEFAULT 0,
+    start_date TEXT,
+    end_date TEXT,
+    -- Doses left, counted down with each dose given; refill_at is when to remind (a parent reminder is made once).
+    supply INTEGER,
+    refill_at INTEGER,
+    refill_reminded INTEGER NOT NULL DEFAULT 0,
+    kid_can_mark INTEGER NOT NULL DEFAULT 0,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX medications_member ON medications(member_id, active);
+  -- One row per dose given or skipped. slot is the scheduled time ('08:00') or 'prn-<n>' for as-needed doses.
+  CREATE TABLE med_doses (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    med_id TEXT NOT NULL REFERENCES medications(id) ON DELETE CASCADE,
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    date TEXT NOT NULL,
+    slot TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('given', 'skipped')),
+    at TEXT NOT NULL DEFAULT (datetime('now')),
+    by_name TEXT,
+    by_kid INTEGER NOT NULL DEFAULT 0,
+    note TEXT,
+    UNIQUE (med_id, date, slot)
+  );
+  CREATE INDEX med_doses_member ON med_doses(member_id, date);
+  CREATE TABLE health_log (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (kind IN ('mood', 'symptom', 'behavior', 'sleep', 'other')),
+    label TEXT NOT NULL,
+    date TEXT NOT NULL,
+    time TEXT,
+    severity INTEGER CHECK (severity BETWEEN 1 AND 5),
+    minutes INTEGER,
+    trigger TEXT,
+    note TEXT,
+    by_name TEXT,
+    created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX health_log_member ON health_log(member_id, date);
+  -- Appointment prep (questions to ask, ticked off at the visit) and follow-up (what the provider said).
+  ALTER TABLE therapy_appointments ADD COLUMN questions TEXT NOT NULL DEFAULT '[]';
+  ALTER TABLE therapy_appointments ADD COLUMN summary TEXT;
+  -- Kid practice mode: picture steps and a timer on the kid's screen; "I did it!" waits for a parent.
+  ALTER TABLE therapy_goals ADD COLUMN steps TEXT NOT NULL DEFAULT '[]';
+  ALTER TABLE therapy_goals ADD COLUMN practice_minutes INTEGER;
+  ALTER TABLE therapy_goals ADD COLUMN kid_practice INTEGER NOT NULL DEFAULT 0;
+  CREATE TABLE practice_requests (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    goal_id TEXT NOT NULL REFERENCES therapy_goals(id) ON DELETE CASCADE,
+    date TEXT NOT NULL,
+    minutes INTEGER,
+    status TEXT NOT NULL DEFAULT 'waiting' CHECK (status IN ('waiting', 'approved', 'rejected')),
+    note_id TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    closed_at TEXT
+  );
+  CREATE INDEX practice_requests_home ON practice_requests(home_id, status);
+  -- Read-only links for a therapist or doctor: chosen goals (or all), optionally the log and medicines, and optionally
+  -- a box to leave a progress note. Only the token's hash is stored.
+  CREATE TABLE share_links (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL UNIQUE,
+    label TEXT NOT NULL,
+    goal_ids TEXT,
+    show_log INTEGER NOT NULL DEFAULT 0,
+    show_meds INTEGER NOT NULL DEFAULT 0,
+    allow_notes INTEGER NOT NULL DEFAULT 0,
+    expires_at TEXT NOT NULL,
+    last_seen_at TEXT,
+    created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX share_links_member ON share_links(member_id);
+  `,
   // Helpdesk: 3 open requests per kid was too tight. Homes still on that old default go to 10 (0 now means no limit).
   `
   UPDATE homes SET helpdesk_max_open = 10 WHERE helpdesk_max_open = 3;

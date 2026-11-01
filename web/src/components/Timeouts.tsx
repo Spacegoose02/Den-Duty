@@ -51,6 +51,7 @@ export function TimeoutCard({ t, asParent, balance, kidName, onChange }: {
         <div style={{ flex: 1 }}>
           <div className="timeout-what">{asParent && kidName ? `${kidName}: ` : asParent ? '' : 'Taking a break from: '}<strong>{t.what}</strong></div>
           {t.reason && <div className="small muted">{asParent ? 'Why: ' : 'What to work on: '}{t.reason}</div>}
+          {t.games && <div className="small muted">🎮 {t.games === 'all' ? 'Games are locked in LootDen' : 'Roblox is locked in LootDen'}</div>}
           <div className="timeout-left">
             {upcoming ? `Starts ${WHEN_FMT.format(new Date(t.startsAt))}, for ${timeLeft(left)}` : asParent ? `${timeLeft(left)} left` : `Back in ${timeLeft(left)}`}
           </div>
@@ -116,14 +117,14 @@ const IDEAS = ['No Roblox', 'No tablet', 'No TV', 'No video games', 'No phone', 
 export function TimeoutForm({ kidId, kidName, onClose, onDone }: { kidId: string; kidName: string; onClose: () => void; onDone: () => void }) {
   const { base, home, toast } = useApp();
   const icon = home?.pointsIcon ?? '✨';
-  const [f, setF] = useState({ what: '', reason: '', length: 1, unit: 'days', later: false, startsAt: '', buy: false, buyUnit: 'hour', buyPrice: 5, buyMaxUnits: 4 });
+  const [f, setF] = useState({ games: '', what: '', reason: '', length: 1, unit: 'days', later: false, startsAt: '', buy: false, buyUnit: 'hour', buyPrice: 5, buyMaxUnits: 4 });
   const [busy, setBusy] = useState(false);
   const save = async () => {
     setBusy(true);
     try {
       await api(`${base}/kids/${kidId}/timeouts`, {
         body: {
-          what: f.what, reason: f.reason, length: f.length, unit: f.unit,
+          what: f.what, reason: f.reason, length: f.length, unit: f.unit, games: f.games || null,
           startsAt: f.later && f.startsAt ? new Date(f.startsAt).toISOString() : undefined,
           ...(f.buy ? { buyUnit: f.buyUnit, buyPrice: f.buyPrice, buyMaxUnits: f.buyMaxUnits } : {}),
         },
@@ -149,6 +150,14 @@ export function TimeoutForm({ kidId, kidName, onClose, onDone }: { kidId: string
           <label className="row small check-row"><input type="checkbox" checked={f.later} onChange={(e) => setF({ ...f, later: e.target.checked })} /> Start later</label>
           {f.later && <input type="datetime-local" value={f.startsAt} onChange={(e) => setF({ ...f, startsAt: e.target.value })} />}
         </div>
+        <label className="row">
+          <span>🎮 In LootDen</span>
+          <select value={f.games} onChange={(e) => setF({ ...f, games: e.target.value })} aria-label="Lock games in LootDen">
+            <option value="">games stay as they are</option>
+            <option value="all">lock all games</option>
+            <option value="roblox">lock Roblox</option>
+          </select>
+        </label>
         <label className="row check-row"><input type="checkbox" checked={f.buy} onChange={(e) => setF({ ...f, buy: e.target.checked })} /> Let {kidName} buy time back with {home?.pointsName}</label>
         {f.buy && (
           <div className="row">
