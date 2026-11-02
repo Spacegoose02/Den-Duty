@@ -1,6 +1,6 @@
 // Today's weather from the family's Weather Scout server: a card on each kid's board (what to wear, the recess
 // light, weather alerts in kid words) and a strip on the family wall.
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useApp, useLoad } from '../state.tsx';
 import { SpeakButton } from './Speak.tsx';
 
@@ -10,6 +10,9 @@ export interface HomeWeatherData {
   now: { temp: number | null; feelsLike: number | null; icon: WeatherIcon; isDay: boolean; label: string; kidLabel: string };
   today: { high: number | null; low: number | null; rainChance: number | null };
   outfit: string[];
+  mood: 'happy' | 'worried' | 'shivering' | 'hot';
+  /** Weather Scout can draw Rocky in today's outfit. */
+  rocky: boolean;
   checklist: { id: string; emoji: string; label: string; why: string }[];
   recess: { rating: 'green' | 'yellow' | 'red'; label: string; emoji: string; reasons: string[] };
   sunset: string | null;
@@ -28,9 +31,39 @@ const TIME_FMT = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '
 const deg = (n: number | null) => (n == null ? '–' : `${n}°`);
 const LIGHT: Record<string, string> = { green: '🟢', yellow: '🟡', red: '🔴' };
 
+/** How Rocky's outfit pieces read in a sentence. */
+const PIECES: Record<string, string> = {
+  raincoat: 'raincoat', 'winter-coat': 'winter coat', jacket: 'jacket', 't-shirt': 'T-shirt', pants: 'pants', shorts: 'shorts',
+  'swim-trunks': 'swim trunks', mittens: 'mittens', boots: 'rain boots', 'snow-boots': 'snow boots', sunglasses: 'sunglasses',
+  beanie: 'warm hat', 'sun-hat': 'sun hat',
+};
+const MOOD_WORDS: Record<string, string> = { shivering: "Brrr, he's chilly!", hot: "Phew, he's hot!", worried: 'He hears thunder.' };
+
+/** "Rocky is wearing his raincoat and rain boots." */
+export function rockySays(outfit: string[], mood: string): string {
+  const names = outfit.map((k) => PIECES[k]).filter(Boolean);
+  const list = names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+  const wear = list ? `Rocky is wearing his ${list}.` : 'Rocky says it’s a nice day!';
+  return MOOD_WORDS[mood] ? `${wear} ${MOOD_WORDS[mood]}` : wear;
+}
+
+/** Rocky the raccoon from Weather Scout, dressed for today. Hides itself if the picture can't load. */
+function Rocky({ base, w, size }: { base: string; w: HomeWeatherData; size: number }) {
+  const v = `${w.outfit.join(',')}|${w.mood}`;
+  const [failed, setFailed] = useState<string | null>(null);
+  if (!w.rocky || failed === v) return null;
+  return (
+    <img
+      className="wx-rocky" src={`${base}/weather/rocky.svg?v=${encodeURIComponent(v)}`} alt={rockySays(w.outfit, w.mood)}
+      width={size} height={Math.round(size * 910 / 710)} decoding="async" onError={() => setFailed(v)}
+    />
+  );
+}
+
 /** What the 🔊 button reads out. */
 function sayWeather(w: HomeWeatherData, simple: boolean): string {
   const parts = [`It's ${w.now.temp ?? ''} degrees and ${w.now.kidLabel.toLowerCase()}.`];
+  if (w.rocky) parts.push(rockySays(w.outfit, w.mood));
   if (w.alerts[0]) parts.push(w.alerts[0].kid);
   parts.push(`Recess check: ${w.recess.label}.`);
   if (w.checklist.length) parts.push(`${simple ? 'Bring' : 'Before you go, grab'}: ${w.checklist.map((c) => c.label).join(', ')}.`);
@@ -79,6 +112,7 @@ export function KidWeatherCard({ simple, readAloud, color }: { simple: boolean; 
         </div>
       ))}
       <div className="wx-now">
+        <Rocky base={base} w={w} size={simple ? 110 : 96} />
         <span className="wx-icon" aria-hidden>{weatherIcon(w.now.icon, w.now.isDay)}</span>
         <div>
           <div className="wx-temp">{deg(w.now.temp)}</div>
@@ -90,6 +124,7 @@ export function KidWeatherCard({ simple, readAloud, color }: { simple: boolean; 
           <div><strong>{simple ? w.recess.emoji : `Recess: ${w.recess.label}`}</strong>{!simple && w.recess.reasons[0] && <div className="small">{w.recess.reasons[0]}</div>}</div>
         </div>
       </div>
+      {w.rocky && !simple && <div className="wx-rocky-says">🦝 {rockySays(w.outfit, w.mood)}</div>}
       {w.checklist.length > 0 && (
         <div className="wx-gear" aria-label="What to bring">
           {w.checklist.map((c) => (
@@ -104,10 +139,12 @@ export function KidWeatherCard({ simple, readAloud, color }: { simple: boolean; 
 
 /** On the family wall: one compact block for the whole family. */
 export function WallWeather({ weather }: { weather: HomeWeather | undefined }) {
+  const { base } = useApp();
   if (!weather?.now) return null;
   const w = weather;
   return (
     <div className="wall-day wx-wall">
+      <Rocky base={base} w={w} size={64} />
       <div className="wall-day-title">{weatherIcon(w.now.icon, w.now.isDay)} {deg(w.now.temp)} · {w.now.kidLabel}</div>
       <div className="wall-line">{LIGHT[w.recess.rating]} Recess: {w.recess.label}</div>
       {w.checklist.length > 0 && <div className="wall-line">{w.checklist.map((c) => `${c.emoji} ${c.label}`).join(' · ')}</div>}

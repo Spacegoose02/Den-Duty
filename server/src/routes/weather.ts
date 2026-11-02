@@ -10,6 +10,7 @@ import { HttpError, str } from '../util.ts';
 import { openKey, sealKey } from '../ai.ts';
 
 export type WeatherIcon = 'clear' | 'partly-cloudy' | 'cloudy' | 'fog' | 'drizzle' | 'rain' | 'sleet' | 'snow' | 'thunder';
+export type RockyMood = 'happy' | 'worried' | 'shivering' | 'hot';
 export interface WeatherAlert { id: string; event: string; severity: 'Extreme' | 'Severe' | 'Moderate' | 'Minor' | 'Unknown'; kid: string; ends: string | null }
 export interface HomeWeatherData {
   place: string | null;
@@ -18,6 +19,10 @@ export interface HomeWeatherData {
   today: { high: number | null; low: number | null; rainChance: number | null };
   /** What Rocky the raccoon is wearing in Weather Scout: raincoat, boots, beanie, mittens, sunglasses… */
   outfit: string[];
+  /** Rocky's mood badge: 🥶 shivering, 💦 hot, ⚡ worried (thunder), none when happy. */
+  mood: RockyMood;
+  /** Weather Scout can draw Rocky in this outfit (GET …/weather/rocky.svg). False on older Weather Scout servers. */
+  rocky: boolean;
   checklist: { id: string; emoji: string; label: string; why: string }[];
   recess: { rating: 'green' | 'yellow' | 'red'; label: string; emoji: string; reasons: string[] };
   sunset: string | null;
@@ -56,6 +61,7 @@ const text = (v: unknown, max = 120): string | null => (typeof v === 'string' &&
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : null);
 const ICONS: WeatherIcon[] = ['clear', 'partly-cloudy', 'cloudy', 'fog', 'drizzle', 'rain', 'sleet', 'snow', 'thunder'];
 const SEVERITIES = ['Extreme', 'Severe', 'Moderate', 'Minor'] as const;
+const MOODS: RockyMood[] = ['happy', 'worried', 'shivering', 'hot'];
 const obj = (v: unknown): Row => (v && typeof v === 'object' && !Array.isArray(v) ? v as Row : {});
 const list = (v: unknown, max: number): unknown[] => (Array.isArray(v) ? v.slice(0, max) : []);
 
@@ -76,6 +82,8 @@ export function cleanWeather(raw: unknown): HomeWeatherData | null {
     },
     today: { high: num(today.high), low: num(today.low), rainChance: num(today.precipChance) },
     outfit: list(obj(b.raccoon).items, 12).map((x) => text(x, 20)).filter((x): x is string => !!x && /^[a-z-]+$/.test(x)),
+    mood: MOODS.includes(obj(b.raccoon).mood as RockyMood) ? obj(b.raccoon).mood as RockyMood : 'happy',
+    rocky: typeof obj(obj(b.raccoon).art).dressed === 'string',
     checklist: list(b.checklist, 10).map(obj).map((c) => ({ id: text(c.id, 20) ?? '', emoji: text(c.emoji, 8) ?? '•', label: text(c.label, 40) ?? '', why: text(c.why, 80) ?? '' }))
       .filter((c) => c.id && c.label),
     recess: {
@@ -125,6 +133,41 @@ export async function homeWeather(db: DatabaseSync, homeId: string): Promise<Hom
   return p;
 }
 
+// ---------- Rocky dressed for today, drawn by Weather Scout ----------
+
+/** Rocky's picture is a few dozen KB (the base art is inside it). Anything far bigger isn't Rocky. */
+const ROCKY_MAX_BYTES = 512 * 1024;
+const rockyCache = new Map<string, { outfitKey: string; svg: string }>();
+
+/** Which picture a weather answer needs: the same outfit and mood is the same picture. */
+export const rockyKey = (w: Pick<HomeWeatherData, 'outfit' | 'mood'>): string => `${w.outfit.join(',')}|${w.mood}`;
+
+async function askRocky(url: string, w: HomeWeatherData): Promise<string | null> {
+  try {
+    const q = new URLSearchParams({ items: w.outfit.join(','), mood: w.mood });
+    const res = await fetchImpl(`${url}/api/connect/rocky.svg?${q}`, { headers: { accept: 'image/svg+xml' }, signal: AbortSignal.timeout(10_000) });
+    if (!res.ok || !/^image\/svg\+xml/i.test(res.headers.get('content-type') ?? '')) return null;
+    const svg = await res.text();
+    return svg.length <= ROCKY_MAX_BYTES && /^\s*<svg[\s>]/.test(svg) ? svg : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Today's Rocky for this home, or null when Weather Scout isn't linked, can't draw him, or can't be reached. */
+export async function homeRocky(db: DatabaseSync, homeId: string): Promise<string | null> {
+  const w = await homeWeather(db, homeId);
+  if (!w?.now || !w.rocky) return null;
+  const outfitKey = rockyKey(w);
+  const hit = rockyCache.get(homeId);
+  if (hit?.outfitKey === outfitKey) return hit.svg;
+  const { url } = link(db, homeId);
+  const svg = url ? await askRocky(url, w) : null;
+  if (svg) rockyCache.set(homeId, { outfitKey, svg });
+  // Weather Scout down: yesterday's outfit is better than no Rocky.
+  return svg ?? hit?.svg ?? null;
+}
+
 function cleanUrl(raw: unknown): string {
   const url = str(raw, 300)?.trim().replace(/\/+$/, '') ?? '';
   if (!url) return '';
@@ -153,11 +196,13 @@ export function weatherRoutes(app: FastifyInstance, db: DatabaseSync): void {
     if (!url) {
       db.prepare('UPDATE homes SET weather_url = NULL, weather_key = NULL WHERE id = ?').run(ctx.homeId);
       cache.delete(ctx.homeId);
+      rockyCache.delete(ctx.homeId);
       return { url: '', hasKey: false, check: null };
     }
     db.prepare('UPDATE homes SET weather_url = ? WHERE id = ?').run(url, ctx.homeId);
     if (key) db.prepare('UPDATE homes SET weather_key = ? WHERE id = ?').run(sealKey(key), ctx.homeId);
     cache.delete(ctx.homeId);
+    rockyCache.delete(ctx.homeId);
     const saved = link(db, ctx.homeId);
     if (!saved.key) return { url, hasKey: false, check: null };
     const r = await askWeatherScout(url, saved.key);
@@ -173,5 +218,20 @@ export function weatherRoutes(app: FastifyInstance, db: DatabaseSync): void {
   app.get('/api/homes/:homeId/weather', async (req) => {
     const ctx = homeCtx(db, req);
     return { weather: await homeWeather(db, ctx.homeId) };
+  });
+
+  // Anyone in the home: Rocky in today's outfit, for the weather card's <img>. Fetched from Weather Scout by this
+  // server, like the weather, so the tablet never needs to reach Weather Scout. The card adds ?v=<outfit> so a new
+  // outfit is a new picture; the SVG is locked down so it can only ever be a picture.
+  app.get('/api/homes/:homeId/weather/rocky.svg', async (req, reply) => {
+    const ctx = homeCtx(db, req);
+    const svg = await homeRocky(db, ctx.homeId);
+    if (!svg) return reply.code(404).send({ error: "Rocky isn't here right now" });
+    return reply
+      .type('image/svg+xml; charset=utf-8')
+      .header('cache-control', 'private, max-age=3600')
+      .header('content-security-policy', "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox")
+      .header('x-content-type-options', 'nosniff')
+      .send(svg);
   });
 }
