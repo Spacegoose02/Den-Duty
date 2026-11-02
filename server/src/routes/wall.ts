@@ -16,6 +16,7 @@ import { kidTimeouts } from './timeouts.ts';
 import { listKids } from './homes.ts';
 import { lootdenWall } from './lootden.ts';
 import { kidSports } from './sports.ts';
+import { homeWeather } from './weather.ts';
 import { addDays } from '../../../shared/schedule.ts';
 
 export interface WallSettings {
@@ -120,6 +121,8 @@ export async function wallData(db: DatabaseSync, homeId: string) {
     teamGoals: teamGoals(db, homeId).filter((g) => g.status === 'active'),
     // LootDen, the family's game library: who's playing, the next game night and screenshots (when linked).
     lootden: await lootdenWall(db, homeId),
+    // Weather Scout (when linked): today's weather, the recess light and any alerts.
+    weather: await homeWeather(db, homeId),
   };
 }
 
