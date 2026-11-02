@@ -192,3 +192,23 @@ export function cleanWeekdays(v: unknown): number[] {
   if (!Array.isArray(v)) return [];
   return [...new Set(v.map(Number).filter((n) => Number.isInteger(n) && n >= 0 && n <= 6))].sort();
 }
+
+/** How a Doctors appointment repeats: every N days, weeks or months, optionally until a date or for a number of visits. */
+export type RepeatUnit = 'day' | 'week' | 'month';
+export const REPEAT_UNITS: RepeatUnit[] = ['day', 'week', 'month'];
+export interface RepeatRule { every: number; unit: RepeatUnit; endDate: string | null; count: number | null }
+
+/** The date of visit number i (0 = the first) of a repeating appointment. Months keep the first visit's day where they can. */
+export function repeatDate(start: string, every: number, unit: RepeatUnit, i: number): string {
+  if (unit === 'month') return addMonths(start, every * i);
+  return addDays(start, (unit === 'week' ? 7 : 1) * every * i);
+}
+
+/** "Weekly", "Every 2 weeks", "Monthly", "Every 3 days", plus how it ends. */
+export function describeRepeat(r: RepeatRule): string {
+  const word = { day: 'day', week: 'week', month: 'month' }[r.unit];
+  const base = r.every === 1 ? { day: 'Daily', week: 'Weekly', month: 'Monthly' }[r.unit] : `Every ${r.every} ${word}s`;
+  if (r.count) return `${base}, ${r.count} times`;
+  if (r.endDate) return `${base} until ${r.endDate}`;
+  return base;
+}

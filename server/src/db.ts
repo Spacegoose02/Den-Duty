@@ -921,6 +921,36 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE homes ADD COLUMN sports_url TEXT;
   ALTER TABLE members ADD COLUMN sports_key TEXT;
   `,
+  // Repeating Doctors appointments. The series holds the rule; each visit is a normal therapy_appointments row (so
+  // prep questions, follow-up, status, calendars and summaries work per visit). Visits are made a few months ahead and
+  // topped up as time passes; next_index is the next visit number to make, so a deleted visit never comes back.
+  `
+  CREATE TABLE appointment_series (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    title TEXT NOT NULL,
+    provider TEXT,
+    location TEXT,
+    notes TEXT,
+    duration_minutes INTEGER,
+    start_date TEXT NOT NULL,
+    time TEXT NOT NULL,
+    repeat_every INTEGER NOT NULL CHECK (repeat_every BETWEEN 1 AND 365),
+    repeat_unit TEXT NOT NULL CHECK (repeat_unit IN ('day', 'week', 'month')),
+    end_date TEXT,
+    end_count INTEGER,
+    next_index INTEGER NOT NULL DEFAULT 0,
+    finished INTEGER NOT NULL DEFAULT 0,
+    created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX appointment_series_home ON appointment_series(home_id, finished);
+  ALTER TABLE therapy_appointments ADD COLUMN series_id TEXT REFERENCES appointment_series(id) ON DELETE SET NULL;
+  ALTER TABLE therapy_appointments ADD COLUMN series_index INTEGER;
+  CREATE INDEX therapy_appointments_series ON therapy_appointments(series_id, series_index);
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

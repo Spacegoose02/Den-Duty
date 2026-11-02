@@ -9,7 +9,7 @@ import { seriesColor } from '../../../shared/catalog.ts';
 import { TherapyHelperCard } from '../components/TherapyHelper.tsx';
 import { AskDoctorCard } from '../components/AskDoctor.tsx';
 import { appointmentOn, goalAreaOn, type DoctorArea } from '../../../shared/pages.ts';
-import { WEEKDAY_SHORT } from '../../../shared/schedule.ts';
+import { describeRepeat, WEEKDAY_SHORT, type RepeatRule, type RepeatUnit } from '../../../shared/schedule.ts';
 import type { PracticeStep, PracticeWaiting } from '../api.ts';
 import { MedsTab } from './doctors/Meds.tsx';
 import { HealthTab, type HealthData } from './doctors/Health.tsx';
@@ -17,7 +17,9 @@ import { LogTab } from './doctors/HealthLog.tsx';
 import { ShareTab } from './doctors/Share.tsx';
 
 interface Question { text: string; done: boolean }
-interface Appointment { id: string; kind: string; title: string; provider: string | null; location: string | null; startsAt: string; durationMinutes: number | null; status: string; notes: string | null; questions: Question[]; summary: string | null }
+/** A repeating visit's rule, which run it's in and which visit of it this is (0 = the first). */
+export type ApptRepeat = RepeatRule & { seriesId: string; index: number };
+interface Appointment { id: string; kind: string; title: string; provider: string | null; location: string | null; startsAt: string; durationMinutes: number | null; status: string; notes: string | null; questions: Question[]; summary: string | null; repeat: ApptRepeat | null }
 interface TGoal { id: string; area: string; title: string; description: string | null; targetDate: string | null; status: string; progress: number; metAt: string | null; history: { date: string; progress: number }[]; rewardStep: number; rewardMet: number; rewardMetPaid: boolean;
   steps: PracticeStep[]; practiceMinutes: number | null; kidPractice: boolean;
   practice: { schedule: 'weekly' | 'once'; weekdays: number[]; date: string | null; time: string | null } | null }
@@ -49,17 +51,102 @@ function nowLocal(): string {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 }
 
-export interface AppointmentDraft { kind: string; title: string; provider: string; location: string; startsAt: string; durationMinutes: number; notes: string; status?: string }
+export interface AppointmentDraft {
+  kind: string; title: string; provider: string; location: string; startsAt: string; durationMinutes: number; notes: string; status?: string;
+  /** Sent as null for "doesn't repeat"; left out when only this visit of a repeating one changes. */
+  repeat?: RepeatRule | null; scope?: 'one' | 'following';
+}
 
-/** New appointment, or edit one (with status and delete) when `initial` is given. Also used from the calendar. */
-export function AppointmentForm({ onSave, onClose, areasOff, initial, onDelete }: {
-  onSave: (a: AppointmentDraft) => Promise<void>; onClose: () => void; areasOff: DoctorArea[]; initial?: AppointmentDraft; onDelete?: () => Promise<void>;
+/** "Every 2 weeks until Mar 3", for a visit's list line. */
+export const repeatLabel = (r: RepeatRule) => describeRepeat({ ...r, endDate: null }) + (r.endDate ? ` until ${shortDate(r.endDate)}` : '');
+
+type RepeatPreset = 'none' | 'weekly' | 'biweekly' | 'monthly' | 'custom';
+interface RepeatForm { preset: RepeatPreset; every: number; unit: RepeatUnit; ends: 'never' | 'date' | 'count'; endDate: string; count: number }
+const REPEAT_PRESETS: { id: RepeatPreset; label: string }[] = [
+  { id: 'none', label: "Doesn't repeat" }, { id: 'weekly', label: 'Weekly' }, { id: 'biweekly', label: 'Every 2 weeks' }, { id: 'monthly', label: 'Monthly' }, { id: 'custom', label: 'Custom…' },
+];
+
+function repeatForm(r: ApptRepeat | RepeatRule | null | undefined): RepeatForm {
+  if (!r) return { preset: 'none', every: 1, unit: 'week', ends: 'never', endDate: '', count: 6 };
+  // A visit partway through a run counts the visits left from it.
+  const count = r.count != null ? r.count - ('index' in r ? r.index : 0) : null;
+  const preset: RepeatPreset = r.every === 1 && r.unit === 'week' ? 'weekly' : r.every === 2 && r.unit === 'week' ? 'biweekly' : r.every === 1 && r.unit === 'month' ? 'monthly' : 'custom';
+  return { preset, every: r.every, unit: r.unit, ends: count != null ? 'count' : r.endDate ? 'date' : 'never', endDate: r.endDate ?? '', count: count ?? 6 };
+}
+
+function repeatRule(f: RepeatForm): RepeatRule | null {
+  if (f.preset === 'none') return null;
+  const [every, unit]: [number, RepeatUnit] = f.preset === 'weekly' ? [1, 'week'] : f.preset === 'biweekly' ? [2, 'week'] : f.preset === 'monthly' ? [1, 'month'] : [Math.max(1, Math.round(f.every) || 1), f.unit];
+  return { every, unit, endDate: f.ends === 'date' && f.endDate ? f.endDate : null, count: f.ends === 'count' ? Math.max(1, Math.round(f.count) || 1) : null };
+}
+
+/** Doesn't repeat / weekly / every 2 weeks / monthly / every N days, weeks or months; ending never, on a date, or after N visits. */
+function RepeatFields({ value: f, onChange, firstDate }: { value: RepeatForm; onChange: (f: RepeatForm) => void; firstDate: string }) {
+  const set = (p: Partial<RepeatForm>) => onChange({ ...f, ...p });
+  return (
+    <div className="stack" style={{ gap: 8 }}>
+      <strong className="small">🔁 Repeat</strong>
+      <div className="chips">
+        {REPEAT_PRESETS.map((p) => <button key={p.id} type="button" className={`chip${f.preset === p.id ? ' on' : ''}`} onClick={() => set({ preset: p.id })}>{p.label}</button>)}
+      </div>
+      {f.preset === 'custom' && (
+        <div className="row">
+          <span>Every</span>
+          <input type="number" min={1} max={365} value={f.every} onChange={(e) => set({ every: Number(e.target.value) })} style={{ width: 90 }} aria-label="Repeat every" />
+          <select style={{ width: 'auto' }} value={f.unit} onChange={(e) => set({ unit: e.target.value as RepeatUnit })} aria-label="Repeat unit">
+            <option value="day">{f.every === 1 ? 'day' : 'days'}</option>
+            <option value="week">{f.every === 1 ? 'week' : 'weeks'}</option>
+            <option value="month">{f.every === 1 ? 'month' : 'months'}</option>
+          </select>
+        </div>
+      )}
+      {f.preset !== 'none' && (
+        <div className="row">
+          <span>Ends</span>
+          <select style={{ width: 'auto' }} value={f.ends} onChange={(e) => set({ ends: e.target.value as RepeatForm['ends'] })} aria-label="Repeat ends">
+            <option value="never">Never</option>
+            <option value="date">On a date</option>
+            <option value="count">After some visits</option>
+          </select>
+          {f.ends === 'date' && <input type="date" style={{ width: 'auto' }} min={firstDate} value={f.endDate} onChange={(e) => set({ endDate: e.target.value })} aria-label="Last date" />}
+          {f.ends === 'count' && <><input type="number" min={1} max={500} value={f.count} onChange={(e) => set({ count: Number(e.target.value) })} style={{ width: 90 }} aria-label="Number of visits" /><span className="small muted">visits</span></>}
+        </div>
+      )}
+      {f.preset !== 'none' && <span className="small muted">Each visit shows on Doctors and the calendars, with its own questions and follow-up.</span>}
+    </div>
+  );
+}
+
+/** New appointment, or edit one (with status and delete) when `initial` is given. Also used from the calendar and reminders. */
+export function AppointmentForm({ onSave, onClose, areasOff, initial, initialRepeat, onDelete }: {
+  onSave: (a: AppointmentDraft) => Promise<void>; onClose: () => void; areasOff: DoctorArea[]; initial?: AppointmentDraft;
+  /** The repeat of the visit being edited, if it's part of one. */
+  initialRepeat?: ApptRepeat | null;
+  onDelete?: (scope: 'one' | 'following') => Promise<void>;
 }) {
   const [a, setA] = useState<AppointmentDraft>(initial ?? { kind: 'speech', title: '', provider: '', location: '', startsAt: nowLocal(), durationMinutes: 45, notes: '' });
+  const [rep, setRep] = useState<RepeatForm>(() => repeatForm(initialRepeat));
+  const inSeries = !!initialRepeat;
+  const [scope, setScope] = useState<'one' | 'following'>('one');
+  const save = () => {
+    if (inSeries && scope === 'one') return onSave({ ...a, scope: 'one' });
+    const repeat = repeatRule(rep);
+    if (repeat?.endDate && repeat.endDate < a.startsAt.slice(0, 10)) return Promise.resolve(alert('The repeat has to end on or after this visit.'));
+    return onSave({ ...a, repeat, ...(inSeries ? { scope: 'following' as const } : {}) });
+  };
   return (
     <Modal onClose={onClose}>
-      <form className="stack" onSubmit={(e) => { e.preventDefault(); void onSave(a); }}>
+      <form className="stack" onSubmit={(e) => { e.preventDefault(); void save(); }}>
         <h2 style={{ margin: 0 }}>{initial ? 'Edit appointment' : 'New appointment'}</h2>
+        {inSeries && (
+          <div className="stack" style={{ gap: 6 }}>
+            <span className="small muted">🔁 Part of a repeat: {repeatLabel(initialRepeat!)}</span>
+            <div className="chips">
+              <button type="button" className={`chip${scope === 'one' ? ' on' : ''}`} onClick={() => setScope('one')}>Just this visit</button>
+              <button type="button" className={`chip${scope === 'following' ? ' on' : ''}`} onClick={() => setScope('following')}>This and later visits</button>
+            </div>
+          </div>
+        )}
         <div className="chips">
           {Object.keys(KIND_ICONS).filter((k) => appointmentOn(k, areasOff.filter((a) => a !== 'appointments'))).map((k) => (
             <button key={k} type="button" className={`chip${a.kind === k ? ' on' : ''}`} onClick={() => setA({ ...a, kind: k, title: a.title || KIND_LABELS[k] })}>{KIND_ICONS[k]} {KIND_LABELS[k]}</button>
@@ -74,6 +161,7 @@ export function AppointmentForm({ onSave, onClose, areasOff, initial, onDelete }
         <input placeholder="Provider (optional), e.g. Ms. Lee" value={a.provider} onChange={(e) => setA({ ...a, provider: e.target.value })} />
         <input placeholder="Where (optional)" value={a.location} onChange={(e) => setA({ ...a, location: e.target.value })} />
         <textarea placeholder="Notes or questions to ask (optional)" value={a.notes} onChange={(e) => setA({ ...a, notes: e.target.value })} style={{ minHeight: 80 }} />
+        {(!inSeries || scope === 'following') && <RepeatFields value={rep} onChange={setRep} firstDate={a.startsAt.slice(0, 10)} />}
         {initial && (
           <div className="chips">
             {(['scheduled', 'done', 'missed', 'cancelled'] as const).map((s) => (
@@ -84,7 +172,11 @@ export function AppointmentForm({ onSave, onClose, areasOff, initial, onDelete }
           </div>
         )}
         <div className="row">
-          {onDelete && <button type="button" className="ghost danger" onClick={() => { if (confirm('Delete this appointment?')) void onDelete(); }}>Delete</button>}
+          {onDelete && !inSeries && <button type="button" className="ghost danger" onClick={() => { if (confirm('Delete this appointment?')) void onDelete('one'); }}>Delete</button>}
+          {onDelete && inSeries && <>
+            <button type="button" className="ghost danger" onClick={() => { if (confirm('Delete just this visit?')) void onDelete('one'); }}>Delete this visit</button>
+            <button type="button" className="ghost danger" onClick={() => { if (confirm('Delete this visit and every later one? Visits marked done stay.')) void onDelete('following'); }}>Delete this and later</button>
+          </>}
           <span className="spacer" /><button type="button" className="ghost" onClick={onClose}>Cancel</button><button className="primary" disabled={!a.title.trim() || !a.startsAt}>Save</button></div>
       </form>
     </Modal>
@@ -423,6 +515,7 @@ export function Doctors() {
   const [health, reloadHealth] = useLoad<HealthData>(hBase, [hBase]);
   const [prep, setPrep] = useState<Appointment | null>(null);
   const [followUp, setFollowUp] = useState<Appointment | null>(null);
+  const [editAppt, setEditAppt] = useState<Appointment | null>(null);
   if (!home) return null;
   const run = async (fn: () => Promise<unknown>, msg?: string) => { try { await fn(); if (msg) toast(msg); await reload(); } catch (e) { toast((e as Error).message); } };
   const now = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
@@ -480,10 +573,11 @@ export function Doctors() {
                 <span style={{ fontSize: '1.6rem' }}>{KIND_ICONS[a.kind] ?? '📌'}</span>
                 <div style={{ flex: 1 }}>
                   <strong>{a.title}</strong>{a.provider && <span className="muted"> with {a.provider}</span>}
-                  <div className="small muted">{whenText(a.startsAt)}{a.durationMinutes ? ` · ${a.durationMinutes} min` : ''}{a.location && ` · ${a.location}`}</div>
+                  <div className="small muted">{whenText(a.startsAt)}{a.durationMinutes ? ` · ${a.durationMinutes} min` : ''}{a.location && ` · ${a.location}`}{a.repeat && ` · 🔁 ${repeatLabel(a.repeat)}`}</div>
                   {a.notes && <div className="small">{a.notes}</div>}
                   {a.questions.length > 0 && <div className="small">❓ {a.questions.filter((q) => !q.done).length} question{a.questions.filter((q) => !q.done).length === 1 ? '' : 's'} to ask: {a.questions.filter((q) => !q.done).map((q) => q.text).join(' · ')}</div>}
                 </div>
+                <button className="icon edit-btn" aria-label="Edit appointment" onClick={() => setEditAppt(a)}>✏️</button>
                 <button className="ghost" onClick={() => setPrep(a)}>❓ Questions</button>
                 <button className="ghost" onClick={() => setFollowUp(a)}>✓ Done</button>
                 <button className="ghost danger" onClick={() => void run(() => api(apptUrl(a.id), { method: 'PATCH', body: { status: 'cancelled' } }), 'Cancelled')}>Cancel</button>
@@ -544,6 +638,13 @@ export function Doctors() {
 
       {prep && <PrepModal appt={prep} url={apptUrl(prep.id)} onClose={() => setPrep(null)} onSaved={reload} />}
       {followUp && tBase && data && <FollowUpModal appt={followUp} url={apptUrl(followUp.id)} goals={data.goals} notesUrl={`${tBase}/notes`} onClose={() => setFollowUp(null)} onSaved={reload} />}
+      {editAppt && (
+        <AppointmentForm areasOff={areasOff} initialRepeat={editAppt.repeat} onClose={() => setEditAppt(null)}
+          initial={{ kind: editAppt.kind, title: editAppt.title, provider: editAppt.provider ?? '', location: editAppt.location ?? '', startsAt: editAppt.startsAt,
+            durationMinutes: editAppt.durationMinutes ?? 45, notes: editAppt.notes ?? '', status: editAppt.status }}
+          onSave={(a) => run(async () => { await api(apptUrl(editAppt.id), { method: 'PATCH', body: a }); setEditAppt(null); }, 'Appointment saved')}
+          onDelete={(scope) => run(async () => { await api(`${apptUrl(editAppt.id)}?scope=${scope}`, { method: 'DELETE' }); setEditAppt(null); }, 'Deleted')} />
+      )}
       {adding === 'appointment' && tBase && (
         <AppointmentForm areasOff={areasOff} onClose={() => setAdding(null)} onSave={(a) => run(async () => { await api(`${tBase}/appointments`, { body: a }); setAdding(null); }, 'Appointment added')} />
       )}

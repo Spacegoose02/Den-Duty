@@ -5,7 +5,7 @@ import { useApp, useLoad } from '../state.tsx';
 import { RaccoonAvatar } from '../components/Raccoon.tsx';
 import { dayName, shortDate, STATUS_LABEL } from '../components/Bits.tsx';
 import { FEED_ICONS } from './Calendars.tsx';
-import { AREA_ICONS, AppointmentForm, KIND_ICONS, NO_PRACTICE, PracticeFields, practiceReady, timeText, type PracticeForm } from './Doctors.tsx';
+import { AREA_ICONS, AppointmentForm, KIND_ICONS, NO_PRACTICE, PracticeFields, practiceReady, repeatLabel, timeText, type PracticeForm } from './Doctors.tsx';
 import { Modal } from '../components/Bits.tsx';
 import { ReminderForm } from '../components/Reminders.tsx';
 import type { Reminder } from '../api.ts';
@@ -91,7 +91,7 @@ function AppointmentLine({ a, kid, withName, onEdit }: { a: AppointmentItem; kid
   const inner = (
     <>
       <span aria-hidden>{KIND_ICONS[a.kind] ?? '📌'}</span>
-      <span style={{ flex: 1 }}><strong>{timeText(a.time)} </strong>{withName && kid ? `${kid.name}: ` : ''}{a.title}{a.status === 'done' && ' ✓'}{a.status === 'missed' && ' (missed)'}</span>
+      <span style={{ flex: 1 }}><strong>{timeText(a.time)} </strong>{withName && kid ? `${kid.name}: ` : ''}{a.title}{a.repeat && <span title={repeatLabel(a.repeat)}> 🔁</span>}{a.status === 'done' && ' ✓'}{a.status === 'missed' && ' (missed)'}</span>
       {onEdit && <span aria-hidden className="small">✏️</span>}
     </>
   );
@@ -290,12 +290,13 @@ export function Calendar({ kidId, title = 'Calendar' }: { kidId?: string; title?
             startsAt: `${data?.days.find((d) => d.appointments?.some((a) => a.id === editing.appt!.id))?.date}T${editing.appt.time}`,
             durationMinutes: editing.appt.durationMinutes ?? 45, notes: editing.appt.notes ?? '', status: editing.appt.status,
           }}
+          initialRepeat={editing.appt.repeat ?? null}
           onClose={() => setEditing(null)}
           onSave={async (a) => {
             try { await api(`${base}/therapy/appointments/${editing.appt!.id}`, { method: 'PATCH', body: a }); toast('Appointment saved'); await done(); } catch (e) { toast((e as Error).message); }
           }}
-          onDelete={async () => {
-            try { await api(`${base}/therapy/appointments/${editing.appt!.id}`, { method: 'DELETE' }); toast('Appointment deleted'); await done(); } catch (e) { toast((e as Error).message); }
+          onDelete={async (scope) => {
+            try { await api(`${base}/therapy/appointments/${editing.appt!.id}?scope=${scope}`, { method: 'DELETE' }); toast('Appointment deleted'); await done(); } catch (e) { toast((e as Error).message); }
           }}
         />
       )}
