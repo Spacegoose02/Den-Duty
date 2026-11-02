@@ -10,7 +10,7 @@ import { homeInfo, homeToday, writeLedger } from '../chores.ts';
 import { byOf } from './chores.ts';
 import { doctorAreasOff, getKid, pageOn } from './homes.ts';
 import { appointmentOn, goalAreaOn } from '../../../shared/pages.ts';
-import { cleanWeekdays, dateRange, isIsoDate, weekdayOf } from '../../../shared/schedule.ts';
+import { addDays, cleanWeekdays, dateRange, isIsoDate, REPEAT_UNITS, repeatDate, weekdayOf, type RepeatRule, type RepeatUnit } from '../../../shared/schedule.ts';
 
 export const APPOINTMENT_KINDS = ['doctor', 'speech', 'feeding', 'occupational', 'physical', 'behavioral', 'dental', 'other'] as const;
 export const GOAL_AREAS = ['development', 'speech', 'feeding', 'doctor', 'motor', 'sensory', 'selfcare', 'physical', 'behavioral', 'dental', 'social', 'other'] as const;
@@ -48,12 +48,118 @@ function progressValue(v: unknown): number {
   return n;
 }
 
-const appointmentView = (r: Row) => ({
+const appointmentView = (db: DatabaseSync, r: Row) => ({
   id: r.id as string, memberId: r.member_id as string, kind: r.kind as string, title: r.title as string, provider: r.provider as string | null,
   location: r.location as string | null, startsAt: r.starts_at as string, durationMinutes: r.duration_minutes as number | null,
   status: r.status as string, notes: r.notes as string | null,
   questions: cleanQuestions(parseJson(r.questions, [])), summary: (r.summary as string | null) ?? null,
+  repeat: appointmentRepeat(db, r),
 });
+
+// ---------- repeating appointments ----------
+
+/** How far ahead a series' visits are made. The minute timer (and opening Doctors) tops them up as days pass. */
+const HORIZON_DAYS: Record<RepeatUnit, number> = { day: 92, week: 183, month: 366 };
+
+/** A repeat rule from a form: null (doesn't repeat) or every N days / weeks / months, ending never, on a date, or after N visits. */
+export function cleanRepeat(v: unknown, startDate: string): RepeatRule | null {
+  if (v == null || v === false || v === '') return null;
+  if (typeof v !== 'object') throw new HttpError(400, 'Repeat must be a rule or nothing');
+  const o = v as Row;
+  const every = num(o.every);
+  if (every == null || !Number.isInteger(every) || every < 1 || every > 365) throw new HttpError(400, 'Repeat every 1 to 365 days, weeks or months');
+  if (!(REPEAT_UNITS as string[]).includes(String(o.unit))) throw new HttpError(400, 'Repeat by day, week or month');
+  const endDate = o.endDate == null || o.endDate === '' ? null : o.endDate;
+  if (endDate != null && (!isIsoDate(endDate) || endDate < startDate)) throw new HttpError(400, 'The repeat end date has to be on or after the first visit');
+  const count = o.count == null || o.count === '' ? null : num(o.count);
+  if (count != null && (!Number.isInteger(count) || count < 1 || count > 500)) throw new HttpError(400, 'Repeat 1 to 500 times');
+  if (endDate && count) throw new HttpError(400, 'End on a date or after a number of visits, not both');
+  return { every, unit: String(o.unit) as RepeatUnit, endDate: endDate as string | null, count };
+}
+
+/** The repeat rule a visit belongs to, with which visit it is, or null for a one-off. */
+function appointmentRepeat(db: DatabaseSync, r: Row): (RepeatRule & { seriesId: string; index: number }) | null {
+  if (!r.series_id) return null;
+  const s = db.prepare('SELECT * FROM appointment_series WHERE id = ?').get(r.series_id as string) as Row | undefined;
+  if (!s) return null;
+  return { seriesId: s.id as string, index: (r.series_index as number) ?? 0, every: s.repeat_every as number, unit: s.repeat_unit as RepeatUnit,
+    endDate: (s.end_date as string | null) ?? null, count: (s.end_count as number | null) ?? null };
+}
+
+/** Makes a series' visits up to its horizon, and marks it finished once it has no more to make. Returns how many it made. */
+export function extendSeries(db: DatabaseSync, s: Row, today: string): number {
+  const unit = s.repeat_unit as RepeatUnit;
+  const horizon = addDays(today, HORIZON_DAYS[unit]);
+  const ins = db.prepare(`INSERT INTO therapy_appointments (id, home_id, member_id, kind, title, provider, location, starts_at, duration_minutes, notes, created_by,
+    series_id, series_index) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  let i = s.next_index as number;
+  let made = 0;
+  let finished = false;
+  for (;;) {
+    if (s.end_count != null && i >= (s.end_count as number)) { finished = true; break; }
+    const d = repeatDate(s.start_date as string, s.repeat_every as number, unit, i);
+    if (s.end_date && d > (s.end_date as string)) { finished = true; break; }
+    if (d > horizon || made >= 400) break;
+    ins.run(newId(), s.home_id as string, s.member_id as string, s.kind as string, s.title as string, s.provider as string | null, s.location as string | null,
+      `${d}T${s.time}`, s.duration_minutes as number | null, s.notes as string | null, s.created_by as string | null, s.id as string, i);
+    i++;
+    made++;
+  }
+  if (i !== s.next_index || finished) db.prepare('UPDATE appointment_series SET next_index = ?, finished = ? WHERE id = ?').run(i, finished ? 1 : 0, s.id as string);
+  return made;
+}
+
+/** Tops up every running series (in one home, or all of them), each by its home's today. */
+export function topUpSeries(db: DatabaseSync, homeId?: string): void {
+  const rows = (homeId ? db.prepare('SELECT * FROM appointment_series WHERE finished = 0 AND home_id = ?').all(homeId)
+    : db.prepare('SELECT * FROM appointment_series WHERE finished = 0').all()) as Row[];
+  if (!rows.length) return;
+  const todays = new Map<string, string>();
+  tx(db, () => {
+    for (const s of rows) {
+      const h = s.home_id as string;
+      if (!todays.has(h)) todays.set(h, homeToday(homeInfo(db, h)));
+      extendSeries(db, s, todays.get(h)!);
+    }
+  });
+}
+
+/** Turns an appointment into the first visit of a new series with its details, and makes the visits after it. */
+function startSeries(db: DatabaseSync, appt: Row, rule: RepeatRule): void {
+  const id = newId();
+  const [date, time] = (appt.starts_at as string).split('T');
+  db.prepare(`INSERT INTO appointment_series (id, home_id, member_id, kind, title, provider, location, notes, duration_minutes, start_date, time,
+    repeat_every, repeat_unit, end_date, end_count, next_index, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`).run(
+    id, appt.home_id as string, appt.member_id as string, appt.kind as string, appt.title as string, appt.provider as string | null, appt.location as string | null,
+    appt.notes as string | null, appt.duration_minutes as number | null, date, time, rule.every, rule.unit, rule.endDate, rule.count, appt.created_by as string | null);
+  db.prepare('UPDATE therapy_appointments SET series_id = ?, series_index = 0 WHERE id = ?').run(id, appt.id as string);
+  extendSeries(db, db.prepare('SELECT * FROM appointment_series WHERE id = ?').get(id) as Row, homeToday(homeInfo(db, appt.home_id as string)));
+}
+
+/**
+ * Ends a series just before one of its visits: that visit and later ones leave it. Later visits are deleted unless
+ * they were marked done (those keep their follow-up).
+ */
+function endSeriesAt(db: DatabaseSync, appt: Row): void {
+  const idx = appt.series_index as number;
+  db.prepare("DELETE FROM therapy_appointments WHERE series_id = ? AND series_index > ? AND status != 'done'").run(appt.series_id as string, idx);
+  db.prepare('UPDATE appointment_series SET end_count = ?, end_date = NULL, finished = 1 WHERE id = ?').run(idx, appt.series_id as string);
+}
+
+/** A new appointment for a kid, repeating when the body has a repeat rule. Returns the (first) appointment's id. */
+export function createAppointment(db: DatabaseSync, ctx: HomeCtx, memberId: string, b: Row, kindFallback: (typeof APPOINTMENT_KINDS)[number] = 'other'): string {
+  if (typeof b.startsAt !== 'string' || !LOCAL_DT.test(b.startsAt)) throw new HttpError(400, 'Pick a date and time');
+  const repeat = cleanRepeat(b.repeat, b.startsAt.slice(0, 10));
+  const id = newId();
+  tx(db, () => {
+    db.prepare(`INSERT INTO therapy_appointments (id, home_id, member_id, kind, title, provider, location, starts_at, duration_minutes, notes, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, ctx.homeId, memberId, oneOf(APPOINTMENT_KINDS, b.kind, 'Kind', kindFallback),
+      requireStr(b.title, 'Title', 100), str(b.provider, 100), str(b.location, 200), b.startsAt as string, num(b.durationMinutes), str(b.notes, 2000), ctx.user?.id ?? null);
+    if ('questions' in b) db.prepare('UPDATE therapy_appointments SET questions = ? WHERE id = ?').run(JSON.stringify(cleanQuestions(b.questions)), id);
+    if (repeat) startSeries(db, db.prepare('SELECT * FROM therapy_appointments WHERE id = ?').get(id) as Row, repeat);
+  });
+  return id;
+}
 
 /** Questions to ask at an appointment, ticked off at the visit. */
 export function cleanQuestions(v: unknown): { text: string; done: boolean }[] {
@@ -150,13 +256,14 @@ export function therapyRoutes(app: FastifyInstance, db: DatabaseSync): void {
     if (!pageOn(db, id, 'doctors')) throw new HttpError(403, `Doctors is turned off for ${kid.name}. Turn it on in Kids → Edit.`);
     // Only the sections turned on for this kid; the rest is kept, just hidden.
     const off = doctorAreasOff(db, id);
+    topUpSeries(db, ctx.homeId);
     const goalRows = db.prepare("SELECT * FROM therapy_goals WHERE member_id = ? ORDER BY status = 'active' DESC, created_at DESC").all(id) as Row[];
     const hiddenGoals = new Set(goalRows.filter((g) => !goalAreaOn(g.area as string, off)).map((g) => g.id as string));
     return {
       kidVisible: !!kid.therapy_kid_visible,
       areasOff: off,
       appointments: (db.prepare('SELECT * FROM therapy_appointments WHERE member_id = ? ORDER BY starts_at DESC LIMIT 200').all(id) as Row[])
-        .filter((a) => appointmentOn(a.kind as string, off)).map(appointmentView),
+        .filter((a) => appointmentOn(a.kind as string, off)).map((a) => appointmentView(db, a)),
       goals: goalRows.filter((g) => !hiddenGoals.has(g.id as string)).map((g) => goalView(db, g)),
       notes: (db.prepare(`SELECT n.*, g.title AS goal_title FROM therapy_notes n LEFT JOIN therapy_goals g ON g.id = n.goal_id
         WHERE n.member_id = ? ORDER BY n.date DESC, n.created_at DESC LIMIT 100`).all(id) as Row[])
@@ -179,25 +286,20 @@ export function therapyRoutes(app: FastifyInstance, db: DatabaseSync): void {
   app.get('/api/homes/:homeId/therapy/upcoming', async (req) => {
     const ctx = homeCtx(db, req, 'parent');
     const today = homeToday(homeInfo(db, ctx.homeId));
+    topUpSeries(db, ctx.homeId);
     return (db.prepare(`SELECT a.*, m.name AS kid_name, m.avatar AS kid_avatar FROM therapy_appointments a JOIN members m ON m.id = a.member_id
       WHERE a.home_id = ? AND a.status = 'scheduled' AND a.starts_at >= ? ORDER BY a.starts_at LIMIT 50`).all(ctx.homeId, today) as Row[])
       .filter((r) => pageOn(db, r.member_id as string, 'doctors') && appointmentOn(r.kind as string, doctorAreasOff(db, r.member_id as string)))
       .slice(0, 10)
-      .map((r) => ({ ...appointmentView(r), kidName: r.kid_name as string, kidAvatar: r.kid_avatar as string }));
+      .map((r) => ({ ...appointmentView(db, r), kidName: r.kid_name as string, kidAvatar: r.kid_avatar as string }));
   });
 
   // ----- appointments -----
   app.post('/api/homes/:homeId/kids/:memberId/therapy/appointments', async (req) => {
     const ctx = homeCtx(db, req, 'parent');
     const kid = getKid(db, ctx, (req.params as { memberId: string }).memberId);
-    const b = (req.body ?? {}) as Row;
-    if (typeof b.startsAt !== 'string' || !LOCAL_DT.test(b.startsAt)) throw new HttpError(400, 'Pick a date and time');
-    const id = newId();
-    db.prepare(`INSERT INTO therapy_appointments (id, home_id, member_id, kind, title, provider, location, starts_at, duration_minutes, notes, created_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, ctx.homeId, kid.id as string, oneOf(APPOINTMENT_KINDS, b.kind, 'Kind', 'other'),
-      requireStr(b.title, 'Title', 100), str(b.provider, 100), str(b.location, 200), b.startsAt, num(b.durationMinutes), str(b.notes, 2000), ctx.user?.id ?? null);
-    if ('questions' in b) db.prepare('UPDATE therapy_appointments SET questions = ? WHERE id = ?').run(JSON.stringify(cleanQuestions(b.questions)), id);
-    return appointmentView(ownRow(db, 'therapy_appointments', ctx, id));
+    const id = createAppointment(db, ctx, kid.id as string, (req.body ?? {}) as Row);
+    return appointmentView(db, ownRow(db, 'therapy_appointments', ctx, id));
   });
 
   app.patch('/api/homes/:homeId/therapy/appointments/:id', async (req) => {
@@ -205,24 +307,49 @@ export function therapyRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const cur = ownRow(db, 'therapy_appointments', ctx, (req.params as { id: string }).id);
     const b = (req.body ?? {}) as Row;
     if ('startsAt' in b && (typeof b.startsAt !== 'string' || !LOCAL_DT.test(b.startsAt))) throw new HttpError(400, 'Pick a date and time');
-    db.prepare(`UPDATE therapy_appointments SET kind = ?, title = ?, provider = ?, location = ?, starts_at = ?, duration_minutes = ?, status = ?, notes = ? WHERE id = ?`).run(
-      'kind' in b ? oneOf(APPOINTMENT_KINDS, b.kind, 'Kind') : cur.kind as string,
-      'title' in b ? requireStr(b.title, 'Title', 100) : cur.title as string,
-      'provider' in b ? str(b.provider, 100) : cur.provider as string | null,
-      'location' in b ? str(b.location, 200) : cur.location as string | null,
-      'startsAt' in b ? b.startsAt as string : cur.starts_at as string,
-      'durationMinutes' in b ? num(b.durationMinutes) : cur.duration_minutes as number | null,
-      'status' in b ? oneOf(STATUSES, b.status, 'Status') : cur.status as string,
-      'notes' in b ? str(b.notes, 2000) : cur.notes as string | null,
-      cur.id as string);
-    if ('questions' in b) db.prepare('UPDATE therapy_appointments SET questions = ? WHERE id = ?').run(JSON.stringify(cleanQuestions(b.questions)), cur.id as string);
-    if ('summary' in b) db.prepare('UPDATE therapy_appointments SET summary = ? WHERE id = ?').run(str(b.summary, 4000), cur.id as string);
-    return appointmentView(ownRow(db, 'therapy_appointments', ctx, cur.id as string));
+    // A repeating visit changes on its own ("one", the default), or with every later visit ("following"), which can also
+    // change or stop the repeat. A one-off appointment with a repeat rule starts repeating from itself.
+    const following = b.scope === 'following' && !!cur.series_id;
+    const startsAt = 'startsAt' in b ? b.startsAt as string : cur.starts_at as string;
+    let rule: RepeatRule | null | undefined;
+    if ('repeat' in b && (following || !cur.series_id)) rule = cleanRepeat(b.repeat, startsAt.slice(0, 10));
+    else if (following) {
+      const s = db.prepare('SELECT * FROM appointment_series WHERE id = ?').get(cur.series_id as string) as Row;
+      const left = s.end_count == null ? null : (s.end_count as number) - (cur.series_index as number);
+      rule = { every: s.repeat_every as number, unit: s.repeat_unit as RepeatUnit, endDate: (s.end_date as string | null) ?? null, count: left };
+      if (rule.endDate && rule.endDate < startsAt.slice(0, 10)) rule = null;
+    }
+    tx(db, () => {
+      db.prepare(`UPDATE therapy_appointments SET kind = ?, title = ?, provider = ?, location = ?, starts_at = ?, duration_minutes = ?, status = ?, notes = ? WHERE id = ?`).run(
+        'kind' in b ? oneOf(APPOINTMENT_KINDS, b.kind, 'Kind') : cur.kind as string,
+        'title' in b ? requireStr(b.title, 'Title', 100) : cur.title as string,
+        'provider' in b ? str(b.provider, 100) : cur.provider as string | null,
+        'location' in b ? str(b.location, 200) : cur.location as string | null,
+        'startsAt' in b ? b.startsAt as string : cur.starts_at as string,
+        'durationMinutes' in b ? num(b.durationMinutes) : cur.duration_minutes as number | null,
+        'status' in b ? oneOf(STATUSES, b.status, 'Status') : cur.status as string,
+        'notes' in b ? str(b.notes, 2000) : cur.notes as string | null,
+        cur.id as string);
+      if ('questions' in b) db.prepare('UPDATE therapy_appointments SET questions = ? WHERE id = ?').run(JSON.stringify(cleanQuestions(b.questions)), cur.id as string);
+      if ('summary' in b) db.prepare('UPDATE therapy_appointments SET summary = ? WHERE id = ?').run(str(b.summary, 4000), cur.id as string);
+      if (following) {
+        endSeriesAt(db, cur);
+        db.prepare('UPDATE therapy_appointments SET series_id = NULL, series_index = NULL WHERE id = ?').run(cur.id as string);
+      }
+      if ((following || !cur.series_id) && rule && rule.count !== 1) startSeries(db, ownRow(db, 'therapy_appointments', ctx, cur.id as string), rule);
+    });
+    return appointmentView(db, ownRow(db, 'therapy_appointments', ctx, cur.id as string));
   });
 
+  // ?scope=following deletes a repeating visit and every later one (visits marked done stay), ending the repeat.
   app.delete('/api/homes/:homeId/therapy/appointments/:id', async (req) => {
     const ctx = homeCtx(db, req, 'parent');
-    db.prepare('DELETE FROM therapy_appointments WHERE id = ? AND home_id = ?').run((req.params as { id: string }).id, ctx.homeId);
+    const cur = db.prepare('SELECT * FROM therapy_appointments WHERE id = ? AND home_id = ?').get((req.params as { id: string }).id, ctx.homeId) as Row | undefined;
+    if (!cur) return { ok: true };
+    tx(db, () => {
+      if ((req.query as { scope?: string }).scope === 'following' && cur.series_id) endSeriesAt(db, cur);
+      db.prepare('DELETE FROM therapy_appointments WHERE id = ?').run(cur.id as string);
+    });
     return { ok: true };
   });
 
@@ -514,6 +641,7 @@ export interface AppointmentItem {
   id: string; memberId: string; kind: string; title: string; provider: string | null; time: string; status: string;
   /** Parents only (for editing from the calendar). */
   location?: string | null; durationMinutes?: number | null; notes?: string | null;
+  repeat?: (RepeatRule & { seriesId: string; index: number }) | null;
 }
 export interface DoctorsDay { practices: PracticeItem[]; appointments: AppointmentItem[] }
 
@@ -557,7 +685,7 @@ export function doctorsCalendar(db: DatabaseSync, memberIds: string[], from: str
       const [d, time] = (a.starts_at as string).split('T');
       day(d).appointments.push({
         id: a.id as string, memberId: id, kind: a.kind as string, title: a.title as string, provider: a.provider as string | null, time, status: a.status as string,
-        ...(forKid ? {} : { location: a.location as string | null, durationMinutes: a.duration_minutes as number | null, notes: a.notes as string | null }),
+        ...(forKid ? {} : { location: a.location as string | null, durationMinutes: a.duration_minutes as number | null, notes: a.notes as string | null, repeat: appointmentRepeat(db, a) }),
       });
     }
   }
