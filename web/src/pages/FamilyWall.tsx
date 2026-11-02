@@ -10,6 +10,7 @@ import type { KidPage } from '../../../shared/pages.ts';
 import type { TeamGoal } from '../api.ts';
 import { TeamBar } from '../components/TeamGoals.tsx';
 import { WallSports, type KidSports } from '../components/Sports.tsx';
+import { WallWeather, type HomeWeather } from '../components/Weather.tsx';
 
 interface WallKid {
   id: string; name: string; avatar: string; color: string; theme: string | null; hasPin: boolean; pagesOff: KidPage[]; balance: number;
@@ -33,6 +34,8 @@ interface Wall {
   teamGoals: TeamGoal[];
   /** From LootDen, the family's game library, when it's linked. */
   lootden?: LootDenWall | null;
+  /** Today's weather from Weather Scout, when it's linked. */
+  weather?: HomeWeather;
 }
 interface LootDenWall {
   nowPlaying: { name: string; title: string; device: string; playedFor: string }[];
@@ -174,6 +177,7 @@ export function FamilyWall() {
         </div>
 
         <section className="wall-strip">
+          <WallWeather weather={wall.weather} />
           {wall.family.map((d, i) => (
             <div key={d.date} className="wall-day">
               <div className="wall-day-title">{i === 0 ? 'Today' : 'Tomorrow'} <span className="wall-sub">{dayName(d.date)}</span></div>

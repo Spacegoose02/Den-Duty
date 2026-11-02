@@ -921,6 +921,11 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE homes ADD COLUMN sports_url TEXT;
   ALTER TABLE members ADD COLUMN sports_key TEXT;
   `,
+  // Weather: the family's Weather Scout server and an app key from it (sealed like the other keys).
+  `
+  ALTER TABLE homes ADD COLUMN weather_url TEXT;
+  ALTER TABLE homes ADD COLUMN weather_key TEXT;
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

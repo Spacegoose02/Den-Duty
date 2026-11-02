@@ -17,6 +17,7 @@ import { KidMedicine, PracticeMode } from '../components/KidPractice.tsx';
 import { RoutineCards, RoutinePlayer } from '../components/Routines.tsx';
 import { KidJars } from '../components/Money.tsx';
 import { KidSportsCards } from '../components/Sports.tsx';
+import { KidWeatherCard } from '../components/Weather.tsx';
 import { SpeakButton, speak } from '../components/Speak.tsx';
 import { clockText } from '../../../shared/schedule.ts';
 import type { RoutineId } from '../../../shared/catalog.ts';
@@ -333,6 +334,8 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
       </div>
 
       {board.money && <KidJars money={board.money} color={kid.color} readAloud={readAloud} />}
+
+      <KidWeatherCard simple={kid.pictureMode} readAloud={readAloud} color={kid.color} />
 
       <KidSportsCards memberId={memberId} simple={kid.pictureMode} readAloud={readAloud} color={kid.color} />
 
