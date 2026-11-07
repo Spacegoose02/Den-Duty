@@ -926,6 +926,11 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE homes ADD COLUMN weather_url TEXT;
   ALTER TABLE homes ADD COLUMN weather_key TEXT;
   `,
+  // Dendrop link: a time-out can pause the kid's chat in Dendrop, the family chat app: the whole time, or until today's
+  // chores are done.
+  `
+  ALTER TABLE timeouts ADD COLUMN chat TEXT CHECK (chat IN ('all', 'chores'));
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {
