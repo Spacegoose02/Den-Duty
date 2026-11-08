@@ -926,6 +926,41 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE homes ADD COLUMN weather_url TEXT;
   ALTER TABLE homes ADD COLUMN weather_key TEXT;
   `,
+  // Practice and habits: reading minutes, instrument practice, homework. A kid logs a practice (with a timer); it waits
+  // for a grown-up unless the habit is trusted. One log per habit per day: practicing again adds minutes to it.
+  `
+  CREATE TABLE habits (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    icon TEXT NOT NULL DEFAULT '🎯',
+    minutes INTEGER,
+    target_days INTEGER NOT NULL DEFAULT 5 CHECK (target_days BETWEEN 1 AND 7),
+    points INTEGER NOT NULL DEFAULT 0 CHECK (points >= 0),
+    needs_ok INTEGER NOT NULL DEFAULT 1,
+    active INTEGER NOT NULL DEFAULT 1,
+    position INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX habits_member ON habits(member_id, active);
+  CREATE TABLE habit_logs (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    habit_id TEXT NOT NULL REFERENCES habits(id) ON DELETE CASCADE,
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    date TEXT NOT NULL,
+    minutes INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'waiting' CHECK (status IN ('waiting', 'approved', 'rejected')),
+    note TEXT,
+    paid INTEGER NOT NULL DEFAULT 0,
+    reviewed_at TEXT,
+    reviewed_by TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (habit_id, date)
+  );
+  CREATE INDEX habit_logs_home ON habit_logs(home_id, status);
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

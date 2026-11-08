@@ -16,6 +16,7 @@ import { cheerOf, pickPhoto, PhotoThumb } from '../components/Photo.tsx';
 import { KidMedicine, PracticeMode } from '../components/KidPractice.tsx';
 import { RoutineCards, RoutinePlayer } from '../components/Routines.tsx';
 import { KidJars } from '../components/Money.tsx';
+import { KidHabits } from '../components/Habits.tsx';
 import { KidSportsCards } from '../components/Sports.tsx';
 import { KidWeatherCard } from '../components/Weather.tsx';
 import { SpeakButton, speak } from '../components/Speak.tsx';
@@ -253,6 +254,8 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
           })}
         </div>
       </section>
+
+      <KidHabits memberId={memberId} kidName={kid.name} color={kid.color} asParent={asParent} readAloud={readAloud} />
 
       {board.surprise?.state === 'waiting' && (
         <section className="card pg-chores surprise-card">

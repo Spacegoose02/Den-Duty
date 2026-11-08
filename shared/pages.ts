@@ -6,6 +6,7 @@ export const KID_PAGES = [
   { id: 'parentduty', label: 'Parent Duty', icon: '📝', hint: 'Your to-dos for this kid' },
   { id: 'timeout', label: 'Time-outs', icon: '⏳', hint: 'Time-outs and buying time back' },
   { id: 'helpdesk', label: 'Helpdesk', icon: '🛎️', hint: 'Asking a grown-up for help' },
+  { id: 'habits', label: 'Practice', icon: '🎯', hint: 'Reading, instruments, homework and other practice' },
   { id: 'goals', label: 'Goals & rewards', icon: '🎁', hint: 'Goals, rewards and reward votes' },
   { id: 'stats', label: 'Stats & badges', icon: '📊', hint: 'Charts, streaks, levels and badges' },
   { id: 'doctors', label: 'Doctors', icon: '🩺', hint: 'Appointments, goals and notes' },

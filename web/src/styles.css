@@ -475,7 +475,7 @@ td, th { text-align: left; padding: 8px; border-bottom: 1px solid var(--border);
 .switch:not(.on) strong { color: var(--muted); }
 
 /* pages a parent switched off for this kid */
-.board.off-chores .pg-chores, .board.off-goals .pg-goals, .board.off-stats .pg-stats { display: none; }
+.board.off-chores .pg-chores, .board.off-goals .pg-goals, .board.off-stats .pg-stats, .board.off-habits .pg-habits { display: none; }
 /* The week still shows school lunch and other feeds when only Chores is off. */
 .board.off-chores .pg-calendar-week { display: block; }
 .board.off-chores.off-calendar .pg-calendar-week { display: none; }
@@ -748,3 +748,13 @@ button.link { background: none; border: none; padding: 0; min-height: 0; color: 
 .wx-alert.warn { background: color-mix(in srgb, var(--warn) 18%, var(--surface)); }
 .wx-alert.bad { background: color-mix(in srgb, var(--danger) 18%, var(--surface)); }
 @media (max-width: 520px) { .wx-recess { margin-left: 0; max-width: none; width: 100%; } }
+
+/* ---------- practice and habits ---------- */
+.habit-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid var(--border); }
+.habit-row:first-of-type { border-top: 0; }
+.habit-days { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin: 4px 0; }
+.habit-day { width: 26px; height: 26px; border-radius: 50%; display: inline-grid; place-items: center; font-size: .75rem; font-weight: 700;
+  border: 2px solid var(--border); color: var(--muted); }
+.habit-day.approved { color: #fff; }
+.habit-day.waiting { border-style: dashed; border-color: var(--warn); color: var(--warn); }
+.habit-day.rejected { border-color: var(--danger); }
