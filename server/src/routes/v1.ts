@@ -126,7 +126,12 @@ export const V1_ROUTES: V1Route[] = [
     method: 'GET', path: '/homes/:homeId/gaming', scope: 'read', tag: 'LootDen',
     summary: "For LootDen and Dendrop: each kid's chores today, time-outs that lock games (all, or just Roblox), time-outs that pause Dendrop chat (all of it, or until chores are done), game time bought in the shop and not yet handed out, and family goals reached in the last 30 days.",
   },
-  { method: 'POST', path: '/homes/:homeId/gaming/orders/:orderId/claim', scope: 'control', tag: 'LootDen', summary: 'LootDen handed out the game time: marks the shop order given.' },
+  { method: 'POST', path: '/homes/:homeId/gaming/orders/:orderId/claim', scope: 'control', tag: 'LootDen', summary: 'LootDen handed out the game time or unlocked the game: marks the shop order given.' },
+  {
+    method: 'POST', path: '/homes/:homeId/gaming/report', scope: 'control', tag: 'LootDen',
+    summary: "LootDen's report: each kid's play time today, what they're playing and minutes left, plus the games a shop reward can unlock.",
+    body: [{ name: 'kids', type: 'array', description: '[{ kidId, minutes, playing?, remaining? }]' }, { name: 'games', type: 'array', description: '[{ id, title }] games a reward can unlock' }],
+  },
   { method: 'GET', path: '/homes/:homeId/events', scope: 'read', tag: 'Events', summary: 'Recent events (chore done, approved, points changed, goal reached…), newest first.', query: [{ name: 'after', in: 'query', description: 'Only events after this id (poll with the last id you saw)' }] },
 ];
 

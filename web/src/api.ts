@@ -230,7 +230,16 @@ export interface TeamGoal {
 }
 
 /** A reward in the shop. stock is null for unlimited. */
-export interface ShopItem { id: string; title: string; icon: string; price: number; stock: number | null; /** Game time LootDen hands out by itself. */ gameMinutes?: number | null }
+export interface ShopItem {
+  id: string; title: string; icon: string; price: number; stock: number | null; /** Game time LootDen hands out by itself. */ gameMinutes?: number | null;
+  /** A LootDen game this reward unlocks for unlockHours. */ unlockGame?: { id: string; title: string } | null; unlockHours?: number | null;
+}
+
+/** What LootDen last reported: games a reward can unlock, and each kid's play today. */
+export interface LootdenReport {
+  linked: boolean; updatedAt: string | null; games: { id: string; title: string }[];
+  play: { memberId: string; name: string; minutes: number; playing: string | null; remaining: number | null; updatedAt: string }[];
+}
 export interface ShopOrder {
   id: string; memberId: string; kidName: string; itemId: string | null; title: string; icon: string; price: number;
   status: 'waiting' | 'given' | 'refunded'; createdAt: string; closedAt: string | null; closedBy: string | null; gameMinutes?: number | null;

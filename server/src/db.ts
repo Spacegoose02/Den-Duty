@@ -1193,6 +1193,27 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE homes ADD COLUMN language TEXT NOT NULL DEFAULT 'en';
   ALTER TABLE members ADD COLUMN language TEXT;
   `,
+  // LootDen, both ways: what each kid played today (LootDen reports it), the games a reward can unlock, and rewards
+  // that unlock one of them for a while.
+  `
+  CREATE TABLE gaming_reports (
+    home_id TEXT PRIMARY KEY REFERENCES homes(id) ON DELETE CASCADE,
+    games TEXT NOT NULL DEFAULT '[]',
+    updated_at TEXT NOT NULL
+  );
+  CREATE TABLE gaming_play (
+    member_id TEXT PRIMARY KEY REFERENCES members(id) ON DELETE CASCADE,
+    day TEXT NOT NULL,
+    minutes INTEGER NOT NULL,
+    playing TEXT,
+    remaining INTEGER,
+    updated_at TEXT NOT NULL
+  );
+  ALTER TABLE shop_items ADD COLUMN unlock_game TEXT;
+  ALTER TABLE shop_items ADD COLUMN unlock_hours INTEGER;
+  ALTER TABLE shop_orders ADD COLUMN unlock_game TEXT;
+  ALTER TABLE shop_orders ADD COLUMN unlock_hours INTEGER;
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

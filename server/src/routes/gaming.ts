@@ -6,13 +6,15 @@
 //   - unlocks a family game night when a family goal is reached.
 // Dendrop, the family chat app, polls the same endpoint for each kid's chores line and for time-outs that pause chat
 // (the whole time, or until today's chores are done).
+// LootDen also reports back (POST .../gaming/report): what each kid played today, and the games a shop reward can
+// unlock. A reward that unlocks a game shows in gameUnlocks until LootDen claims it.
 // Kids whose Chores, Time-outs or Goals & rewards pages are off are left out of that part.
 import type { FastifyInstance } from 'fastify';
 import type { DatabaseSync } from 'node:sqlite';
 import { homeCtx } from '../auth.ts';
 import type { Row } from '../db.ts';
 import { emit } from '../events.ts';
-import { HttpError } from '../util.ts';
+import { HttpError, parseJson } from '../util.ts';
 import { homeInfo, homeToday, kidsWithPageOff, todayList } from '../chores.ts';
 import { listKids } from './homes.ts';
 import { v1Path } from './v1.ts';
@@ -28,6 +30,23 @@ export interface GamingKid {
   chatLocks: Array<{ id: string; what: string; chat: 'all' | 'chores'; endsAt: string }>;
   /** Game time bought in the shop that LootDen hasn't handed out yet. */
   gameTime: Array<{ orderId: string; title: string; icon: string; minutes: number; boughtAt: string }>;
+  /** Rewards bought that unlock one LootDen game for a while, not handed out yet. */
+  gameUnlocks: Array<{ orderId: string; title: string; icon: string; gameId: string; gameTitle: string; hours: number; boughtAt: string }>;
+}
+
+/** A game LootDen says a reward can unlock. */
+export interface LootdenGame { id: string; title: string }
+
+/** What LootDen last reported: games a reward can unlock, and each kid's play today. */
+export function lootdenReport(db: DatabaseSync, homeId: string) {
+  const r = db.prepare('SELECT games, updated_at FROM gaming_reports WHERE home_id = ?').get(homeId) as Row | undefined;
+  const today = homeToday(homeInfo(db, homeId));
+  const play = (db.prepare(`SELECT p.*, m.name FROM gaming_play p JOIN members m ON m.id = p.member_id WHERE m.home_id = ? AND p.day = ?`)
+    .all(homeId, today) as Row[]).map((p) => ({
+    memberId: p.member_id as string, name: p.name as string, minutes: p.minutes as number,
+    playing: (p.playing ?? null) as string | null, remaining: (p.remaining ?? null) as number | null, updatedAt: p.updated_at as string,
+  }));
+  return { linked: !!r, updatedAt: (r?.updated_at ?? null) as string | null, games: parseJson<LootdenGame[]>(r?.games, []), play };
 }
 
 export function gamingState(db: DatabaseSync, homeId: string) {
@@ -54,7 +73,13 @@ export function gamingState(db: DatabaseSync, homeId: string) {
     const gameTime = goalsOff.has(id) ? [] : (db.prepare(`SELECT id, title, icon, game_minutes, created_at FROM shop_orders
       WHERE member_id = ? AND status = 'waiting' AND game_minutes IS NOT NULL ORDER BY created_at`).all(id) as Row[])
       .map((r) => ({ orderId: r.id as string, title: r.title as string, icon: r.icon as string, minutes: r.game_minutes as number, boughtAt: r.created_at as string }));
-    return { id, name: k.name as string, chores, locks, chatLocks, gameTime };
+    const gameUnlocks = goalsOff.has(id) ? [] : (db.prepare(`SELECT id, title, icon, unlock_game, unlock_hours, created_at FROM shop_orders
+      WHERE member_id = ? AND status = 'waiting' AND unlock_game IS NOT NULL ORDER BY created_at`).all(id) as Row[])
+      .map((r) => {
+        const g = parseJson<LootdenGame>(r.unlock_game, { id: '', title: '' });
+        return { orderId: r.id as string, title: r.title as string, icon: r.icon as string, gameId: g.id, gameTitle: g.title, hours: (r.unlock_hours ?? 24) as number, boughtAt: r.created_at as string };
+      });
+    return { id, name: k.name as string, chores, locks, chatLocks, gameTime, gameUnlocks };
   });
   const goals = (db.prepare(`SELECT id, title, icon, reward, status, reached_at FROM team_goals WHERE home_id = ? AND reached_at IS NOT NULL
     AND reached_at > datetime('now', '-30 days') ORDER BY reached_at DESC LIMIT 10`).all(homeId) as Row[])
@@ -70,11 +95,49 @@ export function gamingRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const ctx = homeCtx(db, req, 'parent');
     const { orderId } = req.params as { orderId: string };
     const o = db.prepare('SELECT * FROM shop_orders WHERE id = ? AND home_id = ?').get(orderId, ctx.homeId) as Row | undefined;
-    if (!o || o.game_minutes == null) throw new HttpError(404, 'No such game time order');
+    if (!o || (o.game_minutes == null && o.unlock_game == null)) throw new HttpError(404, 'No such game time order');
     if (o.status !== 'waiting') return { ok: true, already: true };
     const by = ctx.tokenName ?? 'LootDen';
     db.prepare("UPDATE shop_orders SET status = 'given', closed_at = datetime('now'), closed_by = ? WHERE id = ?").run(by, orderId);
     emit(db, ctx.homeId, 'reward_given', o.member_id as string, { reward: o.title, icon: o.icon, price: o.price, order_id: orderId, by, game_minutes: o.game_minutes });
     return { ok: true, already: false };
+  });
+
+  // LootDen reports back every minute or so: each linked kid's play today, and the games a reward may unlock.
+  app.post(v1Path('/homes/:homeId/gaming/report'), { config: { v1: 'control' } }, async (req) => {
+    const ctx = homeCtx(db, req, 'parent');
+    const b = (req.body ?? {}) as { kids?: unknown; games?: unknown };
+    const kids = new Set(listKids(db, ctx.homeId).map((k) => k.id as string));
+    const today = homeToday(homeInfo(db, ctx.homeId));
+    const games = (Array.isArray(b.games) ? b.games : []).slice(0, 500).flatMap((g) => {
+      const id = String((g as LootdenGame)?.id ?? '').slice(0, 200);
+      const title = String((g as LootdenGame)?.title ?? '').trim().slice(0, 120);
+      return id && title ? [{ id, title }] : [];
+    });
+    db.prepare(`INSERT INTO gaming_reports (home_id, games, updated_at) VALUES (?, ?, datetime('now'))
+      ON CONFLICT(home_id) DO UPDATE SET games = excluded.games, updated_at = excluded.updated_at`).run(ctx.homeId, JSON.stringify(games));
+    let saved = 0;
+    for (const k of Array.isArray(b.kids) ? b.kids.slice(0, 50) : []) {
+      const r = k as { kidId?: unknown; minutes?: unknown; playing?: unknown; remaining?: unknown };
+      const id = String(r.kidId ?? '');
+      if (!kids.has(id)) continue;
+      const minutes = Math.max(0, Math.min(24 * 60, Math.round(Number(r.minutes) || 0)));
+      const playing = typeof r.playing === 'string' && r.playing.trim() ? r.playing.trim().slice(0, 120) : null;
+      const remaining = r.remaining == null || !Number.isFinite(Number(r.remaining)) ? null : Math.max(0, Math.round(Number(r.remaining)));
+      db.prepare(`INSERT INTO gaming_play (member_id, day, minutes, playing, remaining, updated_at) VALUES (?, ?, ?, ?, ?, datetime('now'))
+        ON CONFLICT(member_id) DO UPDATE SET day = excluded.day, minutes = excluded.minutes, playing = excluded.playing,
+        remaining = excluded.remaining, updated_at = excluded.updated_at`).run(id, today, minutes, playing, remaining);
+      saved++;
+    }
+    return { ok: true, kids: saved, games: games.length };
+  });
+
+  // For Den Duty's own pages: what LootDen reported (parents see everyone; a kid sees their own play).
+  app.get('/api/homes/:homeId/gaming/lootden', async (req) => {
+    const ctx = homeCtx(db, req);
+    const r = lootdenReport(db, ctx.homeId);
+    if (ctx.actor.kind === 'parent') return r;
+    const own = ctx.actor.kind === 'kid' ? ctx.actor.memberId : null;
+    return { ...r, games: [], play: r.play.filter((p) => p.memberId === own) };
   });
 }
