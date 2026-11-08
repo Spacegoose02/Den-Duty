@@ -72,9 +72,12 @@ export interface Kid {
 export interface HomeDetail {
   id: string; name: string; pointsName: string; pointsIcon: string; theme: string; timezone: string; weekStart: 0 | 1; allowNegative?: boolean; surprise?: 'off' | 'sometimes' | 'often' | 'daily'; helpdeskMaxOpen?: number;
   viewer: 'parent' | 'kid' | 'device' | 'token';
+  /** For a parent: caregivers get the day-to-day only. */
+  access: 'full' | 'caregiver' | null;
   kids: Kid[];
   joinCode?: string;
-  parents?: { id: string; userId: string; name: string; avatar: string; joinedAt: string }[];
+  caregiverCode?: string | null;
+  parents?: { id: string; userId: string; name: string; avatar: string; joinedAt: string; access: 'full' | 'caregiver'; accessUntil: string | null }[];
   haWebhookUrl?: string | null;
 }
 
@@ -133,6 +136,8 @@ export interface BonusOffer { choreId: string; title: string; icon: string; poin
 
 export interface Board {
   today: string; weekStart: string; kid: Kid; stats: KidWeek; todayItems: AgendaItem[]; week: Day[]; goals: Goal[];
+  /** At the other home today (two homes). */
+  away: { label: string; back: string | null } | null;
   bonus: BonusOffer[]; surprise: { state: 'waiting' } | { state: 'opened'; item: AgendaItem } | null; level: LevelInfo; streak: Streak; achievements: Achievement[]; recent: LedgerEntry[]; timeouts: Timeout[];
   /** Present only when a parent shares the kid's therapy goals with them. */
   therapy: { goals: KidTherapyGoal[]; upcoming: { id: string; kind: string; title: string; provider: string | null; startsAt: string }[] } | null;

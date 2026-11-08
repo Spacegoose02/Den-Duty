@@ -11,6 +11,7 @@ import { goalsFor, homeInfo, homeToday, kidWeek, submitInstance, todayList, type
 import { streaks } from '../progress.ts';
 import { listKids } from './homes.ts';
 import { kidHabits } from './habits.ts';
+import { awayToday } from '../away.ts';
 import { findList, listsOf } from './lists.ts';
 
 export const VOICE_TOPICS = ['chores', 'next', 'points', 'goal', 'streak', 'practice', 'everyone', 'list'] as const;
@@ -66,6 +67,8 @@ export function sayFor(db: DatabaseSync, ctx: HomeCtx, kidKey: unknown, about: T
     case 'chores':
     case 'next': {
       if (off.has('chores')) return `${k.name} has no chores in Den Duty.`;
+      const away = awayToday(db, k.id, today);
+      if (away) return `${k.name} is ${away.label.replace(/^At /, 'at ')} today, so no chores here.`;
       const items = todayList(db, ctx.homeId, k.id, today);
       const left = items.filter((i) => i.status === 'pending' || i.status === 'rejected');
       const waiting = items.filter((i) => i.status === 'submitted').length;

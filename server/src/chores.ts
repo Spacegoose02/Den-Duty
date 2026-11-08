@@ -1,5 +1,6 @@
 // The core loop: chores become daily instances per kid, kids submit them, parents approve, approvals write points.
 // Everything here takes "today" as an argument so it's easy to test and always uses the home's own calendar.
+import { awayLookup } from './away.ts';
 import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { tx, type Row } from './db.ts';
@@ -86,6 +87,7 @@ export function materialize(db: DatabaseSync, homeId: string, from: string, to: 
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   tx(db, () => {
     const paused = kidsWithPageOff(db, homeId, 'chores');
+    const away = awayLookup(db, homeId);
     const weekStart = weekStartOf(db, homeId);
     for (const c of activeChores(db, homeId)) {
       if (!c.memberIds.length || c.bonus) continue;
@@ -94,7 +96,7 @@ export function materialize(db: DatabaseSync, homeId: string, from: string, to: 
       for (const date of dateRange(start, last)) {
         if (!isScheduledOn(s, date)) continue;
         for (const m of kidsOn(c, date, weekStart)) {
-          if (!paused.has(m)) ins.run(newId(), homeId, c.id, m, date, c.title, c.icon, c.points, c.photo, c.due_time, c.late_points, c.routine, c.routine_pos, c.minutes);
+          if (!paused.has(m) && !away(m, date)) ins.run(newId(), homeId, c.id, m, date, c.title, c.icon, c.points, c.photo, c.due_time, c.late_points, c.routine, c.routine_pos, c.minutes);
         }
       }
     }
@@ -281,12 +283,13 @@ export function agenda(db: DatabaseSync, homeId: string, memberIds: string[], fr
   if (to > today) {
     const chores = activeChores(db, homeId);
     const weekStart = weekStartOf(db, homeId);
+    const away = awayLookup(db, homeId);
     for (const day of out) {
       if (day.date <= today) continue;
       for (const c of chores) {
         if (c.bonus || !isScheduledOn(scheduleOf(c), day.date)) continue;
         for (const m of kidsOn(c, day.date, weekStart)) {
-          if (!wanted.has(m)) continue;
+          if (!wanted.has(m) || away(m, day.date)) continue;
           day.items.push({
             id: null, choreId: c.id, memberId: m, date: day.date, title: c.title, icon: c.icon, points: c.points, status: 'planned', note: null,
             started: false, surprise: false, needsPhoto: !!c.photo, hasPhoto: false, photoVersion: null, cheer: null,

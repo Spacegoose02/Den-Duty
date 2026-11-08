@@ -1052,6 +1052,25 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX list_items_list ON list_items(list_id, done, created_at);
   `,
+  // Caregivers (grandparents, babysitters, a co-parent's partner): parents with day-to-day access only, joined with
+  // their own code and optionally only until a date. And two homes: a repeating "at the other home" pattern per kid
+  // plus one-off away dates, on which no chores are due here.
+  `
+  ALTER TABLE members ADD COLUMN access TEXT NOT NULL DEFAULT 'full';
+  ALTER TABLE members ADD COLUMN access_until TEXT;
+  ALTER TABLE homes ADD COLUMN caregiver_code TEXT;
+  CREATE UNIQUE INDEX homes_caregiver_code ON homes(caregiver_code);
+  ALTER TABLE members ADD COLUMN away_plan TEXT;
+  CREATE TABLE kid_away (
+    id TEXT PRIMARY KEY,
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    start_date TEXT NOT NULL,
+    end_date TEXT NOT NULL,
+    label TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX kid_away_member ON kid_away(member_id, start_date);
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

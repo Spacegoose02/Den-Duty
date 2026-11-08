@@ -1,3 +1,4 @@
+import { checkCaregiver, homeForCode, type Access } from './caregivers.ts';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { DatabaseSync } from 'node:sqlite';
 import * as oidc from 'openid-client';
@@ -53,6 +54,8 @@ export interface HomeCtx {
   user: User | null;
   /** The API token's name, when one is acting (for the ledger's "by"). */
   tokenName?: string;
+  /** For a signed-in parent: 'caregiver' has day-to-day access only (see caregivers.ts). */
+  access?: Access;
 }
 
 export interface DeviceAuth { id: string; homeId: string; name: string }
@@ -148,9 +151,11 @@ export function createUser(db: DatabaseSync, u: {
 }
 
 /** Adds a signed-in person to a home as a parent (no-op if they're already in it). */
-export function addParent(db: DatabaseSync, homeId: string, user: Pick<User, 'id' | 'name' | 'avatar'>): void {
-  db.prepare("INSERT OR IGNORE INTO members (id, home_id, user_id, role, name, avatar) VALUES (?, ?, ?, 'parent', ?, ?)")
-    .run(newId(), homeId, user.id, user.name, user.avatar);
+export function addParent(db: DatabaseSync, homeId: string, user: Pick<User, 'id' | 'name' | 'avatar'>, access: Access = 'full'): void {
+  db.prepare("INSERT OR IGNORE INTO members (id, home_id, user_id, role, name, avatar, access) VALUES (?, ?, ?, 'parent', ?, ?, ?)")
+    .run(newId(), homeId, user.id, user.name, user.avatar, access);
+  // Joining with the parents' code later upgrades a caregiver; a caregiver code never downgrades a parent.
+  if (access === 'full') db.prepare("UPDATE members SET access = 'full', access_until = NULL WHERE home_id = ? AND user_id = ?").run(homeId, user.id);
   db.prepare('UPDATE users SET last_home_id = ? WHERE id = ?').run(homeId, user.id);
 }
 
@@ -203,10 +208,10 @@ export function findOrCreateSsoUser(db: DatabaseSync, req: FastifyRequest, reply
   // The reverse proxy already decided who gets in, so it doesn't need a join code; they'll create or join a home next.
   if (id.skipInvite) return createUser(db, fields);
   const pending = req.cookies.dn_invite ? req.unsignCookie(req.cookies.dn_invite) : null;
-  const home = pending?.valid && pending.value ? db.prepare('SELECT id FROM homes WHERE join_code = ?').get(pending.value) as Row | undefined : undefined;
+  const home = pending?.valid && pending.value ? homeForCode(db, pending.value) : null;
   if (!home) return 'invite';
   const created = createUser(db, fields);
-  addParent(db, home.id as string, created);
+  addParent(db, home.homeId, created, home.access);
   reply?.clearCookie('dn_invite', { path: '/' });
   return created;
 }
@@ -342,8 +347,12 @@ export function homeCtx(db: DatabaseSync, req: FastifyRequest, need: 'parent' | 
 
 export function homeCtxFor(db: DatabaseSync, req: FastifyRequest, homeId: string, need: 'parent' | 'viewer' = 'viewer'): HomeCtx {
   if (req.user) {
-    const m = db.prepare("SELECT id FROM members WHERE home_id = ? AND user_id = ? AND role = 'parent'").get(homeId, req.user.id) as Row | undefined;
-    if (m) return { homeId, user: req.user, actor: { kind: 'parent', user: req.user, memberId: m.id as string } };
+    const m = db.prepare(`SELECT m.id, m.access, m.access_until, h.timezone FROM members m JOIN homes h ON h.id = m.home_id
+      WHERE m.home_id = ? AND m.user_id = ? AND m.role = 'parent'`).get(homeId, req.user.id) as Row | undefined;
+    if (m) {
+      checkCaregiver(req, m, m.timezone as string);
+      return { homeId, user: req.user, access: m.access as Access, actor: { kind: 'parent', user: req.user, memberId: m.id as string } };
+    }
     if (req.user.is_admin && db.prepare('SELECT 1 FROM homes WHERE id = ?').get(homeId)) {
       return { homeId, user: req.user, actor: { kind: 'parent', user: req.user, memberId: null } };
     }
@@ -381,6 +390,8 @@ export function assertCanActFor(ctx: HomeCtx, memberId: string): void {
 }
 
 export const isParent = (ctx: HomeCtx): boolean => ctx.actor.kind === 'parent';
+/** A parent with the whole app (not a caregiver). */
+export const isFullParent = (ctx: HomeCtx): boolean => ctx.actor.kind === 'parent' && ctx.access !== 'caregiver';
 
 // ---------- single sign-on: Google and any OpenID Connect provider (Authentik, Authelia, Keycloak, Pocket ID...) ----------
 
@@ -500,7 +511,7 @@ export function registerAuthRoutes(app: FastifyInstance, db: DatabaseSync): void
   app.post('/api/auth/invite', async (req, reply) => {
     const code = requireStr((req.body as Row)?.code, 'Join code', 20).toUpperCase().replace(/[^A-Z0-9]/g, '');
     limitAuth(req, 'invite');
-    if (!db.prepare('SELECT 1 FROM homes WHERE join_code = ?').get(code)) throw new HttpError(404, 'No home has that join code');
+    if (!homeForCode(db, code)) throw new HttpError(404, 'No home has that join code');
     reply.setCookie('dn_invite', code, { ...cookieOpts(reply), maxAge: 900 });
     return { ok: true };
   });

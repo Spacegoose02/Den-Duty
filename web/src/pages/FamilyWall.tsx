@@ -18,6 +18,7 @@ interface WallKid {
   level: { level: number; name: string; badge: string } | null;
   chores: { done: number; waiting: number; total: number } | null;
   goal: { title: string; percent: number; progress: number; target: number; reached: boolean } | null;
+  away?: { label: string; back: string | null } | null;
   streak: number | null; badgesToday: { id: string; icon: string; title: string }[]; denMessage: string | null;
   timeouts: { id: string; what: string; state: string; endsAt: string; startsAt: string; minutesLeft: number }[];
   penalties: { reason: string; amount: number }[];
@@ -174,6 +175,7 @@ export function FamilyWall() {
                 {k.chores && <Ring done={k.chores.done} total={k.chores.total} color={k.color} />}
                 <div className="wall-stats">
                   <div><span className="wall-big">{k.balance}</span> <span className="wall-sub">{icon} {wall.home.pointsName}</span></div>
+                  {k.away && <div className="wall-away">🚗 {k.away.label}{k.away.back ? ` · back ${dayName(k.away.back)}` : ''}</div>}
                   {k.streak != null && k.streak > 0 && <div className="wall-streak">🔥 {k.streak}-day streak</div>}
                   {k.chores && k.chores.waiting > 0 && <div className="wall-sub">⏳ {k.chores.waiting} waiting for a grown-up</div>}
                 </div>

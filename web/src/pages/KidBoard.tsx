@@ -208,6 +208,13 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
         {onExit && <button className="kid-exit" onClick={onExit}>👋 I'm done</button>}
       </header>
 
+      {board.away && (
+        <div className="card away-note">
+          <span style={{ fontSize: '2rem' }} aria-hidden>🚗</span>
+          <span style={{ flex: 1 }}>{asParent ? `${kid.name} is` : "You're"} {board.away.label.replace(/^At /, 'at ')} today, so no chores here.{board.away.back ? ` Back ${dayName(board.away.back)}.` : ''}</span>
+          {readAloud && !asParent && <SpeakButton text={`You're ${board.away.label} today.`} />}
+        </div>
+      )}
       {denNote && (
         <div className="den-note pg-chores" aria-live="polite">
           <RaccoonAvatar variant={kid.avatar} size={44} />

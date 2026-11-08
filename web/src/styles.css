@@ -809,3 +809,10 @@ button.link { background: none; border: none; padding: 0; min-height: 0; color: 
 .list-item.done .list-tick { background: var(--ok); border-color: var(--ok); color: white; }
 .wall-list { min-width: min(300px, 100%); }
 .wall-list input { min-height: 40px; }
+
+/* ---------- two homes ---------- */
+.away-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; max-width: 520px; }
+.away-day { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 0; min-height: 52px; font-size: 1.2rem; }
+.away-day.on { background: color-mix(in srgb, var(--primary) 16%, var(--surface)); border-color: var(--primary); }
+.away-note { display: flex; align-items: center; gap: 12px; font-size: 1.15rem; font-weight: 700; }
+.wall-away { font-weight: 800; }

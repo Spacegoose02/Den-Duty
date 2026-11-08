@@ -1,3 +1,4 @@
+import { awayToday } from '../away.ts';
 import type { FastifyInstance } from 'fastify';
 import type { DatabaseSync } from 'node:sqlite';
 import { assertCanActFor, homeCtx, type HomeCtx } from '../auth.ts';
@@ -256,6 +257,8 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
       today,
       weekStart: start,
       kid: kidView(db, kid),
+      // At the other home today (two homes): the board says so instead of "nothing to do".
+      away: awayToday(db, memberId, today),
       stats: kidWeek(db, home, memberId, today),
       todayItems: on('chores') ? todayList(db, ctx.homeId, memberId, today) : [],
       week: withDoctors(db, await withFeeds(db, ctx, on('chores') ? agenda(db, ctx.homeId, [memberId], start, 7, today) : agenda(db, ctx.homeId, [], start, 7, today), memberId), [memberId], ctx.actor.kind !== 'parent'),

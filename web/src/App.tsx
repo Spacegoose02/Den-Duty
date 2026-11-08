@@ -41,13 +41,18 @@ const NAV = [
   { to: '/settings', ico: '⚙️', label: 'Settings' },
 ];
 
+/** Caregivers get the day-to-day pages only. */
+const CAREGIVER_NAV = new Set(['/', '/calendar', '/kids', '/lists', '/settings']);
+
 /** Which per-kid page each nav entry belongs to (see shared/pages.ts). */
 const NAV_PAGE: Record<string, KidPage> = { '/chores': 'chores', '/parent-duty': 'parentduty', '/rewards': 'goals', '/allowance': 'goals', '/stats': 'stats', '/doctors': 'doctors' };
 
 function Nav({ className }: { className: string }) {
   const { who, home } = useApp();
   const kids = home?.kids ?? [];
-  const shown = NAV.filter((n) => !NAV_PAGE[n.to] || !kids.length || kids.some((k) => !k.pagesOff?.includes(NAV_PAGE[n.to])));
+  const caregiver = home?.access === 'caregiver';
+  const shown = NAV.filter((n) => (!caregiver || CAREGIVER_NAV.has(n.to))
+    && (!NAV_PAGE[n.to] || !kids.length || kids.some((k) => !k.pagesOff?.includes(NAV_PAGE[n.to]))));
   return (
     <nav className={className} aria-label="Main">
       {className === 'rail' && (

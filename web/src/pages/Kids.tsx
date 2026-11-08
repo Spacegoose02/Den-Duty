@@ -1,3 +1,4 @@
+import { TwoHomesCard } from '../components/Caregivers.tsx';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, type Goal, type Kid, type LedgerEntry } from '../api.ts';
@@ -203,6 +204,7 @@ function KidCard({ kid, onChange }: { kid: Kid; onChange: () => Promise<void> })
       </form>
       <IdeasButton kind="goal" kidId={kid.id} onPick={(i) => setGoal({ title: i.title, targetPoints: i.points, reward: i.detail.slice(0, 200) })} />
       </>)}
+      <TwoHomesCard kidId={kid.id} kidName={kid.name} />
       {kid.pagesOff.length > 0 && <p className="small muted" style={{ margin: 0 }}>Turned off for {kid.name}: {kid.pagesOff.map((p) => KID_PAGES.find((x) => x.id === p)?.label).join(', ')} (Edit to change).</p>}
 
       <h3 style={{ margin: 0 }}>Bonus or take-back</h3>
@@ -262,6 +264,20 @@ export function Kids() {
   const { home, base, refreshHome, toast } = useApp();
   const [adding, setAdding] = useState(false);
   const count = home?.kids.length ?? 0;
+  // Caregivers: just the kids, each opening their board.
+  if (home?.access === 'caregiver') return (
+    <div className="stack">
+      <div className="topbar"><h1>Kids</h1></div>
+      <div className="row">
+        {home.kids.map((k) => (
+          <Link key={k.id} to={`/kids/${k.id}`} className="card stack" style={{ alignItems: 'center', minWidth: 160, textDecoration: 'none', color: 'inherit' }}>
+            <RaccoonAvatar variant={k.avatar} size={80} />
+            <strong>{k.name}</strong>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
   return (
     <div className="stack">
       <div className="topbar">

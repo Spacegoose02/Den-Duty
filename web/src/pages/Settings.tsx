@@ -1,3 +1,4 @@
+import { AccessControls, CaregiverControls } from '../components/Caregivers.tsx';
 import { useEffect, useState } from 'react';
 import { PushSettings } from '../components/Push.tsx';
 import { Link } from 'react-router-dom';
@@ -179,11 +180,13 @@ function HomeSettings() {
         <strong className="pair-code" style={{ fontSize: '1.4rem' }}>{home.joinCode}</strong>
         <button onClick={async () => { await api(`${base}/join-code`, { body: {} }); await refreshHome(); }}>New code</button>
       </div>
+      <CaregiverControls home={home} />
       <div className="list">
         {home.parents?.map((p) => (
           <div key={p.id} className="list-item">
             <RaccoonAvatar variant={p.avatar} size={40} />
             <span style={{ flex: 1 }}>{p.name}{p.userId === me.id && ' (you)'}</span>
+            {p.userId !== me.id && <AccessControls p={p} />}
             <button className="ghost danger" onClick={async () => {
               const self = p.userId === me.id;
               if (!confirm(self ? 'Leave this home?' : `Remove ${p.name}?`)) return;
@@ -462,13 +465,32 @@ function WeatherCard() {
 }
 
 export function Settings() {
-  const { who } = useApp();
+  const { who, home, base, toast, refresh } = useApp();
   // Links like /settings#ai jump to that card once it has loaded.
   useEffect(() => {
     if (!location.hash) return;
     const t = window.setTimeout(() => document.querySelector(location.hash)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 600);
     return () => window.clearTimeout(t);
   }, []);
+  // Wait for the home so a caregiver never loads the parents' cards.
+  if (!home) return null;
+  if (home.access === 'caregiver') return (
+    <div className="stack" style={{ maxWidth: 960 }}>
+      <div className="topbar"><h1>Settings</h1></div>
+      <div className="card stack">
+        <h2 style={{ margin: 0 }}>🧡 You're a caregiver in {home.name}</h2>
+        <p className="small muted" style={{ margin: 0 }}>You can check off and approve chores, answer the Helpdesk, run time-outs, give quick rewards and use the lists. A parent looks after the rest.</p>
+        <div className="row"><button className="ghost danger" onClick={async () => {
+          if (!confirm(`Leave ${home.name}?`)) return;
+          try { await api(`${base}/parents/me`, { method: 'DELETE' }); } catch (e) { toast((e as Error).message); return; }
+          await refresh();
+        }}>Leave this home</button></div>
+      </div>
+      <PushSettings />
+      <Profile />
+      <SecurityCard />
+    </div>
+  );
   return (
     <div className="stack" style={{ maxWidth: 960 }}>
       <div className="topbar"><h1>Settings</h1></div>
