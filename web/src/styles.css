@@ -475,7 +475,7 @@ td, th { text-align: left; padding: 8px; border-bottom: 1px solid var(--border);
 .switch:not(.on) strong { color: var(--muted); }
 
 /* pages a parent switched off for this kid */
-.board.off-chores .pg-chores, .board.off-goals .pg-goals, .board.off-stats .pg-stats, .board.off-habits .pg-habits { display: none; }
+.board.off-chores .pg-chores, .board.off-goals .pg-goals, .board.off-stats .pg-stats, .board.off-habits .pg-habits, .board.off-den .pg-den { display: none; }
 /* The week still shows school lunch and other feeds when only Chores is off. */
 .board.off-chores .pg-calendar-week { display: block; }
 .board.off-chores.off-calendar .pg-calendar-week { display: none; }
@@ -779,3 +779,18 @@ button.link { background: none; border: none; padding: 0; min-height: 0; color: 
 .meeting-kid { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px 16px; border: 3px solid var(--border); border-radius: 16px; min-width: 150px; }
 .meeting-week { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
 .meeting-day { border: 1px solid var(--border); border-radius: 12px; padding: 8px; }
+
+/* ---------- Rocky's den ---------- */
+.den-room { position: relative; border-radius: 16px; overflow: hidden; min-height: 220px; display: grid; grid-template-rows: 36px 1fr 96px;
+  background: linear-gradient(color-mix(in srgb, var(--kid, var(--primary)) 18%, var(--surface)) 0 62%, color-mix(in srgb, #a0703c 35%, var(--surface)) 62% 100%);
+  font-size: 2.2rem; transition: filter .4s; }
+.den-ceiling, .den-wall, .den-floor { display: flex; align-items: center; justify-content: center; gap: 18px; flex-wrap: wrap; padding: 0 12px; }
+.den-floor { align-items: flex-end; padding-bottom: 10px; }
+.den-window { background: color-mix(in srgb, #7cc4ff 40%, transparent); border-radius: 8px; padding: 2px 8px; }
+.den-rocky { display: inline-flex; }
+.den-mess { position: absolute; bottom: 6px; font-size: 1.6rem; }
+.den-sparkling { box-shadow: inset 0 0 0 3px color-mix(in srgb, gold 60%, transparent); }
+.den-very-messy { filter: saturate(.7); }
+.den-shop { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+.den-shop-item { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px; border-radius: 12px; background: var(--surface-2); text-align: center; }
+.den-shop-item.locked { opacity: .6; }

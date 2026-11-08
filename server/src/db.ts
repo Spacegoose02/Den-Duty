@@ -1016,6 +1016,16 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE chore_instances ADD COLUMN traded INTEGER NOT NULL DEFAULT 0;
   ALTER TABLE homes ADD COLUMN trade_mode TEXT NOT NULL DEFAULT 'ask';
   `,
+  // Rocky's den: the furniture each kid bought for their den (with points), and whether it's out in the room.
+  `
+  CREATE TABLE den_items (
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    item_id TEXT NOT NULL,
+    placed INTEGER NOT NULL DEFAULT 1,
+    bought_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (member_id, item_id)
+  );
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {
