@@ -961,6 +961,20 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX habit_logs_home ON habit_logs(home_id, status);
   `,
+  // Feelings check-in: one per kid per day (tapping again changes it). Parents see them; a hard feeling can buzz them.
+  `
+  CREATE TABLE kid_feelings (
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    date TEXT NOT NULL,
+    feeling TEXT NOT NULL,
+    reasons TEXT NOT NULL DEFAULT '[]',
+    note TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (member_id, date)
+  );
+  ALTER TABLE homes ADD COLUMN feelings_alert INTEGER NOT NULL DEFAULT 1;
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

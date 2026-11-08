@@ -7,6 +7,7 @@ export const KID_PAGES = [
   { id: 'timeout', label: 'Time-outs', icon: '⏳', hint: 'Time-outs and buying time back' },
   { id: 'helpdesk', label: 'Helpdesk', icon: '🛎️', hint: 'Asking a grown-up for help' },
   { id: 'habits', label: 'Practice', icon: '🎯', hint: 'Reading, instruments, homework and other practice' },
+  { id: 'feelings', label: 'Feelings check-in', icon: '💛', hint: 'A daily “how do you feel?” on their board' },
   { id: 'goals', label: 'Goals & rewards', icon: '🎁', hint: 'Goals, rewards and reward votes' },
   { id: 'stats', label: 'Stats & badges', icon: '📊', hint: 'Charts, streaks, levels and badges' },
   { id: 'doctors', label: 'Doctors', icon: '🩺', hint: 'Appointments, goals and notes' },

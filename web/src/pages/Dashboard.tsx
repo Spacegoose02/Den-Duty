@@ -1,3 +1,4 @@
+import { FeelingsCard } from '../components/Feelings.tsx';
 import { HabitsWaitingCard } from '../components/Habits.tsx';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -112,6 +113,7 @@ export function Dashboard() {
 
       <PracticeWaitingCard onChange={reloadSummary} />
       <HabitsWaitingCard />
+      <FeelingsCard />
       <MedsTodayCard />
       {summary && <RemindersCard items={summary.reminders} onChange={() => void reloadSummary()} />}
       {summary && <HelpdeskCard items={summary.helpdesk} onChange={() => void reloadSummary()} />}

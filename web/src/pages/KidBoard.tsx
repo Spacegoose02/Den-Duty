@@ -17,6 +17,7 @@ import { KidMedicine, PracticeMode } from '../components/KidPractice.tsx';
 import { RoutineCards, RoutinePlayer } from '../components/Routines.tsx';
 import { KidJars } from '../components/Money.tsx';
 import { KidHabits } from '../components/Habits.tsx';
+import { KidFeelings } from '../components/Feelings.tsx';
 import { KidSportsCards } from '../components/Sports.tsx';
 import { KidWeatherCard } from '../components/Weather.tsx';
 import { SpeakButton, speak } from '../components/Speak.tsx';
@@ -189,6 +190,8 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
           {readAloud && <SpeakButton text={denNote.text} />}
         </div>
       )}
+
+      <KidFeelings memberId={memberId} kidName={kid.name} asParent={asParent} readAloud={readAloud} picture={kid.pictureMode} />
 
       {(board.timeouts.length > 0 || (asParent && !kid.pagesOff.includes('timeout'))) && (
         <section className="card stack pg-timeout">
