@@ -257,6 +257,8 @@ export interface Timeout {
   state: 'upcoming' | 'active' | 'over'; minutesLeft: number;
   /** Also locks games in LootDen: all of them, or just Roblox. */
   games?: 'all' | 'roblox' | null;
+  /** Also pauses chat in Dendrop: the whole time-out, or until today's chores are done. */
+  chat?: 'all' | 'chores' | null;
   buy: { unit: 'hour' | 'day'; price: number; maxMinutes: number; boughtMinutes: number; unitsLeft: number } | null;
   pending: TimeoutRequest | null;
 }

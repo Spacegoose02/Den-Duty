@@ -421,6 +421,43 @@ function SportsCard() {
   );
 }
 
+/** Weather Scout, the family's weather server: its address and an app key, so today's weather shows on boards and the wall. */
+function WeatherCard() {
+  const { base, toast } = useApp();
+  const [s, reload] = useLoad<{ url: string; hasKey: boolean }>(`${base}/weather-link`);
+  const [url, setUrl] = useState<string | null>(null);
+  const [key, setKey] = useState('');
+  if (!s) return null;
+  const save = async (body: { url: string; key?: string }) => {
+    try {
+      const r = await api<{ url: string; hasKey: boolean; check: { ok: true; place: string | null; temp: number | null } | { ok: false; reason: string } | null }>(
+        `${base}/weather-link`, { method: 'PUT', body });
+      toast(!r.url ? 'Weather Scout unlinked'
+        : !r.check ? 'Address saved. Add an app key to show the weather.'
+          : r.check.ok ? `Weather now shows on boards and the wall 🌦️ (${r.check.temp ?? '?'}°${r.check.place ? ` in ${r.check.place}` : ''})`
+            : `Saved, but: ${r.check.reason}`);
+      setUrl(null);
+      setKey('');
+      await reload();
+    } catch (e) { toast((e as Error).message); }
+  };
+  return (
+    <div className="card stack" id="weather">
+      <h2 style={{ margin: 0 }}>🌦️ Weather Scout</h2>
+      <p className="small muted" style={{ margin: 0 }}>
+        Show today's weather on every kid's board and the family wall: what to wear, a recess traffic light and weather alerts in kid words.
+        In Weather Scout, open <strong>Family &amp; settings → Connected apps</strong>, make a key, and paste it here with Weather Scout's address.
+      </p>
+      <div className="row">
+        <input placeholder="http://192.168.1.10:8080" value={url ?? s.url} onChange={(e) => setUrl(e.target.value)} style={{ flex: 2, minWidth: 220 }} aria-label="Weather Scout's address" />
+        <input type="password" placeholder={s.hasKey ? 'Key saved' : 'wsk_… app key'} value={key} onChange={(e) => setKey(e.target.value)} style={{ flex: 1, minWidth: 160 }} aria-label="Weather Scout app key" autoComplete="off" />
+        <button className="primary" onClick={() => void save({ url: (url ?? s.url).trim(), ...(key.trim() ? { key: key.trim() } : {}) })}>Save</button>
+        {s.url && <button className="ghost" onClick={() => void save({ url: '' })}>Unlink</button>}
+      </div>
+    </div>
+  );
+}
+
 export function Settings() {
   const { who } = useApp();
   // Links like /settings#ai jump to that card once it has loaded.
@@ -437,6 +474,7 @@ export function Settings() {
       <FamilyWallCard />
       <LootDenCard />
       <SportsCard />
+      <WeatherCard />
       <HomeSettings />
       <CalendarsCard />
       <AiCard />

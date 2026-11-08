@@ -921,6 +921,16 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE homes ADD COLUMN sports_url TEXT;
   ALTER TABLE members ADD COLUMN sports_key TEXT;
   `,
+  // Weather: the family's Weather Scout server and an app key from it (sealed like the other keys).
+  `
+  ALTER TABLE homes ADD COLUMN weather_url TEXT;
+  ALTER TABLE homes ADD COLUMN weather_key TEXT;
+  `,
+  // Dendrop link: a time-out can pause the kid's chat in Dendrop, the family chat app: the whole time, or until today's
+  // chores are done.
+  `
+  ALTER TABLE timeouts ADD COLUMN chat TEXT CHECK (chat IN ('all', 'chores'));
+  `,
   // Repeating Doctors appointments. The series holds the rule; each visit is a normal therapy_appointments row (so
   // prep questions, follow-up, status, calendars and summaries work per visit). Visits are made a few months ahead and
   // topped up as time passes; next_index is the next visit number to make, so a deleted visit never comes back.

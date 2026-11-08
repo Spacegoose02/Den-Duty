@@ -23,7 +23,7 @@ export async function family() {
     const res = await app.inject({ method: method as 'GET', url, payload: payload as object, headers: { ...headers, ...(cookie ? { cookie } : {}) } });
     for (const ck of res.cookies) { if (ck.value) jar[ck.name] = ck.value; else delete jar[ck.name]; }
     const json = String(res.headers['content-type'] ?? '').includes('json');
-    return { status: res.statusCode, body: res.body ? (json ? JSON.parse(res.body) : res.body) : null };
+    return { status: res.statusCode, headers: res.headers, body: res.body ? (json ? JSON.parse(res.body) : res.body) : null };
   };
   const mom: Jar = {};
   await call(mom, 'POST', '/api/auth/local', { name: 'Mom' });

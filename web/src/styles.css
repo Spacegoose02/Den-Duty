@@ -726,3 +726,25 @@ button.link { background: none; border: none; padding: 0; min-height: 0; color: 
 .wall-sports { display: flex; flex-direction: column; gap: 4px; }
 .wall-sport { display: flex; align-items: center; gap: 8px; font-size: 0.98rem; padding: 3px 8px; border-radius: 10px; border-left: 5px solid var(--team); background: color-mix(in srgb, var(--team) 8%, var(--surface)); }
 .wall-sport.live { background: color-mix(in srgb, var(--team) 18%, var(--surface)); }
+
+/* Weather (from Weather Scout) */
+.wx-now { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.wx-icon { font-size: 3.4rem; line-height: 1; }
+.wx-temp { font-size: 2.4rem; font-weight: 800; line-height: 1; }
+.wx-label { font-weight: 700; }
+.wx-recess { margin-left: auto; display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 14px; border: 2px solid var(--ok); background: color-mix(in srgb, var(--ok) 10%, var(--surface)); max-width: 320px; }
+.wx-recess.yellow { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, var(--surface)); }
+.wx-recess.red { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, var(--surface)); }
+.wx-light { font-size: 1.8rem; }
+.wx-rocky { flex: none; display: block; height: auto; filter: drop-shadow(0 3px 4px rgb(0 0 0 / .18)); }
+.wx-rocky-says { font-weight: 700; }
+.wx-wall { position: relative; }
+.wx-wall .wx-rocky { position: absolute; right: 10px; bottom: 6px; }
+.wx-wall:has(.wx-rocky) { padding-right: 84px; min-height: 96px; }
+.wx-gear { display: flex; flex-wrap: wrap; gap: 8px; }
+.wx-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; font-weight: 700; background: color-mix(in srgb, var(--kid, var(--accent)) 14%, var(--surface)); }
+.wx-chip span { font-size: 1.4rem; }
+.wx-alert { padding: 8px 12px; border-radius: 12px; display: flex; gap: 8px; flex-wrap: wrap; }
+.wx-alert.warn { background: color-mix(in srgb, var(--warn) 18%, var(--surface)); }
+.wx-alert.bad { background: color-mix(in srgb, var(--danger) 18%, var(--surface)); }
+@media (max-width: 520px) { .wx-recess { margin-left: 0; max-width: none; width: 100%; } }
