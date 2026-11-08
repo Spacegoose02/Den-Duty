@@ -24,6 +24,7 @@ import { KidTrades, TradeForm, useTrades } from '../components/Trades.tsx';
 import { KidSportsCards } from '../components/Sports.tsx';
 import { KidWeatherCard } from '../components/Weather.tsx';
 import { SpeakButton, speak } from '../components/Speak.tsx';
+import { QueuedError, useQueuedDone } from '../offline.tsx';
 import { clockText } from '../../../shared/schedule.ts';
 import type { RoutineId } from '../../../shared/catalog.ts';
 
@@ -94,7 +95,12 @@ function recentLine(e: LedgerEntry, icon: string): { mark: string; text: string;
 
 function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent: boolean; onExit?: () => void }) {
   const { base, home, toast, refresh } = useApp();
-  const [board, reload] = useLoad<Board>(`${base}/kids/${memberId}/board`);
+  const [loaded, reload] = useLoad<Board>(`${base}/kids/${memberId}/board`);
+  const queued = useQueuedDone();
+  // A chore tapped while offline shows as sent; it goes to the server when the Wi-Fi is back.
+  const board = loaded && queued.size
+    ? { ...loaded, todayItems: loaded.todayItems.map((i) => i.id && queued.has(i.id) && (i.status === 'pending' || i.status === 'rejected') ? { ...i, status: 'submitted' as const } : i) }
+    : loaded;
   const [practicing, setPracticing] = useState<KidTherapyGoal | null>(null);
   const [polls, reloadPolls] = useLoad<Poll[]>(`${base}/polls`);
   const [denNote] = useLoad<{ text: string; source: string } | null>(`${base}/kids/${memberId}/room-message`, [memberId]);
@@ -106,6 +112,13 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
   const seenApproved = useRef<Set<string> | null>(null);
   const [trading, setTrading] = useState<AgendaItem | null>(null);
   const [trades, reloadTrades] = useTrades(!asParent);
+
+  // Things tapped while offline just went through: show them as the server sees them.
+  useEffect(() => {
+    const on = () => void reload();
+    window.addEventListener('den-duty-synced', on);
+    return () => window.removeEventListener('den-duty-synced', on);
+  }, [reload]);
 
   // On the kid's own screen, keep an eye out for approvals so the party happens while they're still looking.
   useEffect(() => {
@@ -150,7 +163,13 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
       if (!image) return;
       await post(`/instances/${i.id}/photo`, { image });
     }
-    const r = await post(`/instances/${i.id}/done`) as { awarded: number };
+    let r: { awarded: number };
+    try { r = await post(`/instances/${i.id}/done`) as { awarded: number }; } catch (e) {
+      if (!(e instanceof QueuedError)) throw e;
+      confetti({ colors: [kid.color], count: 90 });
+      celebrate(i.icon, 'Saved! It will send when the Wi-Fi is back. 📶');
+      return;
+    }
     if (asParent) { confetti({ colors: [kid.color], count: 80 }); toast(`${i.title}: +${r.awarded} ${icon}`); }
     else { confetti({ colors: [kid.color], count: left === 1 ? 220 : 90 }); celebrate(i.icon, left === 1 ? 'Last one! You did them all! 🎉' : 'Nice work! Sent to a grown-up.'); }
   });

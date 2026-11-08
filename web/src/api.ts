@@ -1,3 +1,4 @@
+import { enqueue, isQueueable, QueuedError, setOffline } from './offline.tsx';
 import type { ScheduleKind } from '../../shared/schedule.ts';
 import type { RoutineId } from '../../shared/catalog.ts';
 import type { Achievement, LevelInfo } from '../../shared/progress.ts';
@@ -14,14 +15,26 @@ export class ApiError extends Error {
 }
 
 export async function api<T = unknown>(path: string, opts: { method?: string; body?: unknown } = {}): Promise<T> {
-  const res = await fetch(path, {
-    method: opts.method ?? (opts.body === undefined ? 'GET' : 'POST'),
-    headers: opts.body === undefined ? {} : { 'content-type': 'application/json' },
-    body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
-    credentials: 'same-origin',
-  });
+  const method = opts.method ?? (opts.body === undefined ? 'GET' : 'POST');
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method,
+      headers: opts.body === undefined ? {} : { 'content-type': 'application/json' },
+      body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+      credentials: 'same-origin',
+    });
+  } catch {
+    // No network at all. A kid's "I did it!" waits in the outbox; anything else says so.
+    setOffline(true);
+    if (isQueueable(method, path)) { enqueue(method, path, opts.body); throw new QueuedError(); }
+    throw new ApiError(0, "No internet right now. Try again when the Wi-Fi is back.");
+  }
+  // The service worker answers with a saved copy when it can't reach the server.
+  setOffline(res.headers.get('x-den-duty-offline') === '1');
   const text = await res.text();
   const data = text ? safeJson(text) : null;
+  if (res.ok && path === '/api/auth/logout') navigator.serviceWorker?.controller?.postMessage('clear-cache');
   if (!res.ok) throw new ApiError(res.status, (data as { error?: string })?.error ?? `Request failed (${res.status})`);
   return data as T;
 }
