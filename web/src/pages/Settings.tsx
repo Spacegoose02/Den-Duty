@@ -11,6 +11,7 @@ import { CalendarsCard } from './Calendars.tsx';
 import { AiCard } from '../components/Ideas.tsx';
 import { BackupsCard } from '../components/Backups.tsx';
 import { PhotoFrameCard } from '../components/PhotoFrame.tsx';
+import { TradeModeCard } from '../components/Trades.tsx';
 
 function Profile() {
   const { who, home, refresh, toast } = useApp();
@@ -479,6 +480,7 @@ export function Settings() {
       <SportsCard />
       <WeatherCard />
       <HomeSettings />
+      <TradeModeCard />
       <CalendarsCard />
       <AiCard />
       <Profile />

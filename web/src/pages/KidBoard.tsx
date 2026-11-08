@@ -19,6 +19,7 @@ import { KidJars } from '../components/Money.tsx';
 import { KidHabits } from '../components/Habits.tsx';
 import { KidFeelings } from '../components/Feelings.tsx';
 import { KidMeetingNote } from './Meeting.tsx';
+import { KidTrades, TradeForm, useTrades } from '../components/Trades.tsx';
 import { KidSportsCards } from '../components/Sports.tsx';
 import { KidWeatherCard } from '../components/Weather.tsx';
 import { SpeakButton, speak } from '../components/Speak.tsx';
@@ -102,6 +103,8 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
   const [newTimeout, setNewTimeout] = useState(false);
   const [routine, setRoutine] = useState<RoutineId | null>(null);
   const seenApproved = useRef<Set<string> | null>(null);
+  const [trading, setTrading] = useState<AgendaItem | null>(null);
+  const [trades, reloadTrades] = useTrades(!asParent);
 
   // On the kid's own screen, keep an eye out for approvals so the party happens while they're still looking.
   useEffect(() => {
@@ -192,6 +195,9 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
         </div>
       )}
 
+      {!asParent && trades && <KidTrades memberId={memberId} trades={trades.trades} mode={trades.mode} onChange={() => { void reloadTrades(); void reload(); }} />}
+      {trading && <TradeForm item={trading} onClose={() => setTrading(null)} onDone={() => { setTrading(null); void reloadTrades(); }} />}
+
       <KidMeetingNote memberId={memberId} color={kid.color} />
 
       <KidFeelings memberId={memberId} kidName={kid.name} asParent={asParent} readAloud={readAloud} picture={kid.pictureMode} />
@@ -244,6 +250,9 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
                         {col.id === 'todo' && <button disabled={busy === k} onClick={() => void act(k, () => post(`/instances/${k}/start`, { started: true }))} aria-label="Start">▶</button>}
                         {(col.id === 'todo' || col.id === 'doing') && <button className="primary" disabled={busy === k} onClick={() => void done(i)} aria-label={needsSnap(i) ? 'Snap a photo and finish' : 'Done'}>{needsSnap(i) ? '📸' : '✓'}</button>}
                         {col.id === 'doing' && <button disabled={busy === k} onClick={() => void act(k, () => post(`/instances/${k}/start`, { started: false }))} aria-label="Back to to do">↩</button>}
+                        {col.id === 'todo' && !asParent && trades?.mode && trades.mode !== 'off' && !isBonus && !i.helperId && (home?.kids.length ?? 0) > 1 && i.date === board.today && (
+                          <button disabled={busy === k} onClick={() => setTrading(i)} aria-label="Swap or ask for help">🔁</button>
+                        )}
                         {col.id === 'todo' && isBonus && !i.surprise && <button disabled={busy === k} onClick={() => void act(k, () => post(`/instances/${k}/unclaim`))} aria-label="Drop bonus">✕</button>}
                         {col.id === 'waiting' && <button disabled={busy === k} onClick={() => void act(k, () => post(`/instances/${k}/undo`))}>Not yet</button>}
                         {col.id === 'done' && asParent && <button disabled={busy === k} onClick={() => void act(k, async () => {

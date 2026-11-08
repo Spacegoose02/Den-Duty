@@ -1,3 +1,4 @@
+import { TradesWaitingCard } from '../components/Trades.tsx';
 import { FeelingsCard } from '../components/Feelings.tsx';
 import { HabitsWaitingCard } from '../components/Habits.tsx';
 import { useState } from 'react';
@@ -119,6 +120,7 @@ export function Dashboard() {
 
       <PracticeWaitingCard onChange={reloadSummary} />
       <HabitsWaitingCard />
+      <TradesWaitingCard />
       <FeelingsCard />
       <MedsTodayCard />
       {summary && <RemindersCard items={summary.reminders} onChange={() => void reloadSummary()} />}

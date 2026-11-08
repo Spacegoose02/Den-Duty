@@ -994,6 +994,28 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX family_meetings_home ON family_meetings(home_id, held_on);
   `,
+  // Chore trading: two kids swap today's chores, or one asks a sibling to help and they split the points. A swap
+  // trades what the two instances are (title, points...), so nothing is re-created for the original kid; "traded"
+  // keeps chore edits from undoing it. Parents can let trades happen freely, check each one, or turn trading off.
+  `
+  CREATE TABLE chore_trades (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (kind IN ('swap', 'help')),
+    from_member TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    to_member TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    instance_id TEXT NOT NULL REFERENCES chore_instances(id) ON DELETE CASCADE,
+    other_instance_id TEXT REFERENCES chore_instances(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'offered' CHECK (status IN ('offered', 'accepted', 'done', 'declined', 'cancelled')),
+    date TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    decided_at TEXT
+  );
+  CREATE INDEX chore_trades_home ON chore_trades(home_id, status);
+  ALTER TABLE chore_instances ADD COLUMN helper_id TEXT REFERENCES members(id) ON DELETE SET NULL;
+  ALTER TABLE chore_instances ADD COLUMN traded INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE homes ADD COLUMN trade_mode TEXT NOT NULL DEFAULT 'ask';
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

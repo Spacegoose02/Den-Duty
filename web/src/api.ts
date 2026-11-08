@@ -83,6 +83,8 @@ export interface AgendaItem {
   needsPhoto?: boolean; hasPhoto?: boolean; photoVersion?: string | null;
   /** A parent's cheer on the approval (see CHEERS). */
   cheer?: string | null;
+  /** A sibling helping (they split the points), and whether it was swapped with a sibling's chore. */
+  helperId?: string | null; traded?: boolean;
   /** Due by a time of day, worth latePoints after it; late once finished after it. */
   dueTime?: string | null; latePoints?: number | null; late?: boolean;
   /** A step in a routine, in order, with a timer. */
