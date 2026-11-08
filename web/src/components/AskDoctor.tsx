@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../api.ts';
 import { useApp, useLoad } from '../state.tsx';
 import { DoctorRaccoon } from './Raccoon.tsx';
@@ -35,7 +36,7 @@ export function AskDoctorCard({ kidId, kidName }: { kidId: string; kidName: stri
         <DoctorRaccoon size={64} title={DOCTOR_NAME} />
         <div style={{ flex: 1 }}>
           <h2 style={{ margin: 0 }}>Ask {DOCTOR_NAME}</h2>
-          <span className="small muted">Questions about {kidName}, using their age and the sections you follow here. Only you see this.</span>
+          <span className="small muted">Questions about {kidName}, using their age and the sections you follow here. Only you see this. For anything else, <Link to="/ask?tab=doctor">chat with {DOCTOR_NAME}</Link>.</span>
         </div>
       </div>
       {info.topics.length > 0 && (

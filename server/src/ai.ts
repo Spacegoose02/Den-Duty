@@ -101,7 +101,11 @@ export function buildPrompt(c: IdeaContext): string {
 }
 
 /** One structured request to Claude with the home's key. Throws friendly HttpErrors for the app to show. */
-async function askJson<T>(db: DatabaseSync, homeId: string, system: string, prompt: string | Anthropic.Beta.BetaContentBlockParam[], schema: Record<string, unknown>): Promise<T> {
+async function askJson<T>(db: DatabaseSync, homeId: string, system: string, prompt: string | Anthropic.Beta.BetaContentBlockParam[] | Anthropic.Beta.BetaMessageParam[], schema: Record<string, unknown>): Promise<T> {
+  // A plain prompt is one user turn; a list of { role, content } turns is a whole conversation (the chats).
+  const messages: Anthropic.Beta.BetaMessageParam[] = Array.isArray(prompt) && prompt.length > 0 && 'role' in prompt[0]
+    ? prompt as Anthropic.Beta.BetaMessageParam[]
+    : [{ role: 'user', content: prompt as string | Anthropic.Beta.BetaContentBlockParam[] }];
   const h = db.prepare('SELECT ai_enabled, ai_key, ai_model FROM homes WHERE id = ?').get(homeId) as Row;
   if (!h.ai_enabled) throw new HttpError(403, 'AI ideas are turned off. A parent can turn them on in Settings.');
   const apiKey = h.ai_key ? openKey(h.ai_key as string) : null;
@@ -116,7 +120,7 @@ async function askJson<T>(db: DatabaseSync, homeId: string, system: string, prom
       fallbacks: 'default',
       output_config: { effort: 'low', format: { type: 'json_schema', schema } },
       system,
-      messages: [{ role: 'user', content: prompt }],
+      messages,
     });
     if (res.stop_reason === 'refusal') throw new HttpError(422, "Claude couldn't help with that one. Try rewording the note.");
     const text = res.content.find((b) => b.type === 'text');
@@ -340,4 +344,158 @@ export async function snapEvents(db: DatabaseSync, homeId: string, today: string
     time: e.time && time.test(e.time) ? e.time : null, endTime: e.endTime && time.test(e.endTime) ? e.endTime : null,
     location: s(e.location, 200), notes: s(e.notes, 500), forWhom: s(e.forWhom, 80),
   }));
+}
+
+// ---------- Judge Trash Panda: hears each kid's side of an argument and gives a fair, kind ruling ----------
+
+export const JUDGE_DISCLAIMER = "A playful helper for everyday squabbles. You're the real judge: change the ruling if it doesn't fit.";
+
+export interface JudgeSide { age: number | null; story: string }
+export interface JudgeInput { about: string | null; parentSaw: string | null; sides: JudgeSide[] }
+export interface Ruling {
+  /** '1'..'4' for the kid whose side wins, or 'tie' when both (or all) have a point. */
+  winner: string;
+  headline: string;
+  reasoning: string;
+  sides: { who: string; heard: string; nextTime: string }[];
+  fix: string;
+  readAloud: string;
+}
+
+const JUDGE_SCHEMA = {
+  type: 'object',
+  properties: {
+    winner: { type: 'string', enum: ['1', '2', '3', '4', 'tie'], description: 'Whose side is most fair, or tie when it is truly shared' },
+    headline: { type: 'string', description: 'The ruling in one short sentence, using the {1}/{2} placeholders' },
+    reasoning: { type: 'string', description: '2 to 4 plain sentences for the parent on why this is the fairest call' },
+    sides: {
+      type: 'array',
+      description: 'One entry per kid, in order',
+      items: {
+        type: 'object',
+        properties: {
+          who: { type: 'string', enum: ['1', '2', '3', '4'] },
+          heard: { type: 'string', description: 'One kind sentence that shows this kid was heard (their feeling and their point)' },
+          nextTime: { type: 'string', description: 'One small, doable thing this kid can try next time' },
+        },
+        required: ['who', 'heard', 'nextTime'],
+        additionalProperties: false,
+      },
+    },
+    fix: { type: 'string', description: 'What happens now to make it right: a concrete, fair plan (take turns with a timer, split it, a do-over, a repair)' },
+    readAloud: { type: 'string', description: '2 or 3 short, playful sentences to read to the kids as the verdict, at the youngest kid\'s reading level' },
+  },
+  required: ['winner', 'headline', 'reasoning', 'sides', 'fix', 'readAloud'],
+  additionalProperties: false,
+};
+
+const JUDGE_SYSTEM = (name: string) => `You are ${name}, a wise, warm, slightly silly raccoon judge in a family chore app. Parents bring you
+everyday arguments between their kids (whose turn it is, who had it first, who started it, sharing, fairness) and you give the fairest call.
+How you judge: listen to every side, look for what actually happened and what is fair for each kid's age, and weigh honesty, taking turns,
+asking first, sharing and kindness. It's fine to say one side is more right, and it's fine to call a tie when both have a point. Never call
+a kid bad, mean or a liar; describe choices, not character. Always give a practical fix that ends the argument now (a timer, turns, a split,
+a do-over, a repair like helping rebuild what was knocked down) and one small thing each kid can try next time. Keep it light: a gavel joke
+or "order in the den!" is welcome, but the ruling must be clear. If a side mentions someone being badly hurt, unsafe behavior or something a
+parent must handle, keep the ruling short and say a grown-up needs to step in. Refer to the kids only as {1}, {2}, {3} or {4}, exactly like that.`;
+
+/** Only the ages, the stories (with the kids' names swapped for {1}, {2}...) and what the parent saw are sent. */
+export function judgePrompt(input: JudgeInput): string {
+  return [
+    input.about ? `The argument is about: ${input.about}` : '',
+    ...input.sides.map((s, i) => `{${i + 1}}${s.age != null ? ` (age ${s.age})` : ''} says: ${s.story}`),
+    input.parentSaw ? `What the parent saw: ${input.parentSaw}` : '',
+    'Give your ruling.',
+  ].filter(Boolean).join('\n');
+}
+
+export async function judgeArgument(db: DatabaseSync, homeId: string, name: string, input: JudgeInput): Promise<Ruling> {
+  const r = await askJson<Ruling>(db, homeId, JUDGE_SYSTEM(name), judgePrompt(input), JUDGE_SCHEMA);
+  const n = input.sides.length;
+  const who = (v: unknown) => { const x = String(v); return /^[1-4]$/.test(x) && Number(x) <= n ? x : null; };
+  const t = (v: unknown, max: number) => String(v ?? '').trim().slice(0, max);
+  return {
+    winner: who(r.winner) ?? 'tie',
+    headline: t(r.headline, 300),
+    reasoning: t(r.reasoning, 1200),
+    sides: (r.sides ?? []).filter((s) => who(s?.who)).slice(0, n).map((s) => ({ who: String(s.who), heard: t(s.heard, 400), nextTime: t(s.nextTime, 400) })),
+    fix: t(r.fix, 800),
+    readAloud: t(r.readAloud, 600),
+  };
+}
+
+/** Swaps each kid's name in typed text for their {n} placeholder (and other kids' names for "a sibling"), so names stay home. */
+export function scrubNames(text: string, names: string[], others: string[] = []): string {
+  const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  let out = text;
+  const all = [...names.map((nm, i) => ({ nm, to: `{${i + 1}}` })), ...others.map((nm) => ({ nm, to: 'a sibling' }))]
+    .filter((x) => x.nm.trim().length > 1).sort((a, b) => b.nm.length - a.nm.length);
+  for (const { nm, to } of all) out = out.replace(new RegExp(`(?<![\\p{L}\\p{N}])${esc(nm.trim())}(?![\\p{L}\\p{N}])`, 'giu'), to);
+  return out;
+}
+
+/** Puts names back where the judge wrote {1}, {2}... */
+export function fillNames(text: string, names: string[]): string {
+  return text.replace(/\{([1-4])\}/g, (m, d: string) => names[Number(d) - 1] ?? m);
+}
+
+// ---------- open chats: Dr. Bandit (general health) and Coach Ringtail (behavior, time-outs, everyday parenting) ----------
+
+export type ChatKind = 'doctor' | 'parenting';
+export const PARENTING_DISCLAIMER = "General parenting ideas, not professional advice. For ongoing worries, talk with your child's doctor or a child psychologist.";
+export const SAFETY_NOTE = 'If a child or anyone else is in danger, call your local emergency number (911 in the US) now.';
+
+const CHAT_SCHEMA = {
+  type: 'object',
+  properties: {
+    answer: { type: 'string', description: 'Your reply in plain words: short paragraphs or a few bullets, under about 180 words' },
+    urgent: { type: 'boolean', description: 'True if this may need a doctor today, emergency care, or immediate help to keep someone safe' },
+  },
+  required: ['answer', 'urgent'],
+  additionalProperties: false,
+};
+
+const CHAT_SYSTEM: Record<ChatKind, (name: string) => string> = {
+  doctor: (name) => `You are ${name}, a friendly raccoon doctor character in a family app, chatting with a parent. You help with everyday
+questions about kids' health, growth, sleep, eating, development and therapy: what is common at an age, simple care at home, when to call
+the doctor, and good questions to bring to appointments. Keep replies short and warm, and ask one clarifying question when it matters.
+You are not their doctor: never diagnose, never recommend or dose medicines, and never contradict their child's professionals. If anything
+sounds urgent or serious (breathing trouble, an injury, a high fever in a baby, dehydration, a sudden change, a seizure, self-harm, a
+possible poisoning), say clearly to contact their doctor or emergency services now and set urgent to true. For ongoing worries, suggest
+checking in with their pediatrician.`,
+  parenting: (name) => `You are ${name}, a calm, kind raccoon parenting coach in a family chore app, chatting with a parent about kids'
+behavior: tantrums, not listening, sibling fights, back-talk, lying, bedtime battles, screen time, chores and consequences, and whether
+something deserves a time-out. Give practical, age-appropriate, evidence-informed advice: connect first, stay calm, be clear and consistent,
+praise what you want to see, and use small, logical consequences tied to the behavior. For time-outs: suggest one only when it fits
+(usually ages 2 to 10, for things like hitting or not stopping after a warning), give a warning first when sensible, keep it short (about one
+minute per year of age, often 2 to 10 minutes), calm and boring, then reconnect and talk briefly afterwards; when a time-out doesn't fit, say
+what to do instead. When a parent asks you to make a call, make a clear one and explain it in a sentence. Never suggest hitting, spanking,
+shaming, scaring, or taking away food, sleep or love. Keep replies short. If something sounds unsafe (a child hurting themselves or others,
+abuse, talk of self-harm), say clearly to get help now and set urgent to true. For behavior that is frequent, intense or getting worse,
+suggest talking with their pediatrician or a child psychologist.`,
+};
+
+export interface ChatTurn { role: 'user' | 'assistant'; content: string }
+
+/** The recent conversation plus this message. Only the kid's age (if the parent picked one) is added; never names from the app. */
+export function chatMessages(history: ChatTurn[], message: string, age: number | null): Anthropic.Beta.BetaMessageParam[] {
+  const turns = history.slice(-16);
+  while (turns.length && turns[0].role !== 'user') turns.shift();
+  const out: Anthropic.Beta.BetaMessageParam[] = [];
+  for (const t of turns) {
+    const last = out[out.length - 1];
+    if (last && last.role === t.role) last.content = `${last.content as string}\n\n${t.content}`;
+    else out.push({ role: t.role, content: t.content });
+  }
+  const text = age != null ? `(About my ${age}-year-old.) ${message}` : message;
+  const last = out[out.length - 1];
+  if (last && last.role === 'user') last.content = `${last.content as string}\n\n${text}`;
+  else out.push({ role: 'user', content: text });
+  return out;
+}
+
+export async function chat(db: DatabaseSync, homeId: string, kind: ChatKind, name: string, history: ChatTurn[], message: string, age: number | null): Promise<{ answer: string; urgent: boolean }> {
+  const r = await askJson<{ answer: string; urgent: boolean }>(db, homeId, CHAT_SYSTEM[kind](name), chatMessages(history, message, age), CHAT_SCHEMA);
+  const answer = String(r.answer ?? '').trim().slice(0, 3000);
+  if (!answer) throw new HttpError(502, 'The AI answer was empty. Try again.');
+  return { answer, urgent: !!r.urgent };
 }
