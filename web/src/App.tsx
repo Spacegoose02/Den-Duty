@@ -25,6 +25,7 @@ import { VisitSummaryPage } from './pages/doctors/Summary.tsx';
 import { Recap } from './pages/Recap.tsx';
 import { Meeting } from './pages/Meeting.tsx';
 import { AllowancePage } from './components/Money.tsx';
+import { Ask } from './pages/Ask.tsx';
 
 const NAV = [
   { to: '/', ico: '🏠', label: 'Home', end: true },
@@ -36,6 +37,7 @@ const NAV = [
   { to: '/stats', ico: '📊', label: 'Stats' },
   { to: '/doctors', ico: '🩺', label: 'Doctors' },
   { to: '/parent-duty', ico: '📝', label: 'Parent Duty' },
+  { to: '/ask', ico: '⚖️', label: 'Ask' },
   { to: '/lists', ico: '🛒', label: 'Lists' },
   { to: '/reminders', ico: '🔔', label: 'Reminders' },
   { to: '/settings', ico: '⚙️', label: 'Settings' },
@@ -116,6 +118,8 @@ export function App() {
           <Route path="/doctors/summary/:memberId" element={<VisitSummaryPage />} />
           <Route path="/therapy" element={<Navigate to="/doctors" replace />} />
           <Route path="/parent-duty" element={<ParentDuty />} />
+          <Route path="/ask" element={<Ask />} />
+          <Route path="/judge" element={<Navigate to="/ask?tab=judge" replace />} />
           <Route path="/den" element={<Navigate to="/parent-duty" replace />} />
           <Route path="/honeydo" element={<Navigate to="/parent-duty" replace />} />
           <Route path="/settings" element={<Settings />} />

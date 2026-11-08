@@ -643,6 +643,86 @@ export function DoctorRaccoon({ size = 64, title = 'Raccoon doctor' }: { size?: 
   );
 }
 
+/** The rolled barrister curls, cream with a soft edge. */
+function WigRoll({ cx, cy, rx = 9, ry = 5.6 }: { cx: number; cy: number; rx?: number; ry?: number }) {
+  return (
+    <g>
+      <ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill="#f6f1e4" stroke="#cfc4ab" strokeWidth="1.6" />
+      <path d={`M${cx - rx * 0.55} ${cy} q${rx * 0.55} ${-ry * 0.9} ${rx * 1.1} 0`} fill="none" stroke="#ddd3bb" strokeWidth="1.4" strokeLinecap="round" />
+    </g>
+  );
+}
+
+/** Judge Trash Panda's figure on the 120 grid: curly white wig, black robe with white bands, and a gavel. */
+function JudgeFigure() {
+  return (
+    <>
+      {/* the wig's side curls, behind the head */}
+      {[50, 61, 72, 83].map((y, i) => (
+        <g key={y}>
+          <WigRoll cx={15 - i * 0.6} cy={y} />
+          <WigRoll cx={105 + i * 0.6} cy={y} />
+        </g>
+      ))}
+      {/* robe and the white bands at the collar */}
+      <path d="M14 124 C16 104 34 93 60 93 C86 93 104 104 106 124Z" fill="#23252f" />
+      <path d="M30 124 C32 110 42 101 52 98 L60 108 L68 98 C78 101 88 110 90 124Z" fill="#33364a" />
+      <Head />
+      {/* bushy, wise eyebrows */}
+      <path d="M33 50.5 q8 -6 16 -1.5 M87 50.5 q-8 -6 -16 -1.5" fill="none" stroke="#f6f1e4" strokeWidth="4.2" strokeLinecap="round" />
+      <path d="M53.5 99 h13 l-2.2 16 h-8.6z" fill="#fff" stroke="#ced4da" strokeWidth="1.2" />
+      <path d="M60 99.5 v15" stroke="#ced4da" strokeWidth="1.2" />
+      {/* the wig's crown: a cap with rows of curls and a front roll */}
+      <path d="M28 47 C27 27 42 17 60 17 C78 17 93 27 92 47 C84 40 72 37 60 37 C48 37 36 40 28 47Z" fill="#f6f1e4" stroke="#cfc4ab" strokeWidth="1.6" />
+      {[[42, 24], [52, 21], [62, 20.5], [72, 22], [80, 27], [36, 31], [47, 29.5], [58, 28.5], [69, 29], [84, 35]].map(([x, y]) => (
+        <circle key={`${x}-${y}`} cx={x} cy={y} r="3.6" fill="none" stroke="#ddd3bb" strokeWidth="1.4" />
+      ))}
+      <path d="M30 46 C38 37 50 34.5 60 34.5 C70 34.5 82 37 90 46" fill="none" stroke="#f6f1e4" strokeWidth="6" strokeLinecap="round" />
+      <path d="M30 46 C38 37 50 34.5 60 34.5 C70 34.5 82 37 90 46" fill="none" stroke="#cfc4ab" strokeWidth="1.2" strokeLinecap="round" strokeDasharray="5 4" transform="translate(0 2.6)" />
+      {/* the gavel, raised in the right paw */}
+      <g transform="translate(95 103) rotate(-38)">
+        <rect x="-2.4" y="-2" width="4.8" height="24" rx="2.2" fill="#9a6232" stroke="#5c3a1c" strokeWidth="1.4" />
+        <rect x="-12" y="-12" width="24" height="11" rx="3" fill="#b8763d" stroke="#5c3a1c" strokeWidth="1.6" />
+        <rect x="-7.5" y="-12" width="3" height="11" fill="#8a5528" />
+        <rect x="4.5" y="-12" width="3" height="11" fill="#8a5528" />
+        <ellipse cx="0" cy="21" rx="6.8" ry="5.6" fill="#4a505b" />
+        <path d="M-3.4 17 v4 M0 16.4 v4.4 M3.4 17 v4" stroke="#2f343c" strokeWidth="1.3" strokeLinecap="round" />
+      </g>
+    </>
+  );
+}
+
+/**
+ * Judge Trash Panda, who settles kids' arguments. `badge` puts him on a round courtroom-red badge, for chat bubbles and
+ * small spots; without it he stands on his own like the doctor.
+ */
+export function JudgeRaccoon({ size = 64, title = 'Judge Trash Panda', badge = false }: { size?: number; title?: string; badge?: boolean }) {
+  const uid = useSvgId();
+  if (!badge) {
+    return (
+      <svg viewBox="0 0 120 124" width={size} height={size} role="img" aria-label={title}>
+        <JudgeFigure />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 120 120" width={size} height={size} role="img" aria-label={title} className="raccoon-avatar">
+      <defs>
+        <radialGradient id={`${uid}-bg`} cx="0.35" cy="0.25" r="0.85">
+          <stop offset="0" stopColor="#a8455d" />
+          <stop offset="1" stopColor="#5a1a2c" />
+        </radialGradient>
+        <clipPath id={`${uid}-clip`}><circle cx="60" cy="60" r="58" /></clipPath>
+      </defs>
+      <circle cx="60" cy="60" r="58" fill={`url(#${uid}-bg)`} />
+      <g clipPath={`url(#${uid}-clip)`}>
+        <g transform="translate(13 10) scale(0.78)"><JudgeFigure /></g>
+      </g>
+      <circle cx="60" cy="60" r="57" fill="none" stroke="#e8c36a" strokeWidth="2.5" opacity="0.85" />
+    </svg>
+  );
+}
+
 /**
  * Pick an animal, then an outfit. `lockedAt` returns the level an outfit needs, or null when it's open to this person.
  */

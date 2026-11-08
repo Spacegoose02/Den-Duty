@@ -68,6 +68,22 @@ export const appointmentOn = (kind: string, off: readonly string[]) => {
 /** The raccoon doctor who answers "Ask" questions in Doctors. One place to rename it. */
 export const DOCTOR_NAME = 'Dr. Bandit';
 
+/** The raccoon judge who settles kids' arguments, and the parenting coach in the Ask page's chat. */
+export const JUDGE_NAME = 'Judge Trash Panda';
+export const COACH_NAME = 'Coach Ringtail';
+
+/** Quick starters for the parenting chat: behavior and time-out questions parents ask most. */
+export const PARENTING_STARTERS = [
+  { icon: '⏳', label: 'Time-out or not?', ask: 'My child just did something. Does this deserve a time-out, and for how long? Here is what happened: ' },
+  { icon: '👂', label: 'Not listening', ask: 'How do I get my child to listen the first time without yelling?' },
+  { icon: '🌋', label: 'Tantrums', ask: 'What should I do during a tantrum, and what helps afterwards?' },
+  { icon: '🤼', label: 'Sibling fights', ask: 'My kids fight all the time. What actually helps?' },
+  { icon: '🗯️', label: 'Back-talk', ask: 'How should I respond when my child talks back or is rude?' },
+  { icon: '🤥', label: 'Lying', ask: 'My child keeps lying about small things. How should I handle it?' },
+  { icon: '📺', label: 'Screen time', ask: 'Screen time always ends in a fight. How can I make it easier?' },
+  { icon: '⚖️', label: 'Fair consequences', ask: 'What is a fair, small consequence for this, that fits my child\'s age? ' },
+] as const;
+
 /** Quick topics for Dr. Bandit in Doctors > Behavioral: age-appropriate ideas for feelings and behavior. */
 export const BEHAVIOR_TOPICS = [
   { id: 'anger', icon: '😠', label: 'Anger', ask: 'How can I help my child calm down and handle anger without hurting anyone?' },

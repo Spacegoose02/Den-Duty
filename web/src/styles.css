@@ -834,3 +834,20 @@ button.link { background: none; border: none; padding: 0; min-height: 0; color: 
 .list-item.asked.done > span { text-decoration: none; opacity: .8; }
 .list-tick:not(button) { display: inline-flex; align-items: center; justify-content: center; }
 .list-item.done .list-tick.declined { background: var(--surface); border-color: var(--border); color: var(--muted, inherit); }
+
+/* The Ask page: Judge Trash Panda and the chats */
+.judge-side { border: 1px dashed var(--border); border-radius: 14px; padding: 10px; gap: 8px; }
+.judge-sides { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; }
+.judge-heard { background: var(--surface-2); border-radius: 14px; padding: 10px; display: flex; flex-direction: column; gap: 4px; }
+.past-ruling { border-top: 1px solid var(--border); padding-top: 8px; }
+.past-ruling > summary { cursor: pointer; padding: 4px 0; }
+.past-ruling[open] > summary { margin-bottom: 8px; }
+.read-aloud { margin-top: 6px; flex-wrap: nowrap; }
+.chat-log { display: flex; flex-direction: column; gap: 10px; max-height: 60vh; overflow-y: auto; padding: 4px 2px; }
+.bubble-row { display: flex; gap: 8px; align-items: flex-end; }
+.bubble-row > svg { flex: none; }
+.bubble-row.me { justify-content: flex-end; }
+.bubble { background: var(--surface-2); border-radius: 16px 16px 16px 4px; padding: 10px 12px; white-space: pre-wrap; max-width: min(640px, 85%); overflow-wrap: anywhere; }
+.bubble-row.me .bubble { background: var(--primary); color: var(--on-primary); border-radius: 16px 16px 4px 16px; }
+.bubble.urgent { border: 2px solid var(--danger); }
+.ruling .bubble { max-width: 100%; flex: 1; }

@@ -1224,6 +1224,26 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE list_items ADD COLUMN request_status TEXT;
   ALTER TABLE list_items ADD COLUMN request_list TEXT;
   `,
+  // The Ask page: Judge Trash Panda's rulings on kids' arguments, and the open chats with Dr. Bandit and Coach Ringtail.
+  `
+  CREATE TABLE ai_rulings (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    data TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX ai_rulings_home ON ai_rulings(home_id, created_at);
+  CREATE TABLE ai_chats (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    urgent INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX ai_chats_home ON ai_chats(home_id, kind, created_at);
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

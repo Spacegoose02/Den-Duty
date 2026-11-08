@@ -26,6 +26,7 @@ import { reminderRoutes } from './routes/reminders.ts';
 import { haRoutes } from './routes/ha.ts';
 import { calendarRoutes } from './routes/calendars.ts';
 import { aiRoutes } from './routes/ai.ts';
+import { adviceRoutes } from './routes/advice.ts';
 import { archiveRoutes } from './routes/archive.ts';
 import { installV1, v1Routes } from './routes/v1.ts';
 import { gamingRoutes } from './routes/gaming.ts';
@@ -88,6 +89,7 @@ export async function buildApp(db: DatabaseSync, opts: { logger?: boolean; serve
   haRoutes(app, db);
   calendarRoutes(app, db);
   aiRoutes(app, db);
+  adviceRoutes(app, db);
   archiveRoutes(app, db);
   v1Routes(app, db);
   gamingRoutes(app, db);
