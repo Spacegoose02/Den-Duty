@@ -102,6 +102,8 @@ export interface PracticeItem {
 export interface AppointmentItem {
   id: string; memberId: string; kind: string; title: string; provider: string | null; time: string; status: string;
   location?: string | null; durationMinutes?: number | null; notes?: string | null;
+  /** Parents only: the repeat this visit is part of. */
+  repeat?: { seriesId: string; index: number; every: number; unit: 'day' | 'week' | 'month'; endDate: string | null; count: number | null } | null;
 }
 export interface Day { date: string; items: AgendaItem[]; external?: ExternalItem[]; duty?: DutyItem[]; reminders?: Reminder[]; practices?: PracticeItem[]; appointments?: AppointmentItem[] }
 
