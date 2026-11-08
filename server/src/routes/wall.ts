@@ -17,6 +17,7 @@ import { listKids } from './homes.ts';
 import { lootdenWall } from './lootden.ts';
 import { kidSports } from './sports.ts';
 import { homeWeather } from './weather.ts';
+import { wallLists } from './lists.ts';
 import { framePhotos } from './photoframe.ts';
 import { addDays } from '../../../shared/schedule.ts';
 
@@ -126,6 +127,8 @@ export async function wallData(db: DatabaseSync, homeId: string) {
     weather: await homeWeather(db, homeId),
     // The photo frame (when on): an Immich album and this week's photo-proof highlights.
     photoFrame: await framePhotos(db, homeId),
+    // Shared lists marked for the wall (open items only).
+    lists: wallLists(db, homeId),
   };
 }
 

@@ -1,3 +1,4 @@
+import { WallLists, type FamilyList } from '../components/Lists.tsx';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useLoad } from '../state.tsx';
@@ -37,6 +38,7 @@ interface Wall {
   /** Today's weather from Weather Scout, when it's linked. */
   weather?: HomeWeather;
   /** The photo frame: an Immich album and this week's photo-proof highlights, when it's on. */
+  lists?: FamilyList[];
   photoFrame?: { seconds: number; photos: { url: string; caption: string | null; kind: 'immich' | 'proof' }[] } | null;
 }
 interface LootDenWall {
@@ -247,6 +249,7 @@ export function FamilyWall() {
           )}
           {wall.photoFrame?.photos.length ? <div className="wall-day wall-day-frame"><PhotoFrame frame={wall.photoFrame} /></div> : null}
           {wall.lootden?.screenshots.length ? <div className="wall-day"><ShotShow shots={wall.lootden.screenshots} /></div> : null}
+          {wall.lists?.length ? <WallLists lists={wall.lists} onChange={() => void reload()} /> : null}
           {wall.polls.map((p) => (
             <div key={p.id} className="wall-day">
               <div className="wall-day-title">🗳️ {p.title}</div>

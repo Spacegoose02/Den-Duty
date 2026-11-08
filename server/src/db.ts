@@ -1026,6 +1026,32 @@ export const MIGRATIONS: string[] = [
     PRIMARY KEY (member_id, item_id)
   );
   `,
+  // Shared family lists: groceries, packing, to-dos. Kids (and the wall tablet) can add to lists that allow it.
+  `
+  CREATE TABLE lists (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    icon TEXT NOT NULL DEFAULT '📝',
+    kids_can_add INTEGER NOT NULL DEFAULT 1,
+    on_wall INTEGER NOT NULL DEFAULT 1,
+    position INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX lists_home ON lists(home_id, position);
+  CREATE TABLE list_items (
+    id TEXT PRIMARY KEY,
+    list_id TEXT NOT NULL REFERENCES lists(id) ON DELETE CASCADE,
+    text TEXT NOT NULL,
+    note TEXT,
+    done INTEGER NOT NULL DEFAULT 0,
+    added_by_member_id TEXT REFERENCES members(id) ON DELETE SET NULL,
+    added_by_name TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    done_at TEXT
+  );
+  CREATE INDEX list_items_list ON list_items(list_id, done, created_at);
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

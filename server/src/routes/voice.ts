@@ -11,8 +11,9 @@ import { goalsFor, homeInfo, homeToday, kidWeek, submitInstance, todayList, type
 import { streaks } from '../progress.ts';
 import { listKids } from './homes.ts';
 import { kidHabits } from './habits.ts';
+import { findList, listsOf } from './lists.ts';
 
-export const VOICE_TOPICS = ['chores', 'next', 'points', 'goal', 'streak', 'practice', 'everyone'] as const;
+export const VOICE_TOPICS = ['chores', 'next', 'points', 'goal', 'streak', 'practice', 'everyone', 'list'] as const;
 type Topic = (typeof VOICE_TOPICS)[number];
 
 /** "a", "a and b", "a, b and c". */
@@ -42,10 +43,16 @@ export function matchChore(items: AgendaItem[], said: string): AgendaItem | null
   return items.find((i) => t(i) === s) ?? items.find((i) => t(i).startsWith(s)) ?? items.find((i) => t(i).includes(s) || s.includes(t(i))) ?? null;
 }
 
-export function sayFor(db: DatabaseSync, ctx: HomeCtx, kidKey: unknown, about: Topic): string {
+export function sayFor(db: DatabaseSync, ctx: HomeCtx, kidKey: unknown, about: Topic, listName = ''): string {
   const home = homeInfo(db, ctx.homeId);
   const today = homeToday(home);
   const pts = home.pointsName;
+  if (about === 'list') {
+    const l = findList(db, ctx.homeId, listName);
+    if (!l) return listName ? `I couldn't find a list called ${listName}.` : 'There are no lists yet.';
+    const open = listsOf(db, ctx.homeId).find((x) => x.id === l.id)!.items.filter((i) => !i.done).map((i) => clean(i.text));
+    return open.length ? `On the ${l.name} list: ${spokenList(open.slice(0, 12))}${open.length > 12 ? `, and ${open.length - 12} more` : ''}.` : `The ${l.name} list is empty.`;
+  }
   if (about === 'everyone') {
     const lines = listKids(db, ctx.homeId).filter((k) => !k.pagesOff.includes('chores')).map((k) => {
       const left = todayList(db, ctx.homeId, k.id, today).filter((i) => i.status === 'pending' || i.status === 'rejected').length;
@@ -98,10 +105,10 @@ export function voiceRoutes(app: FastifyInstance, db: DatabaseSync): void {
   app.get('/api/homes/:homeId/ha/say', async (req) => {
     const ctx = homeCtx(db, req);
     if (ctx.actor.kind !== 'token' && ctx.actor.kind !== 'parent') throw new HttpError(403, 'For Home Assistant tokens and parents');
-    const q = req.query as { kid?: string; about?: string };
+    const q = req.query as { kid?: string; about?: string; list?: string };
     const about = (VOICE_TOPICS as readonly string[]).includes(q.about ?? '') ? q.about as Topic : q.kid ? 'chores' : 'everyone';
     try {
-      return { speech: sayFor(db, ctx, q.kid, about), about };
+      return { speech: sayFor(db, ctx, q.kid, about, q.list ?? ''), about };
     } catch (err) {
       // Speak the problem rather than failing: Assist reads it out.
       if (err instanceof HttpError && err.status < 500) return { speech: err.message.endsWith('.') ? err.message : `${err.message}.`, about, error: true };

@@ -8,6 +8,7 @@ export const KID_PAGES = [
   { id: 'helpdesk', label: 'Helpdesk', icon: '🛎️', hint: 'Asking a grown-up for help' },
   { id: 'habits', label: 'Practice', icon: '🎯', hint: 'Reading, instruments, homework and other practice' },
   { id: 'feelings', label: 'Feelings check-in', icon: '💛', hint: 'A daily “how do you feel?” on their board' },
+  { id: 'lists', label: 'Family lists', icon: '📝', hint: 'Adding to groceries and other shared lists' },
   { id: 'den', label: "Rocky's den", icon: '🏡', hint: 'Their own room to decorate with points; it gets messy when chores slip' },
   { id: 'goals', label: 'Goals & rewards', icon: '🎁', hint: 'Goals, rewards and reward votes' },
   { id: 'stats', label: 'Stats & badges', icon: '📊', hint: 'Charts, streaks, levels and badges' },

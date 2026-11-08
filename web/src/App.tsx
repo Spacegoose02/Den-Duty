@@ -1,3 +1,4 @@
+import { ListsPage } from './components/Lists.tsx';
 import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { useApp } from './state.tsx';
 import { RaccoonAvatar } from './components/Raccoon.tsx';
@@ -35,6 +36,7 @@ const NAV = [
   { to: '/stats', ico: '📊', label: 'Stats' },
   { to: '/doctors', ico: '🩺', label: 'Doctors' },
   { to: '/parent-duty', ico: '📝', label: 'Parent Duty' },
+  { to: '/lists', ico: '🛒', label: 'Lists' },
   { to: '/reminders', ico: '🔔', label: 'Reminders' },
   { to: '/settings', ico: '⚙️', label: 'Settings' },
 ];
@@ -95,6 +97,7 @@ export function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/calendar" element={<Week />} />
           <Route path="/reminders" element={<Reminders />} />
+          <Route path="/lists" element={<ListsPage />} />
           <Route path="/week" element={<Navigate to="/calendar" replace />} />
           <Route path="/chores" element={<Chores />} />
           <Route path="/kids" element={<Kids />} />

@@ -475,7 +475,7 @@ td, th { text-align: left; padding: 8px; border-bottom: 1px solid var(--border);
 .switch:not(.on) strong { color: var(--muted); }
 
 /* pages a parent switched off for this kid */
-.board.off-chores .pg-chores, .board.off-goals .pg-goals, .board.off-stats .pg-stats, .board.off-habits .pg-habits, .board.off-den .pg-den { display: none; }
+.board.off-chores .pg-chores, .board.off-goals .pg-goals, .board.off-stats .pg-stats, .board.off-habits .pg-habits, .board.off-den .pg-den, .board.off-lists .pg-lists { display: none; }
 /* The week still shows school lunch and other feeds when only Chores is off. */
 .board.off-chores .pg-calendar-week { display: block; }
 .board.off-chores.off-calendar .pg-calendar-week { display: none; }
@@ -799,3 +799,13 @@ button.link { background: none; border: none; padding: 0; min-height: 0; color: 
 .offline-banner { position: sticky; top: 0; z-index: 50; padding: 8px 16px; text-align: center; font-weight: 700;
   background: color-mix(in srgb, var(--warn) 22%, var(--surface)); color: var(--text); }
 .offline-banner.ok { background: color-mix(in srgb, var(--ok) 22%, var(--surface)); }
+
+/* ---------- shared lists ---------- */
+.lists-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); gap: 14px; align-items: start; }
+.list-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.list-item { display: flex; align-items: center; gap: 10px; min-height: 40px; }
+.list-item.done > span { text-decoration: line-through; opacity: .55; }
+.list-tick { width: 30px; height: 30px; min-height: 30px; padding: 0; border-radius: 50%; border: 2px solid var(--border); background: var(--surface); font-weight: 900; flex: none; }
+.list-item.done .list-tick { background: var(--ok); border-color: var(--ok); color: white; }
+.wall-list { min-width: min(300px, 100%); }
+.wall-list input { min-height: 40px; }

@@ -43,6 +43,7 @@ import { meetingRoutes } from './routes/meetings.ts';
 import { tradeRoutes } from './routes/trades.ts';
 import { voiceRoutes } from './routes/voice.ts';
 import { denRoutes } from './routes/den.ts';
+import { listRoutes } from './routes/lists.ts';
 
 export async function buildApp(db: DatabaseSync, opts: { logger?: boolean; serveWeb?: boolean } = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 1024 * 1024, trustProxy: config.trustProxy });
@@ -97,6 +98,7 @@ export async function buildApp(db: DatabaseSync, opts: { logger?: boolean; serve
   tradeRoutes(app, db);
   voiceRoutes(app, db);
   denRoutes(app, db);
+  listRoutes(app, db);
 
   const hasWeb = opts.serveWeb !== false && fs.existsSync(path.join(config.webDist, 'index.html'));
   if (hasWeb) {
