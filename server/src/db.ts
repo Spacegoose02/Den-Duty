@@ -926,6 +926,11 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE homes ADD COLUMN weather_url TEXT;
   ALTER TABLE homes ADD COLUMN weather_key TEXT;
   `,
+  // Dendrop link: a time-out can pause the kid's chat in Dendrop, the family chat app: the whole time, or until today's
+  // chores are done.
+  `
+  ALTER TABLE timeouts ADD COLUMN chat TEXT CHECK (chat IN ('all', 'chores'));
+  `,
   // Practice and habits: reading minutes, instrument practice, homework. A kid logs a practice (with a timer); it waits
   // for a grown-up unless the habit is trusted. One log per habit per day: practicing again adds minutes to it.
   `
