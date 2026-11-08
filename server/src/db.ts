@@ -1102,6 +1102,57 @@ export const MIGRATIONS: string[] = [
   CREATE INDEX screen_sessions_open ON screen_sessions(home_id, ended_at);
   ALTER TABLE homes ADD COLUMN screen_time TEXT;
   `,
+  // Family events: the home's own calendar (practices, parties, school trips), typed in, snapped from a flyer with AI,
+  // or pulled from a linked calendar. calendar_accounts are the linked Google / Microsoft / CalDAV calendars, and
+  // event_links remember which remote event each family event is, for two-way sync.
+  `
+  CREATE TABLE family_events (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    date TEXT NOT NULL,
+    end_date TEXT,
+    time TEXT,
+    end_time TEXT,
+    location TEXT,
+    notes TEXT,
+    member_ids TEXT NOT NULL DEFAULT '[]',
+    kids_see INTEGER NOT NULL DEFAULT 1,
+    source TEXT NOT NULL DEFAULT 'manual',
+    account_id TEXT,
+    deleted INTEGER NOT NULL DEFAULT 0,
+    created_by TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX family_events_home ON family_events(home_id, date);
+  CREATE TABLE calendar_accounts (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (kind IN ('google', 'microsoft', 'caldav')),
+    name TEXT NOT NULL,
+    url TEXT,
+    username TEXT,
+    secret TEXT,
+    calendar_id TEXT,
+    calendar_name TEXT,
+    pull INTEGER NOT NULL DEFAULT 1,
+    push INTEGER NOT NULL DEFAULT 1,
+    member_ids TEXT NOT NULL DEFAULT '[]',
+    synced_at TEXT,
+    error TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE event_links (
+    event_id TEXT NOT NULL REFERENCES family_events(id) ON DELETE CASCADE,
+    account_id TEXT NOT NULL REFERENCES calendar_accounts(id) ON DELETE CASCADE,
+    remote_id TEXT NOT NULL,
+    etag TEXT,
+    synced_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (event_id, account_id)
+  );
+  CREATE UNIQUE INDEX event_links_remote ON event_links(account_id, remote_id);
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

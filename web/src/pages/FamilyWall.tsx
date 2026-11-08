@@ -26,7 +26,7 @@ interface WallKid {
   /** Their followed teams from the sports tracker, when linked. */
   sports?: KidSports;
 }
-interface WallDay { date: string; kids: { kidId: string; chores: number; done: number; practices: number; appointments: { id: string; kind: string; title: string; time: string }[] }[] }
+interface WallDay { date: string; events?: { id: string; title: string; time: string | null; location: string | null; kidIds: string[] }[]; kids: { kidId: string; chores: number; done: number; practices: number; appointments: { id: string; kind: string; title: string; time: string }[] }[] }
 interface Wall {
   home: { name: string; pointsName: string; pointsIcon: string; theme: string; timezone: string };
   today: string; tomorrow: string;
@@ -209,6 +209,14 @@ export function FamilyWall() {
           {wall.family.map((d, i) => (
             <div key={d.date} className="wall-day">
               <div className="wall-day-title">{i === 0 ? 'Today' : 'Tomorrow'} <span className="wall-sub">{dayName(d.date)}</span></div>
+              {d.events?.map((e) => {
+                const k = e.kidIds.length === 1 ? kidsById.get(e.kidIds[0]) : undefined;
+                return (
+                  <div key={e.id} className="wall-line" style={{ borderLeftColor: k?.color ?? 'var(--primary)' }}>
+                    📌 {e.time && <strong>{e.time} </strong>}{e.kidIds.length ? `${e.kidIds.map((id) => kidsById.get(id)?.name).filter(Boolean).join(' & ')}: ` : ''}{e.title}
+                  </div>
+                );
+              })}
               {d.kids.map((x) => {
                 const k = kidsById.get(x.kidId);
                 if (!k || (!x.chores && !x.practices && !x.appointments.length)) return null;

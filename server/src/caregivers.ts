@@ -26,7 +26,7 @@ const WRITE = new Set([
 
 /** What caregivers may not even look at. */
 const HIDDEN = [
-  /\/(doctors|therapy|health|meds|share-links|feelings|money|ai|tokens|backups?|export|archive|devices|honeydo|meetings|parent-duty|ha|calendars|weather-link|lootden|photo-frame|caregiver-code)(\/|$)/,
+  /\/(doctors|therapy|health|meds|share-links|feelings|money|ai|tokens|backups?|export|archive|devices|honeydo|meetings|parent-duty|ha|calendars|weather-link|lootden|photo-frame|caregiver-code|calendar-sync)(\/|$)/,
 ];
 
 export type Access = 'full' | 'caregiver';

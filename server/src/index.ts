@@ -2,6 +2,7 @@ import { config } from './config.ts';
 import { openDb } from './db.ts';
 import { applyPendingRestore, nightlyBackup } from './backup.ts';
 import { endFinishedSessions } from './screentime.ts';
+import { syncAllDue } from './calsync.ts';
 import { buildApp } from './app.ts';
 import { checkDueReminders } from './routes/reminders.ts';
 import { checkPush } from './push.ts';
@@ -25,6 +26,8 @@ const reminderTimer = setInterval(() => {
   try { checkDueReminders(db); } catch (err) { app.log.error(err); }
   try { checkPush(db); } catch (err) { app.log.error(err); }
   try { if (nightlyBackup(db, config.dataDir)) app.log.info('Nightly backup saved'); } catch (err) { app.log.error(err); }
+  // Linked calendars (Google, Outlook, iCloud...): both ways, every 15 minutes.
+  void syncAllDue(db).catch((err) => app.log.error(err));
   try {
     for (const h of db.prepare('SELECT id, timezone FROM homes WHERE money_enabled = 1').all() as Row[]) runMoney(db, h.id as string, homeToday({ timezone: h.timezone as string }));
   } catch (err) { app.log.error(err); }

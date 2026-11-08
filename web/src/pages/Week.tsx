@@ -10,6 +10,7 @@ import { Modal } from '../components/Bits.tsx';
 import { ReminderForm } from '../components/Reminders.tsx';
 import type { Reminder } from '../api.ts';
 import { addDays, startOfWeek } from '../../../shared/schedule.ts';
+import { EventForm, SnapFlyer, eventIcon, type FamilyEvent } from '../components/Events.tsx';
 
 const mark = (i: AgendaItem) => (i.status === 'approved' ? '✅' : i.status === 'submitted' ? '⏳' : i.status === 'rejected' ? '🔁' : '');
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
@@ -102,15 +103,25 @@ function AppointmentLine({ a, kid, withName, onEdit }: { a: AppointmentItem; kid
 }
 
 /** Everything on one day, grouped per kid: chores, practices, appointments; then Parent Duty and subscribed feeds. */
-interface Edits { appt: (a: AppointmentItem) => void; practice: (p: PracticeItem) => void; duty: (d: DutyItem) => void; reminder: (r: Reminder) => void }
+interface Edits { appt: (a: AppointmentItem) => void; practice: (p: PracticeItem) => void; duty: (d: DutyItem) => void; reminder: (r: Reminder) => void; event: (e: FamilyEvent) => void }
 
 function DayDetail({ d, kids, today, parent, solo, onTap, onTick, edit }: {
   d: Day; kids: Kid[]; today: string; parent: boolean; solo: boolean; onTap?: (i: AgendaItem) => void; onTick?: (p: PracticeItem) => void; edit?: Edits;
 }) {
   const past = d.date <= today;
-  const empty = !d.items.length && !d.external?.length && !d.duty?.length && !d.reminders?.length && !d.practices?.length && !d.appointments?.length;
+  const empty = !d.items.length && !d.events?.length && !d.external?.length && !d.duty?.length && !d.reminders?.length && !d.practices?.length && !d.appointments?.length;
   return (
     <>
+      {d.events?.map((e) => {
+        const who = e.memberIds.map((id) => kids.find((k) => k.id === id)).filter((k): k is Kid => !!k);
+        return (
+          <button key={`e-${e.id}`} className="agenda-ext event-line as-button" style={{ borderLeftColor: who[0]?.color }} onClick={() => edit?.event(e)} disabled={!edit} title={e.location ?? undefined}>
+            <span aria-hidden>{eventIcon(e)}</span>
+            <span style={{ flex: 1 }}>{e.time && <strong>{timeText(e.time)} </strong>}{!solo && who.length > 0 && `${who.map((k) => k.name).join(' & ')}: `}{e.title}{e.location && <span className="small muted"> · {e.location}</span>}</span>
+            {edit && <span aria-hidden className="small">✏️</span>}
+          </button>
+        );
+      })}
       {kids.map((k) => {
         const items = d.items.filter((i) => i.memberId === k.id);
         const practices = d.practices?.filter((p) => p.memberId === k.id) ?? [];
@@ -209,9 +220,9 @@ export function Calendar({ kidId, title = 'Calendar' }: { kidId?: string; title?
   const step = (n: number) => setAnchor(month ? addMonths(month, n) : addDays(start, 7 * n));
   const label = month ? MONTH_FMT.format(new Date(`${month}T00:00:00Z`)) : `${shortDate(start)} – ${shortDate(addDays(start, 6))}`;
   const pickedDay = data?.days.find((d) => d.date === picked);
-  const [editing, setEditing] = useState<{ appt?: AppointmentItem; practice?: PracticeItem; duty?: DutyItem; reminder?: Reminder } | null>(null);
+  const [editing, setEditing] = useState<{ appt?: AppointmentItem; practice?: PracticeItem; duty?: DutyItem; reminder?: Reminder; event?: FamilyEvent | null; newEvent?: string; snap?: boolean } | null>(null);
   // Parents edit straight from the calendar; kids only look.
-  const edits: Edits | undefined = parent ? { appt: (a) => setEditing({ appt: a }), practice: (p) => setEditing({ practice: p }), duty: (d) => setEditing({ duty: d }), reminder: (r) => setEditing({ reminder: r }) } : undefined;
+  const edits: Edits | undefined = parent ? { appt: (a) => setEditing({ appt: a }), practice: (p) => setEditing({ practice: p }), duty: (d) => setEditing({ duty: d }), reminder: (r) => setEditing({ reminder: r }), event: (e) => setEditing({ event: e }) } : undefined;
   const done = async () => { setEditing(null); await reload(); };
 
   return (
@@ -222,6 +233,10 @@ export function Calendar({ kidId, title = 'Calendar' }: { kidId?: string; title?
           <button className={view === 'month' ? 'on' : ''} aria-pressed={view === 'month'} onClick={() => setView('month')}>Month</button>
           <button className={view === 'week' ? 'on' : ''} aria-pressed={view === 'week'} onClick={() => setView('week')}>Week</button>
         </div>
+        {parent && !kidId && home?.access !== 'caregiver' && <>
+          <button onClick={() => setEditing({ newEvent: picked ?? realToday })}>＋ Event</button>
+          <button onClick={() => setEditing({ snap: true })}>📸 Snap a flyer</button>
+        </>}
         <button className="icon" aria-label={`Previous ${view}`} onClick={() => step(-1)}>◀</button>
         {anchor && <button onClick={() => setAnchor(null)}>Today</button>}
         <button className="icon" aria-label={`Next ${view}`} onClick={() => step(1)}>▶</button>
@@ -262,6 +277,8 @@ export function Calendar({ kidId, title = 'Calendar' }: { kidId?: string; title?
                     );
                   })}
                   {d.appointments?.map((a) => <span key={a.id} className="month-line appt">{KIND_ICONS[a.kind] ?? '📌'} {timeText(a.time)}</span>)}
+                  {d.events?.slice(0, 2).map((e) => <span key={e.id} className="month-line event">{eventIcon(e)} {e.title}</span>)}
+                  {(d.events?.length ?? 0) > 2 && <span className="month-line muted">+{d.events!.length - 2} more</span>}
                   {!!d.duty?.length && <span className="month-line">📝 {d.duty.length}</span>}
                   {!!d.reminders?.length && <span className="month-line">🔔 {d.reminders.length}</span>}
                   {!!d.external?.length && <span className="month-line muted">📅 {d.external.length}</span>}
@@ -282,6 +299,8 @@ export function Calendar({ kidId, title = 'Calendar' }: { kidId?: string; title?
         </>
       )}
 
+      {(editing?.event || editing?.newEvent) && <EventForm event={editing.event} date={editing.newEvent} onClose={() => setEditing(null)} onSaved={() => void done()} />}
+      {editing?.snap && <SnapFlyer onClose={() => setEditing(null)} onSaved={() => void done()} />}
       {editing?.appt && (
         <AppointmentForm
           areasOff={(home?.kids.find((k) => k.id === editing.appt!.memberId)?.doctorAreasOff ?? []).filter((x) => x !== 'appointments')}

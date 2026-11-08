@@ -1,4 +1,5 @@
 import { enqueue, isQueueable, QueuedError, setOffline } from './offline.tsx';
+import type { FamilyEvent } from './components/Events.tsx';
 import type { ScheduleKind } from '../../shared/schedule.ts';
 import type { RoutineId } from '../../shared/catalog.ts';
 import type { Achievement, LevelInfo } from '../../shared/progress.ts';
@@ -121,7 +122,7 @@ export interface AppointmentItem {
   id: string; memberId: string; kind: string; title: string; provider: string | null; time: string; status: string;
   location?: string | null; durationMinutes?: number | null; notes?: string | null;
 }
-export interface Day { date: string; items: AgendaItem[]; external?: ExternalItem[]; duty?: DutyItem[]; reminders?: Reminder[]; practices?: PracticeItem[]; appointments?: AppointmentItem[] }
+export interface Day { date: string; items: AgendaItem[]; external?: ExternalItem[]; events?: FamilyEvent[]; duty?: DutyItem[]; reminders?: Reminder[]; practices?: PracticeItem[]; appointments?: AppointmentItem[] }
 
 export interface Goal {
   id: string; memberId: string; title: string; targetPoints: number; reward: string | null; status: 'active' | 'redeemed';

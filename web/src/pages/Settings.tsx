@@ -1,3 +1,4 @@
+import { CalendarSyncCard } from '../components/Events.tsx';
 import { ScreenTimeCard } from '../components/ScreenTime.tsx';
 import { AccessControls, CaregiverControls } from '../components/Caregivers.tsx';
 import { useEffect, useState } from 'react';
@@ -506,6 +507,7 @@ export function Settings() {
       <TradeModeCard />
       <ScreenTimeCard />
       <CalendarsCard />
+      <CalendarSyncCard />
       <AiCard />
       <Profile />
       <SecurityCard />

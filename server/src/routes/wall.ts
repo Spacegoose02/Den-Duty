@@ -1,6 +1,7 @@
 // The family wall: the family tablet's home page, showing every kid at once for a glance from across the room.
 // No sign-in to look (the tablet is already paired). A shared wall is careful by default: no Doctors goals, no
 // penalties and no time-out details unless a parent turns them on, and appointments only when shared with that kid.
+import { eventsBetween } from '../familyevents.ts';
 import { awayToday } from '../away.ts';
 import type { FastifyInstance } from 'fastify';
 import { teamGoals } from '../team.ts';
@@ -94,11 +95,14 @@ export async function wallData(db: DatabaseSync, homeId: string) {
     };
   }));
 
+  // Family events kids may see (the wall is a shared screen), for anyone in the family.
+    const kidEvents = (date: string) => eventsBetween(db, homeId, date, date).filter((e) => e.kidsSee);
   const family = [today, tomorrow].map((date) => {
     const d = days.find((x) => x.date === date);
     const doc = docs.get(date);
     return {
       date,
+      events: kidEvents(date).map((e) => ({ id: e.id, title: e.title, time: e.time, location: e.location, kidIds: e.memberIds })),
       kids: kids.map((k) => {
         const items = d?.items.filter((i) => i.memberId === k.id) ?? [];
         return {

@@ -11,6 +11,9 @@ export interface IcsEvent {
   durationMinutes?: number | null;
   /** All-day events spanning several days end the day before this (exclusive), like iCalendar. */
   endDate?: string | null;
+  location?: string | null;
+  /** On an expanded repeating event: which occurrence this is. */
+  recurrenceId?: string | null;
 }
 
 // ---------- writing ----------
@@ -59,6 +62,7 @@ export function buildIcs(calName: string, tz: string, events: IcsEvent[], now = 
       lines.push(`DTSTART;VALUE=DATE:${compactDate(e.date)}`, `DTEND;VALUE=DATE:${compactDate(e.endDate ?? nextDay(e.date))}`, 'TRANSP:TRANSPARENT');
     }
     if (e.description) lines.push(`DESCRIPTION:${escapeText(e.description)}`);
+    if (e.location) lines.push(`LOCATION:${escapeText(e.location)}`);
     lines.push('END:VEVENT');
   }
   lines.push('END:VCALENDAR');
@@ -142,6 +146,8 @@ export function parseIcs(text: string, homeTz: string): IcsEvent[] {
             time: start.time,
             durationMinutes,
             endDate: !start.time && end && end.date > nextDay(start.date) ? end.date : null,
+            location: get('LOCATION') ? unescapeText(get('LOCATION')!.value).trim() || null : null,
+            recurrenceId: get('RECURRENCE-ID')?.value ?? null,
           });
         }
       }
