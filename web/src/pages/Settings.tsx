@@ -388,6 +388,41 @@ function LootDenCard() {
   );
 }
 
+/** Nighttime Ninja, the family's kitchen app: where kids' grocery requests go for a yes or no. */
+function NinjaCard() {
+  const { base, toast } = useApp();
+  const [s, reload] = useLoad<{ url: string; hasToken: boolean; linked: boolean }>(`${base}/ninja`);
+  const [url, setUrl] = useState<string | null>(null);
+  const [token, setToken] = useState('');
+  if (!s) return null;
+  const save = async (body: { url: string; token?: string }) => {
+    try {
+      const r = await api<{ home?: string }>(`${base}/ninja`, { method: 'PUT', body });
+      toast(!body.url ? 'Nighttime Ninja unlinked' : `Linked to ${r.home ?? 'Nighttime Ninja'}. Turn on requests for a list under Lists.`);
+      setToken('');
+      setUrl(null);
+      await reload();
+    } catch (e) { toast((e as Error).message); }
+  };
+  return (
+    <div className="card stack" id="ninja">
+      <h2 style={{ margin: 0 }}>🦝 Nighttime Ninja</h2>
+      <p className="small muted" style={{ margin: 0 }}>
+        Link Nighttime Ninja, the family's kitchen app, so the groceries kids pick on a list become <strong>requests</strong>.
+        You say yes or no on its Shopping page, Requests tab, and yes puts it on the shopping list you choose. Kids see the answer here.
+        In Nighttime Ninja, open Settings, Home, API tokens and make a token for Den Duty.
+      </p>
+      <div className="row">
+        <input placeholder="http://192.168.1.10:8081" value={url ?? s.url} onChange={(e) => setUrl(e.target.value)} style={{ flex: 2, minWidth: 220 }} aria-label="Nighttime Ninja's address" />
+        <input type="password" placeholder={s.hasToken ? 'Token saved' : 'Nighttime Ninja token (nnk_…)'} value={token} onChange={(e) => setToken(e.target.value)} style={{ flex: 1, minWidth: 160 }} aria-label="Nighttime Ninja token" autoComplete="off" />
+        <button className="primary" onClick={() => void save({ url: (url ?? s.url).trim(), ...(token.trim() ? { token: token.trim() } : {}) })}>Save</button>
+        {s.url && <button className="ghost" onClick={() => void save({ url: '' })}>Unlink</button>}
+      </div>
+      {s.linked && <p className="small" style={{ margin: 0 }}>✅ Linked. Pick which lists send requests under <a href="/lists">Lists</a> (⚙️ on a list).</p>}
+    </div>
+  );
+}
+
 /** The family's sports tracker: its address, and each kid's private key so their followed teams show on their board. */
 function SportsCard() {
   const { base, toast } = useApp();
@@ -513,6 +548,7 @@ export function Settings() {
       <FamilyWallCard />
       <PhotoFrameCard />
       <LootDenCard />
+      <NinjaCard />
       <SportsCard />
       <WeatherCard />
       <HomeSettings />

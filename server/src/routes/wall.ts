@@ -20,6 +20,7 @@ import { lootdenWall } from './lootden.ts';
 import { kidSports } from './sports.ts';
 import { homeWeather } from './weather.ts';
 import { wallLists } from './lists.ts';
+import { syncRequests } from './ninja.ts';
 import { framePhotos } from './photoframe.ts';
 import { addDays } from '../../../shared/schedule.ts';
 
@@ -133,8 +134,8 @@ export async function wallData(db: DatabaseSync, homeId: string) {
     weather: await homeWeather(db, homeId),
     // The photo frame (when on): an Immich album and this week's photo-proof highlights.
     photoFrame: await framePhotos(db, homeId),
-    // Shared lists marked for the wall (open items only).
-    lists: wallLists(db, homeId),
+    // Shared lists marked for the wall (open items only), with Nighttime Ninja's answers to grocery requests.
+    lists: await syncRequests(db, homeId).then(() => wallLists(db, homeId)),
   };
 }
 

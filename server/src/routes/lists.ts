@@ -1,12 +1,14 @@
 // Shared family lists: groceries, packing, to-dos. Parents make the lists; kids (on their board) and the wall
 // tablet can add to and tick off the lists that allow it. A kid adding something buzzes the parents.
 // Home Assistant can add by voice ("add milk to the shopping list") through POST /ha/lists/add.
+// A list can also send what kids add to Nighttime Ninja as requests a parent says yes or no to (see ninja.ts).
 import type { FastifyInstance } from 'fastify';
 import type { DatabaseSync } from 'node:sqlite';
 import { homeCtx, isParent, type HomeCtx } from '../auth.ts';
 import type { Row } from '../db.ts';
 import { HttpError, newId, requireStr, str } from '../util.ts';
 import { emit } from '../events.ts';
+import { ninjaLinked, sendRequest, syncRequests, withdrawRequest, type RequestStatus } from './ninja.ts';
 
 export const LIST_TEMPLATES = [
   { name: 'Groceries', icon: '🛒', kidsCanAdd: true },
@@ -16,8 +18,12 @@ export const LIST_TEMPLATES = [
 ];
 
 interface ListView {
-  id: string; name: string; icon: string; kidsCanAdd: boolean; onWall: boolean;
-  items: { id: string; text: string; note: string | null; done: boolean; by: string | null; byMemberId: string | null; createdAt: string }[];
+  id: string; name: string; icon: string; kidsCanAdd: boolean; onWall: boolean; ninjaRequests: boolean;
+  items: {
+    id: string; text: string; note: string | null; done: boolean; by: string | null; byMemberId: string | null; createdAt: string;
+    /** A kid's ask sent to Nighttime Ninja, and the answer (with the shopping list it went on). */
+    request: { status: RequestStatus; list: string | null } | null;
+  }[];
 }
 
 function itemsOf(db: DatabaseSync, listId: string) {
@@ -27,12 +33,13 @@ function itemsOf(db: DatabaseSync, listId: string) {
   return [...open, ...done].map((r) => ({
     id: r.id as string, text: r.text as string, note: r.note as string | null, done: !!r.done,
     by: r.added_by_name as string | null, byMemberId: r.added_by_member_id as string | null, createdAt: r.created_at as string,
+    request: r.request_status ? { status: r.request_status as RequestStatus, list: (r.request_list as string | null) ?? null } : null,
   }));
 }
 
 export function listsOf(db: DatabaseSync, homeId: string, only?: { wall?: boolean }): ListView[] {
   const rows = db.prepare(`SELECT * FROM lists WHERE home_id = ? ${only?.wall ? 'AND on_wall = 1' : ''} ORDER BY position, created_at`).all(homeId) as Row[];
-  return rows.map((r) => ({ id: r.id as string, name: r.name as string, icon: r.icon as string, kidsCanAdd: !!r.kids_can_add, onWall: !!r.on_wall, items: itemsOf(db, r.id as string) }));
+  return rows.map((r) => ({ id: r.id as string, name: r.name as string, icon: r.icon as string, kidsCanAdd: !!r.kids_can_add, onWall: !!r.on_wall, ninjaRequests: !!r.ninja_requests, items: itemsOf(db, r.id as string) }));
 }
 
 /** The wall's view: open items only. */
@@ -71,19 +78,24 @@ export function addItem(db: DatabaseSync, ctx: HomeCtx, l: Row, text: string, no
   if (same) return { id: same.id as string, duplicate: true };
   const id = newId();
   const memberId = ctx.actor.kind === 'kid' ? ctx.actor.memberId : ctx.actor.kind === 'parent' ? ctx.actor.memberId : null;
-  db.prepare('INSERT INTO list_items (id, list_id, text, note, added_by_member_id, added_by_name) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(id, l.id as string, text, note, memberId, by ?? null);
+  // On a request list, what a kid or the family tablet adds is an ask for a parent in Nighttime Ninja.
+  const asks = !!l.ninja_requests && (ctx.actor.kind === 'kid' || ctx.actor.kind === 'device') && ninjaLinked(db, ctx.homeId);
+  db.prepare('INSERT INTO list_items (id, list_id, text, note, added_by_member_id, added_by_name, request_status) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(id, l.id as string, text, note, memberId, by ?? null, asks ? 'sending' : null);
   emit(db, ctx.homeId, 'list_item_added', ctx.actor.kind === 'kid' ? ctx.actor.memberId : null, {
     list_id: l.id, list: l.name, list_icon: l.icon, item: text, by, by_kid: ctx.actor.kind === 'kid',
   });
-  return { id, duplicate: false };
+  return { id, duplicate: false, request: asks };
 }
+
+const stillAsking = (it: Row) => it.request_status === 'sending' || it.request_status === 'waiting';
 
 export function listRoutes(app: FastifyInstance, db: DatabaseSync): void {
   const parent = (req: Parameters<typeof homeCtx>[1]) => homeCtx(db, req, 'parent');
 
   app.get('/api/homes/:homeId/lists', async (req) => {
     const ctx = homeCtx(db, req);
+    await syncRequests(db, ctx.homeId);
     return listsOf(db, ctx.homeId);
   });
 
@@ -101,12 +113,14 @@ export function listRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const ctx = parent(req);
     const l = getList(db, ctx.homeId, (req.params as { id: string }).id);
     const b = (req.body ?? {}) as Row;
-    db.prepare('UPDATE lists SET name = ?, icon = ?, kids_can_add = ?, on_wall = ?, position = ? WHERE id = ?').run(
+    if (b.ninjaRequests && !l.ninja_requests && !ninjaLinked(db, ctx.homeId)) throw new HttpError(400, 'Link Nighttime Ninja first (Settings → Nighttime Ninja)');
+    db.prepare('UPDATE lists SET name = ?, icon = ?, kids_can_add = ?, on_wall = ?, position = ?, ninja_requests = ? WHERE id = ?').run(
       b.name !== undefined ? requireStr(b.name, 'Name', 60) : l.name as string,
       b.icon !== undefined ? str(b.icon, 16) ?? '📝' : l.icon as string,
       b.kidsCanAdd !== undefined ? (b.kidsCanAdd ? 1 : 0) : l.kids_can_add as number,
       b.onWall !== undefined ? (b.onWall ? 1 : 0) : l.on_wall as number,
       typeof b.position === 'number' ? b.position : l.position as number,
+      b.ninjaRequests !== undefined ? (b.ninjaRequests ? 1 : 0) : l.ninja_requests as number,
       l.id as string,
     );
     return listsOf(db, ctx.homeId).find((x) => x.id === l.id);
@@ -125,6 +139,7 @@ export function listRoutes(app: FastifyInstance, db: DatabaseSync): void {
     assertCanEdit(ctx, l);
     const b = (req.body ?? {}) as Row;
     const r = addItem(db, ctx, l, requireStr(b.text, 'Item', 120), str(b.note, 200));
+    if (r.request) await sendRequest(db, ctx.homeId, r.id);
     return { ...r, list: listsOf(db, ctx.homeId).find((x) => x.id === l.id) };
   });
 
@@ -136,6 +151,12 @@ export function listRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const l = getList(db, ctx.homeId, it.list_id as string);
     assertCanEdit(ctx, l);
     const b = (req.body ?? {}) as Row;
+    if (b.done !== undefined && stillAsking(it)) {
+      // Still waiting for a yes or no: only a grown-up can tick it off, and that takes back the ask in Nighttime Ninja.
+      if (!isParent(ctx)) throw new HttpError(403, 'Waiting for a grown-up to say yes');
+      await withdrawRequest(db, ctx.homeId, it.id as string);
+      db.prepare('UPDATE list_items SET request_status = NULL WHERE id = ?').run(it.id as string);
+    }
     if (b.done !== undefined) db.prepare("UPDATE list_items SET done = ?, done_at = CASE WHEN ? THEN datetime('now') ELSE NULL END WHERE id = ?").run(b.done ? 1 : 0, b.done ? 1 : 0, it.id as string);
     if (b.text !== undefined) {
       if (!isParent(ctx) && it.added_by_member_id !== (ctx.actor.kind === 'kid' ? ctx.actor.memberId : '-')) throw new HttpError(403, 'Only a grown-up can change that');
@@ -152,6 +173,7 @@ export function listRoutes(app: FastifyInstance, db: DatabaseSync): void {
     // Kids can take back what they added themselves.
     const own = ctx.actor.kind === 'kid' && it.added_by_member_id === ctx.actor.memberId;
     if (!isParent(ctx) && !own) throw new HttpError(403, 'Only a grown-up can remove that');
+    if (stillAsking(it)) await withdrawRequest(db, ctx.homeId, it.id as string);
     db.prepare('DELETE FROM list_items WHERE id = ?').run(it.id as string);
     return listsOf(db, ctx.homeId).find((x) => x.id === l.id);
   });
