@@ -1214,6 +1214,16 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE shop_orders ADD COLUMN unlock_game TEXT;
   ALTER TABLE shop_orders ADD COLUMN unlock_hours INTEGER;
   `,
+  // Nighttime Ninja grocery requests: a list can send what kids add to Nighttime Ninja's Requests tab, where a parent
+  // says yes (onto the shopping list they pick) or no. Each item remembers where its request stands.
+  `
+  ALTER TABLE homes ADD COLUMN ninja_url TEXT;
+  ALTER TABLE homes ADD COLUMN ninja_home_id TEXT;
+  ALTER TABLE homes ADD COLUMN ninja_token TEXT;
+  ALTER TABLE lists ADD COLUMN ninja_requests INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE list_items ADD COLUMN request_status TEXT;
+  ALTER TABLE list_items ADD COLUMN request_list TEXT;
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

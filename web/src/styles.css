@@ -825,3 +825,12 @@ button.link { background: none; border: none; padding: 0; min-height: 0; color: 
 .event-line { border-left: 4px solid var(--primary); }
 .month-line.event { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .snap-draft.off { opacity: .5; }
+
+/* Grocery requests: tap-to-ask tiles and the wait for a grown-up's answer (Nighttime Ninja). */
+.grocery-picks { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+.grocery-pick { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 6px; min-height: 84px; font-size: .9rem; line-height: 1.15; text-align: center; }
+.grocery-pick > span { font-size: 1.9rem; line-height: 1; }
+.list-tick.waiting { display: inline-flex; align-items: center; justify-content: center; border-style: dashed; font-size: .9rem; }
+.list-item.asked.done > span { text-decoration: none; opacity: .8; }
+.list-tick:not(button) { display: inline-flex; align-items: center; justify-content: center; }
+.list-item.done .list-tick.declined { background: var(--surface); border-color: var(--border); color: var(--muted, inherit); }

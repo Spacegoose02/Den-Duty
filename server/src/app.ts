@@ -44,6 +44,7 @@ import { tradeRoutes } from './routes/trades.ts';
 import { voiceRoutes } from './routes/voice.ts';
 import { denRoutes } from './routes/den.ts';
 import { listRoutes } from './routes/lists.ts';
+import { ninjaRoutes } from './routes/ninja.ts';
 import { awayRoutes } from './routes/away.ts';
 import { screenTimeRoutes } from './routes/screentime.ts';
 import { eventRoutes } from './routes/events.ts';
@@ -103,6 +104,7 @@ export async function buildApp(db: DatabaseSync, opts: { logger?: boolean; serve
   voiceRoutes(app, db);
   denRoutes(app, db);
   listRoutes(app, db);
+  ninjaRoutes(app, db);
   awayRoutes(app, db);
   screenTimeRoutes(app, db);
   eventRoutes(app, db);
