@@ -1,3 +1,4 @@
+import { ListsPage } from './components/Lists.tsx';
 import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { useApp } from './state.tsx';
 import { RaccoonAvatar } from './components/Raccoon.tsx';
@@ -22,6 +23,7 @@ import { DownloadsPage } from './pages/Downloads.tsx';
 import { SharePage } from './pages/SharePage.tsx';
 import { VisitSummaryPage } from './pages/doctors/Summary.tsx';
 import { Recap } from './pages/Recap.tsx';
+import { Meeting } from './pages/Meeting.tsx';
 import { AllowancePage } from './components/Money.tsx';
 
 const NAV = [
@@ -34,9 +36,13 @@ const NAV = [
   { to: '/stats', ico: '📊', label: 'Stats' },
   { to: '/doctors', ico: '🩺', label: 'Doctors' },
   { to: '/parent-duty', ico: '📝', label: 'Parent Duty' },
+  { to: '/lists', ico: '🛒', label: 'Lists' },
   { to: '/reminders', ico: '🔔', label: 'Reminders' },
   { to: '/settings', ico: '⚙️', label: 'Settings' },
 ];
+
+/** Caregivers get the day-to-day pages only. */
+const CAREGIVER_NAV = new Set(['/', '/calendar', '/kids', '/lists', '/settings']);
 
 /** Which per-kid page each nav entry belongs to (see shared/pages.ts). */
 const NAV_PAGE: Record<string, KidPage> = { '/chores': 'chores', '/parent-duty': 'parentduty', '/rewards': 'goals', '/allowance': 'goals', '/stats': 'stats', '/doctors': 'doctors' };
@@ -44,7 +50,9 @@ const NAV_PAGE: Record<string, KidPage> = { '/chores': 'chores', '/parent-duty':
 function Nav({ className }: { className: string }) {
   const { who, home } = useApp();
   const kids = home?.kids ?? [];
-  const shown = NAV.filter((n) => !NAV_PAGE[n.to] || !kids.length || kids.some((k) => !k.pagesOff?.includes(NAV_PAGE[n.to])));
+  const caregiver = home?.access === 'caregiver';
+  const shown = NAV.filter((n) => (!caregiver || CAREGIVER_NAV.has(n.to))
+    && (!NAV_PAGE[n.to] || !kids.length || kids.some((k) => !k.pagesOff?.includes(NAV_PAGE[n.to]))));
   return (
     <nav className={className} aria-label="Main">
       {className === 'rail' && (
@@ -94,6 +102,7 @@ export function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/calendar" element={<Week />} />
           <Route path="/reminders" element={<Reminders />} />
+          <Route path="/lists" element={<ListsPage />} />
           <Route path="/week" element={<Navigate to="/calendar" replace />} />
           <Route path="/chores" element={<Chores />} />
           <Route path="/kids" element={<Kids />} />
@@ -101,6 +110,7 @@ export function App() {
           <Route path="/rewards" element={<Rewards />} />
           <Route path="/allowance" element={<AllowancePage />} />
           <Route path="/recap" element={<Recap />} />
+          <Route path="/meeting" element={<Meeting />} />
           <Route path="/stats" element={<Stats />} />
           <Route path="/doctors" element={<Doctors />} />
           <Route path="/doctors/summary/:memberId" element={<VisitSummaryPage />} />

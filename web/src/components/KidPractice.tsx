@@ -9,7 +9,7 @@ import { confetti } from './Confetti.ts';
 const TIME_FMT = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' });
 const timeText = (t: string) => TIME_FMT.format(new Date(`2000-01-01T${t}:00Z`));
 
-function TimerRing({ total, left, color }: { total: number; left: number; color: string }) {
+export function TimerRing({ total, left, color }: { total: number; left: number; color: string }) {
   const r = 54;
   const c = 2 * Math.PI * r;
   const frac = total ? left / total : 0;

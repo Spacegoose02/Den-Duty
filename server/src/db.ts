@@ -961,6 +961,238 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE therapy_appointments ADD COLUMN series_index INTEGER;
   CREATE INDEX therapy_appointments_series ON therapy_appointments(series_id, series_index);
   `,
+  // Practice and habits: reading minutes, instrument practice, homework. A kid logs a practice (with a timer); it waits
+  // for a grown-up unless the habit is trusted. One log per habit per day: practicing again adds minutes to it.
+  `
+  CREATE TABLE habits (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    icon TEXT NOT NULL DEFAULT '🎯',
+    minutes INTEGER,
+    target_days INTEGER NOT NULL DEFAULT 5 CHECK (target_days BETWEEN 1 AND 7),
+    points INTEGER NOT NULL DEFAULT 0 CHECK (points >= 0),
+    needs_ok INTEGER NOT NULL DEFAULT 1,
+    active INTEGER NOT NULL DEFAULT 1,
+    position INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX habits_member ON habits(member_id, active);
+  CREATE TABLE habit_logs (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    habit_id TEXT NOT NULL REFERENCES habits(id) ON DELETE CASCADE,
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    date TEXT NOT NULL,
+    minutes INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'waiting' CHECK (status IN ('waiting', 'approved', 'rejected')),
+    note TEXT,
+    paid INTEGER NOT NULL DEFAULT 0,
+    reviewed_at TEXT,
+    reviewed_by TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (habit_id, date)
+  );
+  CREATE INDEX habit_logs_home ON habit_logs(home_id, status);
+  `,
+  // Feelings check-in: one per kid per day (tapping again changes it). Parents see them; a hard feeling can buzz them.
+  `
+  CREATE TABLE kid_feelings (
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    date TEXT NOT NULL,
+    feeling TEXT NOT NULL,
+    reasons TEXT NOT NULL DEFAULT '[]',
+    note TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (member_id, date)
+  );
+  ALTER TABLE homes ADD COLUMN feelings_alert INTEGER NOT NULL DEFAULT 1;
+  `,
+  // Photo frame on the family wall: an Immich album (its address, album and a sealed API key) and/or this week's
+  // photo-proof highlights. Settings are one JSON blob per home.
+  `
+  ALTER TABLE homes ADD COLUMN photo_frame TEXT;
+  ALTER TABLE homes ADD COLUMN immich_key TEXT;
+  `,
+  // Family meetings: a guided weekly sit-down on the wall or a parent's screen. What was said is kept: each kid's
+  // "this week I'll..." (shown on their board until the next meeting), cheers (with any points given) and plans.
+  `
+  CREATE TABLE family_meetings (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    held_on TEXT NOT NULL,
+    data TEXT NOT NULL DEFAULT '{}',
+    created_by TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX family_meetings_home ON family_meetings(home_id, held_on);
+  `,
+  // Chore trading: two kids swap today's chores, or one asks a sibling to help and they split the points. A swap
+  // trades what the two instances are (title, points...), so nothing is re-created for the original kid; "traded"
+  // keeps chore edits from undoing it. Parents can let trades happen freely, check each one, or turn trading off.
+  `
+  CREATE TABLE chore_trades (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (kind IN ('swap', 'help')),
+    from_member TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    to_member TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    instance_id TEXT NOT NULL REFERENCES chore_instances(id) ON DELETE CASCADE,
+    other_instance_id TEXT REFERENCES chore_instances(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'offered' CHECK (status IN ('offered', 'accepted', 'done', 'declined', 'cancelled')),
+    date TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    decided_at TEXT
+  );
+  CREATE INDEX chore_trades_home ON chore_trades(home_id, status);
+  ALTER TABLE chore_instances ADD COLUMN helper_id TEXT REFERENCES members(id) ON DELETE SET NULL;
+  ALTER TABLE chore_instances ADD COLUMN traded INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE homes ADD COLUMN trade_mode TEXT NOT NULL DEFAULT 'ask';
+  `,
+  // Rocky's den: the furniture each kid bought for their den (with points), and whether it's out in the room.
+  `
+  CREATE TABLE den_items (
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    item_id TEXT NOT NULL,
+    placed INTEGER NOT NULL DEFAULT 1,
+    bought_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (member_id, item_id)
+  );
+  `,
+  // Shared family lists: groceries, packing, to-dos. Kids (and the wall tablet) can add to lists that allow it.
+  `
+  CREATE TABLE lists (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    icon TEXT NOT NULL DEFAULT '📝',
+    kids_can_add INTEGER NOT NULL DEFAULT 1,
+    on_wall INTEGER NOT NULL DEFAULT 1,
+    position INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX lists_home ON lists(home_id, position);
+  CREATE TABLE list_items (
+    id TEXT PRIMARY KEY,
+    list_id TEXT NOT NULL REFERENCES lists(id) ON DELETE CASCADE,
+    text TEXT NOT NULL,
+    note TEXT,
+    done INTEGER NOT NULL DEFAULT 0,
+    added_by_member_id TEXT REFERENCES members(id) ON DELETE SET NULL,
+    added_by_name TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    done_at TEXT
+  );
+  CREATE INDEX list_items_list ON list_items(list_id, done, created_at);
+  `,
+  // Caregivers (grandparents, babysitters, a co-parent's partner): parents with day-to-day access only, joined with
+  // their own code and optionally only until a date. And two homes: a repeating "at the other home" pattern per kid
+  // plus one-off away dates, on which no chores are due here.
+  `
+  ALTER TABLE members ADD COLUMN access TEXT NOT NULL DEFAULT 'full';
+  ALTER TABLE members ADD COLUMN access_until TEXT;
+  ALTER TABLE homes ADD COLUMN caregiver_code TEXT;
+  CREATE UNIQUE INDEX homes_caregiver_code ON homes(caregiver_code);
+  ALTER TABLE members ADD COLUMN away_plan TEXT;
+  CREATE TABLE kid_away (
+    id TEXT PRIMARY KEY,
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    start_date TEXT NOT NULL,
+    end_date TEXT NOT NULL,
+    label TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX kid_away_member ON kid_away(member_id, start_date);
+  `,
+  // Screen-time bank: minutes kids earn from chores (or swap points for), and the sessions they spend them on.
+  // Its own ledger in minutes, append-only like points. Sessions tell Home Assistant when to switch things on and off.
+  `
+  CREATE TABLE screen_ledger (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    minutes INTEGER NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('earn', 'swap', 'grant', 'use', 'refund', 'reversal')),
+    reason TEXT NOT NULL,
+    date TEXT NOT NULL,
+    instance_id TEXT,
+    session_id TEXT,
+    by_name TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX screen_ledger_member ON screen_ledger(member_id, date);
+  CREATE INDEX screen_ledger_instance ON screen_ledger(instance_id);
+  CREATE TABLE screen_sessions (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    minutes INTEGER NOT NULL,
+    started_at TEXT NOT NULL DEFAULT (datetime('now')),
+    ends_at TEXT NOT NULL,
+    ended_at TEXT,
+    end_reason TEXT
+  );
+  CREATE INDEX screen_sessions_open ON screen_sessions(home_id, ended_at);
+  ALTER TABLE homes ADD COLUMN screen_time TEXT;
+  `,
+  // Family events: the home's own calendar (practices, parties, school trips), typed in, snapped from a flyer with AI,
+  // or pulled from a linked calendar. calendar_accounts are the linked Google / Microsoft / CalDAV calendars, and
+  // event_links remember which remote event each family event is, for two-way sync.
+  `
+  CREATE TABLE family_events (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    date TEXT NOT NULL,
+    end_date TEXT,
+    time TEXT,
+    end_time TEXT,
+    location TEXT,
+    notes TEXT,
+    member_ids TEXT NOT NULL DEFAULT '[]',
+    kids_see INTEGER NOT NULL DEFAULT 1,
+    source TEXT NOT NULL DEFAULT 'manual',
+    account_id TEXT,
+    deleted INTEGER NOT NULL DEFAULT 0,
+    created_by TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX family_events_home ON family_events(home_id, date);
+  CREATE TABLE calendar_accounts (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (kind IN ('google', 'microsoft', 'caldav')),
+    name TEXT NOT NULL,
+    url TEXT,
+    username TEXT,
+    secret TEXT,
+    calendar_id TEXT,
+    calendar_name TEXT,
+    pull INTEGER NOT NULL DEFAULT 1,
+    push INTEGER NOT NULL DEFAULT 1,
+    member_ids TEXT NOT NULL DEFAULT '[]',
+    synced_at TEXT,
+    error TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE event_links (
+    event_id TEXT NOT NULL REFERENCES family_events(id) ON DELETE CASCADE,
+    account_id TEXT NOT NULL REFERENCES calendar_accounts(id) ON DELETE CASCADE,
+    remote_id TEXT NOT NULL,
+    etag TEXT,
+    synced_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (event_id, account_id)
+  );
+  CREATE UNIQUE INDEX event_links_remote ON event_links(account_id, remote_id);
+  `,
+  // Languages: the home's language for kid screens and the family wall, and a kid's own (null = the home's).
+  `
+  ALTER TABLE homes ADD COLUMN language TEXT NOT NULL DEFAULT 'en';
+  ALTER TABLE members ADD COLUMN language TEXT;
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

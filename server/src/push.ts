@@ -9,7 +9,7 @@ import { getSetting, setSetting } from './auth.ts';
 import { homeToday } from './chores.ts';
 import { addDays, clockText, startOfWeek, timeIn } from '../../shared/schedule.ts';
 
-export type Audience = 'parents' | 'tablet' | 'all';
+export type Audience = 'parents' | 'full-parents' | 'tablet' | 'all';
 export interface PushMessage { title: string; body?: string; url?: string; tag?: string }
 export interface PushSub { endpoint: string; keys: { p256dh: string; auth: string } }
 
@@ -51,7 +51,9 @@ export function saveSubscription(db: DatabaseSync, homeId: string, who: { userId
 
 /** Sends to everyone in the audience, after the current transaction. Gone subscriptions (404/410) are removed. */
 export function notify(db: DatabaseSync, homeId: string, audience: Audience, msg: PushMessage, only?: string): void {
-  const where = audience === 'parents' ? 'AND user_id IS NOT NULL' : audience === 'tablet' ? 'AND device_id IS NOT NULL' : '';
+  const where = audience === 'parents' ? 'AND user_id IS NOT NULL' : audience === 'tablet' ? 'AND device_id IS NOT NULL'
+    // Private things (feelings) skip caregivers.
+    : audience === 'full-parents' ? "AND user_id IN (SELECT m.user_id FROM members m WHERE m.home_id = push_subscriptions.home_id AND m.access = 'full')" : '';
   const subs = db.prepare(`SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE home_id = ? ${where} ${only ? 'AND endpoint = ?' : ''}`)
     .all(...(only ? [homeId, only] : [homeId])) as Row[];
   if (!subs.length) return;
@@ -86,6 +88,10 @@ export function pushForEvent(db: DatabaseSync, homeId: string, type: string, mem
     case 'timeout_buy_requested': return notify(db, homeId, 'parents', { title: `⏳ ${kid()} wants to buy back time`, body: `${d.what}: ${d.points} points`, url: '/' });
     case 'practice_waiting': return notify(db, homeId, 'parents', { title: `🌈 ${kid()} finished a practice`, body: 'Check it on Home', url: '/' });
     case 'reminder_due': return notify(db, homeId, 'parents', { title: `⏰ ${d.reminder}`, body: d.due_time ? `Due at ${clockText(String(d.due_time))}` : 'Due today', url: '/reminders', tag: `rem-${d.reminder_id}` });
+    case 'habit_logged': return d.waiting ? notify(db, homeId, 'parents', { title: `${d.icon ?? '🎯'} ${kid()} practiced ${d.habit}`, body: d.minutes ? `${d.minutes} minutes. Check it on Home` : 'Check it on Home', url: '/', tag: 'habits' }) : undefined;
+    case 'feeling_shared': return d.alert ? notify(db, homeId, 'full-parents', { title: `${d.icon ?? '💛'} ${kid()} is feeling ${d.feeling}`, body: d.note ? String(d.note) : 'From their check-in today', url: '/', tag: `feel-${memberId}` }) : undefined;
+    case 'list_item_added': return d.by_kid ? notify(db, homeId, 'parents', { title: `${d.list_icon ?? '🛒'} ${kid()} added ${d.item}`, body: `To ${d.list}`, url: '/lists', tag: `list-${d.list_id}` }) : undefined;
+    case 'trade_waiting': return notify(db, homeId, 'parents', { title: `🔁 ${kid()} and ${d.other} want to ${d.kind === 'help' ? 'team up on' : 'swap'} a chore`, body: String(d.chore ?? ''), url: '/', tag: 'trades' });
     case 'med_refill_due': return notify(db, homeId, 'parents', { title: `💊 Time to refill ${kid()}'s medicine`, body: `${d.doses_left} doses left`, url: '/' });
     case 'goal_reached': return notify(db, homeId, 'all', { title: `🏆 ${kid()} reached a goal!`, body: String(d.goal ?? ''), url: '/' });
     case 'team_goal_reached': return notify(db, homeId, 'all', { title: `🎉 The family reached ${d.goal}!`, body: d.reward ? `Reward: ${d.reward}` : 'Great teamwork!', url: '/' });

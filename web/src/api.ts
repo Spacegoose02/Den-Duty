@@ -1,3 +1,5 @@
+import { enqueue, isQueueable, QueuedError, setOffline } from './offline.tsx';
+import type { FamilyEvent } from './components/Events.tsx';
 import type { ScheduleKind } from '../../shared/schedule.ts';
 import type { RoutineId } from '../../shared/catalog.ts';
 import type { Achievement, LevelInfo } from '../../shared/progress.ts';
@@ -14,14 +16,26 @@ export class ApiError extends Error {
 }
 
 export async function api<T = unknown>(path: string, opts: { method?: string; body?: unknown } = {}): Promise<T> {
-  const res = await fetch(path, {
-    method: opts.method ?? (opts.body === undefined ? 'GET' : 'POST'),
-    headers: opts.body === undefined ? {} : { 'content-type': 'application/json' },
-    body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
-    credentials: 'same-origin',
-  });
+  const method = opts.method ?? (opts.body === undefined ? 'GET' : 'POST');
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method,
+      headers: opts.body === undefined ? {} : { 'content-type': 'application/json' },
+      body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+      credentials: 'same-origin',
+    });
+  } catch {
+    // No network at all. A kid's "I did it!" waits in the outbox; anything else says so.
+    setOffline(true);
+    if (isQueueable(method, path)) { enqueue(method, path, opts.body); throw new QueuedError(); }
+    throw new ApiError(0, "No internet right now. Try again when the Wi-Fi is back.");
+  }
+  // The service worker answers with a saved copy when it can't reach the server.
+  setOffline(res.headers.get('x-den-duty-offline') === '1');
   const text = await res.text();
   const data = text ? safeJson(text) : null;
+  if (res.ok && path === '/api/auth/logout') navigator.serviceWorker?.controller?.postMessage('clear-cache');
   if (!res.ok) throw new ApiError(res.status, (data as { error?: string })?.error ?? `Request failed (${res.status})`);
   return data as T;
 }
@@ -54,14 +68,21 @@ export interface Kid {
   aiOn: boolean;
   /** Read chores and messages out loud ('auto' = on with the picture board). */
   readAloudSetting: 'auto' | 'on' | 'off'; readAloud: boolean;
+  /** The kid's own language for their screens (null = the family's). */
+  language?: string | null;
 }
 
 export interface HomeDetail {
   id: string; name: string; pointsName: string; pointsIcon: string; theme: string; timezone: string; weekStart: 0 | 1; allowNegative?: boolean; surprise?: 'off' | 'sometimes' | 'often' | 'daily'; helpdeskMaxOpen?: number;
+  /** The language kid screens and the wall use (en, es, fr). */
+  language?: string;
   viewer: 'parent' | 'kid' | 'device' | 'token';
+  /** For a parent: caregivers get the day-to-day only. */
+  access: 'full' | 'caregiver' | null;
   kids: Kid[];
   joinCode?: string;
-  parents?: { id: string; userId: string; name: string; avatar: string; joinedAt: string }[];
+  caregiverCode?: string | null;
+  parents?: { id: string; userId: string; name: string; avatar: string; joinedAt: string; access: 'full' | 'caregiver'; accessUntil: string | null }[];
   haWebhookUrl?: string | null;
 }
 
@@ -83,6 +104,8 @@ export interface AgendaItem {
   needsPhoto?: boolean; hasPhoto?: boolean; photoVersion?: string | null;
   /** A parent's cheer on the approval (see CHEERS). */
   cheer?: string | null;
+  /** A sibling helping (they split the points), and whether it was swapped with a sibling's chore. */
+  helperId?: string | null; traded?: boolean;
   /** Due by a time of day, worth latePoints after it; late once finished after it. */
   dueTime?: string | null; latePoints?: number | null; late?: boolean;
   /** A step in a routine, in order, with a timer. */
@@ -105,7 +128,7 @@ export interface AppointmentItem {
   /** Parents only: the repeat this visit is part of. */
   repeat?: { seriesId: string; index: number; every: number; unit: 'day' | 'week' | 'month'; endDate: string | null; count: number | null } | null;
 }
-export interface Day { date: string; items: AgendaItem[]; external?: ExternalItem[]; duty?: DutyItem[]; reminders?: Reminder[]; practices?: PracticeItem[]; appointments?: AppointmentItem[] }
+export interface Day { date: string; items: AgendaItem[]; external?: ExternalItem[]; events?: FamilyEvent[]; duty?: DutyItem[]; reminders?: Reminder[]; practices?: PracticeItem[]; appointments?: AppointmentItem[] }
 
 export interface Goal {
   id: string; memberId: string; title: string; targetPoints: number; reward: string | null; status: 'active' | 'redeemed';
@@ -120,6 +143,8 @@ export interface BonusOffer { choreId: string; title: string; icon: string; poin
 
 export interface Board {
   today: string; weekStart: string; kid: Kid; stats: KidWeek; todayItems: AgendaItem[]; week: Day[]; goals: Goal[];
+  /** At the other home today (two homes). */
+  away: { label: string; back: string | null } | null;
   bonus: BonusOffer[]; surprise: { state: 'waiting' } | { state: 'opened'; item: AgendaItem } | null; level: LevelInfo; streak: Streak; achievements: Achievement[]; recent: LedgerEntry[]; timeouts: Timeout[];
   /** Present only when a parent shares the kid's therapy goals with them. */
   therapy: { goals: KidTherapyGoal[]; upcoming: { id: string; kind: string; title: string; provider: string | null; startsAt: string }[] } | null;

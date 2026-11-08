@@ -29,6 +29,8 @@ function list(v: string | undefined): string[] {
 
 const googleClientId = process.env.GOOGLE_CLIENT_ID || '';
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET || '';
+const msClientId = process.env.MICROSOFT_CLIENT_ID || '';
+const msClientSecret = process.env.MICROSOFT_CLIENT_SECRET || '';
 const port = Number(process.env.PORT || 8080);
 
 export const config = {
@@ -43,6 +45,8 @@ export const config = {
     ? process.env.SESSION_SECRET
     : generatedSecret(),
   google: googleClientId && googleClientSecret ? { clientId: googleClientId, clientSecret: googleClientSecret } : null,
+  // Outlook / Microsoft 365 calendars (two-way calendar sync only, not sign-in). See docs/calendar-sync.md.
+  microsoft: msClientId && msClientSecret ? { clientId: msClientId, clientSecret: msClientSecret, tenant: process.env.MICROSOFT_TENANT || 'common' } : null,
   // Name-only "quick sign-in" for parents: off, lan (home network addresses only) or anywhere. Admins can change it in the app.
   // ALLOW_LOCAL_LOGIN=true from older versions now means "lan".
   localLogin: process.env.LOCAL_LOGIN

@@ -1,4 +1,5 @@
 // Accounts and strong sign-in: passwords, two-factor codes, passkeys, sessions, and admin controls.
+import { homeForCode, type Access } from './caregivers.ts';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { DatabaseSync } from 'node:sqlite';
 import QRCode from 'qrcode';
@@ -108,19 +109,22 @@ export function accountRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const name = str(b.name, 60) ?? username;
     const first = !hasUsers(db);
     let homeId: string | null = null;
+    let access: Access = 'full';
     if (!first) {
       const mode = signupMode(db);
       const code = str(b.joinCode, 20)?.toUpperCase().replace(/[^A-Z0-9]/g, '');
       if (code) {
-        homeId = ((db.prepare('SELECT id FROM homes WHERE join_code = ?').get(code) as Row | undefined)?.id as string) ?? null;
-        if (!homeId) throw new HttpError(400, 'No home has that join code');
+        const found = homeForCode(db, code);
+        if (!found) throw new HttpError(400, 'No home has that join code');
+        homeId = found.homeId;
+        access = found.access;
       }
       if (mode === 'closed') throw new HttpError(403, 'New accounts are turned off on this server. Ask the admin.');
       if (mode === 'invite' && !homeId) throw new HttpError(403, "You need a join code from someone's home to make an account here");
     }
     if (db.prepare('SELECT 1 FROM users WHERE username = ?').get(username)) throw new HttpError(409, 'That username is taken');
     const user = createUser(db, { name, username, passwordHash: await hashPassword(password) });
-    if (homeId) addParent(db, homeId, user);
+    if (homeId) addParent(db, homeId, user, access);
     startSession(db, reply, user.id, 'password');
     return { user: publicUser(user) };
   });

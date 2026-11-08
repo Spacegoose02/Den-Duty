@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+import { WallLists, type FamilyList } from '../components/Lists.tsx';
+import { useEffect, useMemo, useState } from 'react';
+import { LangProvider, useT } from '../i18n.tsx';
 import { Link } from 'react-router-dom';
 import { useLoad } from '../state.tsx';
 import { RaccoonAvatar } from '../components/Raccoon.tsx';
@@ -17,6 +19,7 @@ interface WallKid {
   level: { level: number; name: string; badge: string } | null;
   chores: { done: number; waiting: number; total: number } | null;
   goal: { title: string; percent: number; progress: number; target: number; reached: boolean } | null;
+  away?: { label: string; back: string | null } | null;
   streak: number | null; badgesToday: { id: string; icon: string; title: string }[]; denMessage: string | null;
   timeouts: { id: string; what: string; state: string; endsAt: string; startsAt: string; minutesLeft: number }[];
   penalties: { reason: string; amount: number }[];
@@ -24,9 +27,9 @@ interface WallKid {
   /** Their followed teams from the sports tracker, when linked. */
   sports?: KidSports;
 }
-interface WallDay { date: string; kids: { kidId: string; chores: number; done: number; practices: number; appointments: { id: string; kind: string; title: string; time: string }[] }[] }
+interface WallDay { date: string; events?: { id: string; title: string; time: string | null; location: string | null; kidIds: string[] }[]; kids: { kidId: string; chores: number; done: number; practices: number; appointments: { id: string; kind: string; title: string; time: string }[] }[] }
 interface Wall {
-  home: { name: string; pointsName: string; pointsIcon: string; theme: string; timezone: string };
+  home: { name: string; pointsName: string; pointsIcon: string; theme: string; timezone: string; language?: string };
   today: string; tomorrow: string;
   settings: { landing: 'wall' | 'picker'; dim: { on: boolean; from: string; to: string } };
   kids: WallKid[]; family: WallDay[]; lunch: { title: string; time: string | null }[];
@@ -36,6 +39,9 @@ interface Wall {
   lootden?: LootDenWall | null;
   /** Today's weather from Weather Scout, when it's linked. */
   weather?: HomeWeather;
+  /** The photo frame: an Immich album and this week's photo-proof highlights, when it's on. */
+  lists?: FamilyList[];
+  photoFrame?: { seconds: number; photos: { url: string; caption: string | null; kind: 'immich' | 'proof' }[] } | null;
 }
 interface LootDenWall {
   nowPlaying: { name: string; title: string; device: string; playedFor: string }[];
@@ -59,9 +65,33 @@ function ShotShow({ shots }: { shots: LootDenWall['screenshots'] }) {
   );
 }
 
+/** The photo frame: one picture at a time, fading to the next. Pictures that fail to load are skipped. */
+function PhotoFrame({ frame }: { frame: NonNullable<Wall['photoFrame']> }) {
+  const [i, setI] = useState(0);
+  const [broken, setBroken] = useState<Set<string>>(new Set());
+  const photos = frame.photos.filter((p) => !broken.has(p.url));
+  useEffect(() => {
+    const t = window.setInterval(() => setI((x) => x + 1), frame.seconds * 1000);
+    return () => window.clearInterval(t);
+  }, [frame.seconds]);
+  if (!photos.length) return null;
+  const p = photos[i % photos.length];
+  const next = photos[(i + 1) % photos.length];
+  return (
+    <figure className="wall-shot wall-frame">
+      <img key={p.url} src={p.url} alt={p.caption ?? 'Family photo'} onError={() => setBroken((b) => new Set(b).add(p.url))} />
+      {/* Load the next one early so the change is instant. */}
+      {next !== p && <link rel="prefetch" href={next.url} />}
+      {p.caption && <figcaption className="wall-sub">{p.kind === 'proof' ? '📸 ' : '🖼️ '}{p.caption}</figcaption>}
+    </figure>
+  );
+}
+
 const REFRESH_MS = 60e3;
-const CLOCK_FMT = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
-const DATE_FMT = new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+const fmts = (lang?: string) => {
+  const loc = !lang || lang === 'en' ? undefined : lang;
+  return { clock: new Intl.DateTimeFormat(loc, { hour: 'numeric', minute: '2-digit' }), date: new Intl.DateTimeFormat(loc, { weekday: 'long', month: 'long', day: 'numeric' }) };
+};
 
 /** Is the local time inside a dim window (which may cross midnight, e.g. 21:00 to 06:30)? */
 export function inWindow(now: Date, from: string, to: string): boolean {
@@ -74,6 +104,7 @@ export function inWindow(now: Date, from: string, to: string): boolean {
 }
 
 function Ring({ done, total, color }: { done: number; total: number; color: string }) {
+  const t = useT();
   const r = 46;
   const c = 2 * Math.PI * r;
   const pct = total ? done / total : 0;
@@ -83,7 +114,7 @@ function Ring({ done, total, color }: { done: number; total: number; color: stri
       <circle cx="55" cy="55" r={r} fill="none" stroke={total && done === total ? 'var(--ok)' : color} strokeWidth="11" strokeLinecap="round"
         strokeDasharray={`${c * pct} ${c}`} transform="rotate(-90 55 55)" />
       <text x="55" y="52" textAnchor="middle" className="wall-ring-num">{done}/{total}</text>
-      <text x="55" y="72" textAnchor="middle" className="wall-ring-label">{total && done === total ? 'all done!' : 'chores'}</text>
+      <text x="55" y="72" textAnchor="middle" className="wall-ring-label">{t(total && done === total ? 'all done!' : 'chores')}</text>
     </svg>
   );
 }
@@ -96,7 +127,6 @@ function Ring({ done, total, color }: { done: number; total: number; color: stri
 export function FamilyWall() {
   const [wall, reload] = useLoad<Wall>('/api/kiosk/wall');
   const [now, setNow] = useState(new Date());
-  const sign = useKidSignIn();
 
   useEffect(() => {
     const clock = window.setInterval(() => setNow(new Date()), 15e3);
@@ -108,6 +138,13 @@ export function FamilyWall() {
 
   if (!wall) return <div className="center-screen"><RaccoonAvatar variant="ninja" size={96} title="Loading" /></div>;
   if (wall.settings.landing === 'picker') return <KidPicker />;
+  return <LangProvider lang={wall.home.language}><WallView wall={wall} now={now} reload={reload} /></LangProvider>;
+}
+
+function WallView({ wall, now, reload }: { wall: Wall; now: Date; reload: () => Promise<unknown> }) {
+  const sign = useKidSignIn();
+  const t = useT();
+  const fmt = useMemo(() => fmts(wall.home.language), [wall.home.language]);
 
   const dim = wall.settings.dim.on && inWindow(now, wall.settings.dim.from, wall.settings.dim.to);
   // Burn-in: move everything a few pixels every few minutes, in a slow loop.
@@ -121,13 +158,13 @@ export function FamilyWall() {
     <div className={`wall${dim ? ' dim' : ''}`} style={{ ['--cols' as string]: String(n <= 4 ? Math.max(n, 1) : 3), ['--cols-p' as string]: String(n <= 1 ? 1 : 2) }}>
       <div className="wall-inner" style={{ transform: `translate(${drift[0]}px, ${drift[1]}px)` }}>
         <header className="wall-head">
-          <div className="wall-clock">{CLOCK_FMT.format(now)}</div>
+          <div className="wall-clock">{fmt.clock.format(now)}</div>
           <div style={{ flex: 1 }}>
-            <div className="wall-date">{DATE_FMT.format(now)}</div>
+            <div className="wall-date">{fmt.date.format(now)}</div>
             <div className="wall-home">{wall.home.name}</div>
           </div>
-          <Link to="/picker" className="btn ghost wall-parents">🦝 Pick a raccoon</Link>
-          <Link to="/login" className="btn ghost wall-parents">🔒 Parents</Link>
+          <Link to="/picker" className="btn ghost wall-parents">{t('🦝 Pick a raccoon')}</Link>
+          <Link to="/login" className="btn ghost wall-parents">{t('🔒 Parents')}</Link>
         </header>
 
         <div className="wall-kids">
@@ -148,8 +185,9 @@ export function FamilyWall() {
                 {k.chores && <Ring done={k.chores.done} total={k.chores.total} color={k.color} />}
                 <div className="wall-stats">
                   <div><span className="wall-big">{k.balance}</span> <span className="wall-sub">{icon} {wall.home.pointsName}</span></div>
+                  {k.away && <div className="wall-away">🚗 {k.away.label}{k.away.back ? ` · ${t('back {day}', { day: dayName(k.away.back) })}` : ''}</div>}
                   {k.streak != null && k.streak > 0 && <div className="wall-streak">🔥 {k.streak}-day streak</div>}
-                  {k.chores && k.chores.waiting > 0 && <div className="wall-sub">⏳ {k.chores.waiting} waiting for a grown-up</div>}
+                  {k.chores && k.chores.waiting > 0 && <div className="wall-sub">{t('⏳ {n} waiting for a grown-up', { n: k.chores.waiting })}</div>}
                 </div>
               </div>
               {k.goal && (
@@ -180,7 +218,15 @@ export function FamilyWall() {
           <WallWeather weather={wall.weather} />
           {wall.family.map((d, i) => (
             <div key={d.date} className="wall-day">
-              <div className="wall-day-title">{i === 0 ? 'Today' : 'Tomorrow'} <span className="wall-sub">{dayName(d.date)}</span></div>
+              <div className="wall-day-title">{t(i === 0 ? 'Today' : 'Tomorrow')} <span className="wall-sub">{dayName(d.date)}</span></div>
+              {d.events?.map((e) => {
+                const k = e.kidIds.length === 1 ? kidsById.get(e.kidIds[0]) : undefined;
+                return (
+                  <div key={e.id} className="wall-line" style={{ borderLeftColor: k?.color ?? 'var(--primary)' }}>
+                    📌 {e.time && <strong>{e.time} </strong>}{e.kidIds.length ? `${e.kidIds.map((id) => kidsById.get(id)?.name).filter(Boolean).join(' & ')}: ` : ''}{e.title}
+                  </div>
+                );
+              })}
               {d.kids.map((x) => {
                 const k = kidsById.get(x.kidId);
                 if (!k || (!x.chores && !x.practices && !x.appointments.length)) return null;
@@ -197,7 +243,7 @@ export function FamilyWall() {
           ))}
           {wall.lunch.length > 0 && (
             <div className="wall-day">
-              <div className="wall-day-title">🍎 Lunch today</div>
+              <div className="wall-day-title">{t('🍎 Lunch today')}</div>
               {wall.lunch.map((l, i) => <div key={i} className="wall-line">{l.title}</div>)}
             </div>
           )}
@@ -210,7 +256,7 @@ export function FamilyWall() {
           ))}
           {wall.lootden?.nowPlaying.length ? (
             <div className="wall-day">
-              <div className="wall-day-title">🎮 Playing now</div>
+              <div className="wall-day-title">{t('🎮 Playing now')}</div>
               {wall.lootden.nowPlaying.map((p, i) => <div key={i} className="wall-line"><strong>{p.name}</strong> · {p.title} <span className="wall-sub">· {p.playedFor}</span></div>)}
             </div>
           ) : null}
@@ -221,7 +267,9 @@ export function FamilyWall() {
               <div className="wall-sub">{wall.lootden.nextGameNight.players.map((p) => p.name).join(', ')}{wall.lootden.nextGameNight.goal ? ` · earned with ${wall.lootden.nextGameNight.goal.icon} ${wall.lootden.nextGameNight.goal.title}` : ''}</div>
             </div>
           )}
+          {wall.photoFrame?.photos.length ? <div className="wall-day wall-day-frame"><PhotoFrame frame={wall.photoFrame} /></div> : null}
           {wall.lootden?.screenshots.length ? <div className="wall-day"><ShotShow shots={wall.lootden.screenshots} /></div> : null}
+          {wall.lists?.length ? <WallLists lists={wall.lists} onChange={() => void reload()} /> : null}
           {wall.polls.map((p) => (
             <div key={p.id} className="wall-day">
               <div className="wall-day-title">🗳️ {p.title}</div>

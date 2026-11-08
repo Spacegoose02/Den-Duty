@@ -1,3 +1,6 @@
+import { TradesWaitingCard } from '../components/Trades.tsx';
+import { FeelingsCard } from '../components/Feelings.tsx';
+import { HabitsWaitingCard } from '../components/Habits.tsx';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, type QuickReward, type ReviewItem, type Summary } from '../api.ts';
@@ -30,6 +33,8 @@ export function Dashboard() {
   const [quick] = useLoad<QuickReward[]>(`${base}/quick-rewards`);
   const [appointments] = useLoad<{ id: string; kind: string; title: string; provider: string | null; startsAt: string; kidName: string; kidAvatar: string }[]>(`${base}/therapy/upcoming`);
   const [penalty, setPenalty] = useState<{ id: string; name: string; points: number; reason: string } | null>(null);
+  // Caregivers get the day-to-day: no meetings, reminders or taking points away.
+  const caregiver = home?.access === 'caregiver';
   const [busy, setBusy] = useState(false);
   const [timeoutFor, setTimeoutFor] = useState<{ id: string; name: string } | null>(null);
   const icon = home?.pointsIcon ?? '✨';
@@ -83,6 +88,12 @@ export function Dashboard() {
         </Link>
       )}
 
+      {!caregiver && <Link to="/meeting" className="card row recap-banner">
+        <span style={{ fontSize: '2rem' }} aria-hidden>🗓️</span>
+        <span style={{ flex: 1 }}><strong>Family meeting</strong><span className="small muted" style={{ display: 'block' }}>Look back, cheer each other on and plan the week, one step at a time</span></span>
+        <span className="btn">Start</span>
+      </Link>}
+
       <section className={`card stack review-card${queue?.length ? ' has-items' : ''}`}>
         <div className="row">
           <h2 style={{ margin: 0, flex: 1 }}>To review {!!queue?.length && <span className="pill warn">{queue.length}</span>}</h2>
@@ -110,8 +121,11 @@ export function Dashboard() {
       </section>
 
       <PracticeWaitingCard onChange={reloadSummary} />
+      <HabitsWaitingCard />
+      <TradesWaitingCard />
+      <FeelingsCard />
       <MedsTodayCard />
-      {summary && <RemindersCard items={summary.reminders} onChange={() => void reloadSummary()} />}
+      {summary && !caregiver && <RemindersCard items={summary.reminders} onChange={() => void reloadSummary()} />}
       {summary && <HelpdeskCard items={summary.helpdesk} onChange={() => void reloadSummary()} />}
       {home && <ShopOrdersCard kids={home.kids} onChange={() => void reloadSummary()} />}
 
@@ -174,7 +188,7 @@ export function Dashboard() {
                     toast(`${q.icon} ${q.title}: +${q.amount} ${icon} for ${k.name}`);
                   })}>{q.icon} +{q.amount}</button>
                 ))}
-                <button className="chip" onClick={() => setPenalty({ id: k.id, name: k.name, points: 1, reason: '' })}>🌱 Take away</button>
+                {!caregiver && <button className="chip" onClick={() => setPenalty({ id: k.id, name: k.name, points: 1, reason: '' })}>🌱 Take away</button>}
                 {!k.pagesOff.includes('timeout') && <button className="chip" onClick={() => setTimeoutFor({ id: k.id, name: k.name })}>⏳ Time-out</button>}
               </div>
             </div>

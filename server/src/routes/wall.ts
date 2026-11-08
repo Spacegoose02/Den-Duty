@@ -1,6 +1,8 @@
 // The family wall: the family tablet's home page, showing every kid at once for a glance from across the room.
 // No sign-in to look (the tablet is already paired). A shared wall is careful by default: no Doctors goals, no
 // penalties and no time-out details unless a parent turns them on, and appointments only when shared with that kid.
+import { eventsBetween } from '../familyevents.ts';
+import { awayToday } from '../away.ts';
 import type { FastifyInstance } from 'fastify';
 import { teamGoals } from '../team.ts';
 import type { DatabaseSync } from 'node:sqlite';
@@ -17,6 +19,8 @@ import { listKids } from './homes.ts';
 import { lootdenWall } from './lootden.ts';
 import { kidSports } from './sports.ts';
 import { homeWeather } from './weather.ts';
+import { wallLists } from './lists.ts';
+import { framePhotos } from './photoframe.ts';
 import { addDays } from '../../../shared/schedule.ts';
 
 export interface WallSettings {
@@ -74,6 +78,7 @@ export async function wallData(db: DatabaseSync, homeId: string) {
     return {
       id: k.id, name: k.name, avatar: k.avatar, color: k.color, theme: k.theme, hasPin: k.hasPin, pagesOff: k.pagesOff,
       balance: balance(db, k.id),
+      away: awayToday(db, k.id, today),
       level: on(k, 'stats') ? { level: level.level, name: level.name, badge: level.badge } : null,
       chores: on(k, 'chores') ? { done: items.filter((i) => i.status === 'approved').length, waiting: items.filter((i) => i.status === 'submitted').length, total: items.length } : null,
       goal: goal ? { title: goal.title, percent: goal.percent, progress: goal.progress, target: goal.targetPoints, reached: goal.reached } : null,
@@ -90,11 +95,14 @@ export async function wallData(db: DatabaseSync, homeId: string) {
     };
   }));
 
+  // Family events kids may see (the wall is a shared screen), for anyone in the family.
+    const kidEvents = (date: string) => eventsBetween(db, homeId, date, date).filter((e) => e.kidsSee);
   const family = [today, tomorrow].map((date) => {
     const d = days.find((x) => x.date === date);
     const doc = docs.get(date);
     return {
       date,
+      events: kidEvents(date).map((e) => ({ id: e.id, title: e.title, time: e.time, location: e.location, kidIds: e.memberIds })),
       kids: kids.map((k) => {
         const items = d?.items.filter((i) => i.memberId === k.id) ?? [];
         return {
@@ -115,7 +123,7 @@ export async function wallData(db: DatabaseSync, homeId: string) {
   }));
 
   return {
-    home: { name: home.name, pointsName: home.pointsName, pointsIcon: home.pointsIcon, theme: home.theme, timezone: home.timezone },
+    home: { name: home.name, pointsName: home.pointsName, pointsIcon: home.pointsIcon, theme: home.theme, timezone: home.timezone, language: home.language },
     today, tomorrow, settings: { landing: settings.landing, dim: settings.dim },
     kids: kidCards, family, lunch: lunch.map((x) => ({ title: x.title, time: x.time })), polls,
     teamGoals: teamGoals(db, homeId).filter((g) => g.status === 'active'),
@@ -123,6 +131,10 @@ export async function wallData(db: DatabaseSync, homeId: string) {
     lootden: await lootdenWall(db, homeId),
     // Weather Scout (when linked): today's weather, the recess light and any alerts.
     weather: await homeWeather(db, homeId),
+    // The photo frame (when on): an Immich album and this week's photo-proof highlights.
+    photoFrame: await framePhotos(db, homeId),
+    // Shared lists marked for the wall (open items only).
+    lists: wallLists(db, homeId),
   };
 }
 

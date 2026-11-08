@@ -1,6 +1,7 @@
 // Calendars in and out. Out: a secret ICS link per home and per kid with chores and appointments, so they show
 // up in Google Calendar. In: ICS feeds a parent adds (school lunch menus, Nighttime Ninja's meal plan), cached
 // and shown on the weekly agenda.
+import { eventsBetween } from './familyevents.ts';
 import type { DatabaseSync } from 'node:sqlite';
 import type { Row } from './db.ts';
 import { randomToken } from './util.ts';
@@ -83,6 +84,15 @@ export function calendarFor(db: DatabaseSync, token: string): string | null {
         description: [a.location, a.notes].filter(Boolean).join('\n') || null,
       });
     }
+  }
+  // Family events made in Den Duty (not ones mirrored from a linked calendar: that calendar has them already).
+  for (const e of eventsBetween(db, info.id, from, addDays(today, 120), kid ? kid.id as string : undefined)) {
+    if (e.accountId) continue;
+    const mins = e.time && e.endTime ? Math.max(Math.round((Date.parse(`${e.endDate ?? e.date}T${e.endTime}:00Z`) - Date.parse(`${e.date}T${e.time}:00Z`)) / 60000), 15) : 60;
+    events.push({
+      uid: `event-${e.id}@den-duty`, date: e.date, time: e.time, durationMinutes: mins, endDate: e.time ? null : addDays(e.endDate ?? e.date, 1),
+      summary: e.title, description: e.notes, location: e.location,
+    });
   }
   if (!kid) {
     for (const r of remindersDue(db, info.id, from, addDays(today, 120))) {

@@ -16,11 +16,21 @@ import { cheerOf, pickPhoto, PhotoThumb } from '../components/Photo.tsx';
 import { KidMedicine, PracticeMode } from '../components/KidPractice.tsx';
 import { RoutineCards, RoutinePlayer } from '../components/Routines.tsx';
 import { KidJars } from '../components/Money.tsx';
+import { KidHabits } from '../components/Habits.tsx';
+import { KidFeelings } from '../components/Feelings.tsx';
+import { KidDen } from '../components/Den.tsx';
+import { KidLists } from '../components/Lists.tsx';
+import { KidScreenTime } from '../components/ScreenTime.tsx';
+import { KidMeetingNote } from './Meeting.tsx';
+import { KidTrades, TradeForm, useTrades } from '../components/Trades.tsx';
 import { KidSportsCards } from '../components/Sports.tsx';
 import { KidWeatherCard } from '../components/Weather.tsx';
 import { SpeakButton, speak } from '../components/Speak.tsx';
+import { QueuedError, useQueuedDone } from '../offline.tsx';
 import { clockText } from '../../../shared/schedule.ts';
 import type { RoutineId } from '../../../shared/catalog.ts';
+import { LangProvider, translate, type T } from '../i18n.tsx';
+import { isLang } from '../../../shared/languages.ts';
 
 const IDLE_MS = 3 * 60e3;
 /** How often a kid's own board checks for chores a grown-up just approved. */
@@ -89,7 +99,12 @@ function recentLine(e: LedgerEntry, icon: string): { mark: string; text: string;
 
 function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent: boolean; onExit?: () => void }) {
   const { base, home, toast, refresh } = useApp();
-  const [board, reload] = useLoad<Board>(`${base}/kids/${memberId}/board`);
+  const [loaded, reload] = useLoad<Board>(`${base}/kids/${memberId}/board`);
+  const queued = useQueuedDone();
+  // A chore tapped while offline shows as sent; it goes to the server when the Wi-Fi is back.
+  const board = loaded && queued.size
+    ? { ...loaded, todayItems: loaded.todayItems.map((i) => i.id && queued.has(i.id) && (i.status === 'pending' || i.status === 'rejected') ? { ...i, status: 'submitted' as const } : i) }
+    : loaded;
   const [practicing, setPracticing] = useState<KidTherapyGoal | null>(null);
   const [polls, reloadPolls] = useLoad<Poll[]>(`${base}/polls`);
   const [denNote] = useLoad<{ text: string; source: string } | null>(`${base}/kids/${memberId}/room-message`, [memberId]);
@@ -99,6 +114,15 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
   const [newTimeout, setNewTimeout] = useState(false);
   const [routine, setRoutine] = useState<RoutineId | null>(null);
   const seenApproved = useRef<Set<string> | null>(null);
+  const [trading, setTrading] = useState<AgendaItem | null>(null);
+  const [trades, reloadTrades] = useTrades(!asParent);
+
+  // Things tapped while offline just went through: show them as the server sees them.
+  useEffect(() => {
+    const on = () => void reload();
+    window.addEventListener('den-duty-synced', on);
+    return () => window.removeEventListener('den-duty-synced', on);
+  }, [reload]);
 
   // On the kid's own screen, keep an eye out for approvals so the party happens while they're still looking.
   useEffect(() => {
@@ -126,6 +150,10 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
 
   if (!board) return <div className="center-screen"><RaccoonAvatar variant="ninja" size={96} title="Loading" /></div>;
   const { kid, stats, level, streak } = board;
+  // A kid's own screen speaks their language; a parent looking at it sees English.
+  const langRaw = asParent ? 'en' : kid.language ?? home?.language;
+  const lang = isLang(langRaw) ? langRaw : 'en';
+  const t: T = (k, v) => translate(lang, k, v);
   const icon = home?.pointsIcon ?? '✨';
   const celebrate = (i: string, text: string) => { setCheer({ icon: i, text }); window.setTimeout(() => setCheer(null), 1600); };
 
@@ -143,9 +171,15 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
       if (!image) return;
       await post(`/instances/${i.id}/photo`, { image });
     }
-    const r = await post(`/instances/${i.id}/done`) as { awarded: number };
+    let r: { awarded: number };
+    try { r = await post(`/instances/${i.id}/done`) as { awarded: number }; } catch (e) {
+      if (!(e instanceof QueuedError)) throw e;
+      confetti({ colors: [kid.color], count: 90 });
+      celebrate(i.icon, t('Saved! It will send when the Wi-Fi is back. 📶'));
+      return;
+    }
     if (asParent) { confetti({ colors: [kid.color], count: 80 }); toast(`${i.title}: +${r.awarded} ${icon}`); }
-    else { confetti({ colors: [kid.color], count: left === 1 ? 220 : 90 }); celebrate(i.icon, left === 1 ? 'Last one! You did them all! 🎉' : 'Nice work! Sent to a grown-up.'); }
+    else { confetti({ colors: [kid.color], count: left === 1 ? 220 : 90 }); celebrate(i.icon, t(left === 1 ? 'Last one! You did them all! 🎉' : 'Nice work! Sent to a grown-up.')); }
   });
 
   // Routine steps live in their routine cards, not the kanban.
@@ -156,6 +190,7 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
   const decided = polls?.filter((p) => p.status === 'closed').slice(0, 2) ?? [];
 
   return (
+    <LangProvider lang={lang}>
     <div className={`stack board${asParent && kid.theme ? ' themed' : ''}${kid.pictureMode ? ' picture' : ''}${kid.pagesOff.map((p) => ` off-${p}`).join('')}`} data-theme={asParent ? kid.theme ?? undefined : undefined} style={{ ['--kid' as string]: kid.color }}>
       <header className="board-head">
         <button className="avatar-button" onClick={() => setPicking(true)} aria-label="Change raccoon">
@@ -163,24 +198,33 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
           <span className="level-badge" title={`Level ${level.level}: ${level.name}`}>{level.badge}</span>
         </button>
         <div style={{ flex: 1, minWidth: 200 }}>
-          <h1 style={{ margin: 0 }}>{asParent ? kid.name : `Hi ${kid.name}!`}</h1>
+          <h1 style={{ margin: 0 }}>{asParent ? kid.name : t('Hi {name}!', { name: kid.name })}</h1>
           <p className="muted" style={{ margin: '0 0 6px' }}>
-            {left ? `${left} chore${left === 1 ? '' : 's'} left today` : board.todayItems.length ? 'All done for today! 🎉' : 'Nothing to do today'}
-            {streak.current > 0 && ` · 🔥 ${streak.current}-day streak`}
+            {left ? t(left === 1 ? '{n} chore left today' : '{n} chores left today', { n: left }) : t(board.todayItems.length ? 'All done for today! 🎉' : 'Nothing to do today')}
+            {streak.current > 0 && ` · ${t('🔥 {n}-day streak', { n: streak.current })}`}
           </p>
           <div className="level-line pg-stats">
             <strong>{level.name}</strong>
             <ProgressBar percent={level.percent} color={kid.color} />
-            <span className="small muted">{level.next ? `${level.next.min - level.points} to ${level.next.badge} ${level.next.name}` : 'Top level!'}</span>
+            <span className="small muted">{level.next ? t('{n} to {next}', { n: level.next.min - level.points, next: `${level.next.badge} ${level.next.name}` }) : t('Top level!')}</span>
           </div>
         </div>
         <div className="balance">
           <span className="balance-num">{kid.balance}</span>
           <span className="balance-label">{icon} {home?.pointsName}</span>
         </div>
-        {onExit && <button className="kid-exit" onClick={onExit}>👋 I'm done</button>}
+        {onExit && <button className="kid-exit" onClick={onExit}>{t("👋 I'm done")}</button>}
       </header>
 
+      {board.away && (
+        <div className="card away-note">
+          <span style={{ fontSize: '2rem' }} aria-hidden>🚗</span>
+          <span style={{ flex: 1 }}>{asParent
+            ? <>{kid.name} is {board.away.label.replace(/^At /, 'at ')} today, so no chores here.{board.away.back ? ` Back ${dayName(board.away.back)}.` : ''}</>
+            : <>{t('Today: {where}. No chores here.', { where: board.away.label })}{board.away.back ? ` ${t('Back {day}.', { day: dayName(board.away.back) })}` : ''}</>}</span>
+          {readAloud && !asParent && <SpeakButton text={`You're ${board.away.label} today.`} />}
+        </div>
+      )}
       {denNote && (
         <div className="den-note pg-chores" aria-live="polite">
           <RaccoonAvatar variant={kid.avatar} size={44} />
@@ -189,14 +233,21 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
         </div>
       )}
 
+      {!asParent && trades && <KidTrades memberId={memberId} trades={trades.trades} mode={trades.mode} onChange={() => { void reloadTrades(); void reload(); }} />}
+      {trading && <TradeForm item={trading} onClose={() => setTrading(null)} onDone={() => { setTrading(null); void reloadTrades(); }} />}
+
+      <KidMeetingNote memberId={memberId} color={kid.color} />
+
+      <KidFeelings memberId={memberId} kidName={kid.name} asParent={asParent} readAloud={readAloud} picture={kid.pictureMode} />
+
       {(board.timeouts.length > 0 || (asParent && !kid.pagesOff.includes('timeout'))) && (
         <section className="card stack pg-timeout">
           <div className="row">
-            <h2 style={{ margin: 0, flex: 1 }}>{asParent ? '⏳ Time-outs' : '⏳ Taking a break'}</h2>
+            <h2 style={{ margin: 0, flex: 1 }}>{asParent ? '⏳ Time-outs' : t('⏳ Taking a break')}</h2>
             {asParent && <button onClick={() => setNewTimeout(true)}>＋ Time-out</button>}
           </div>
           {board.timeouts.map((t) => <TimeoutCard key={t.id} t={t} asParent={asParent} balance={kid.balance} onChange={() => void reload()} />)}
-          {!board.timeouts.length && <p className="small muted" style={{ margin: 0 }}>None right now.</p>}
+          {!board.timeouts.length && <p className="small muted" style={{ margin: 0 }}>{t('None right now.')}</p>}
         </section>
       )}
       {!kid.pagesOff.includes('helpdesk') && <KidHelpdesk memberId={memberId} kidName={kid.name} picture={kid.pictureMode} asParent={asParent} />}
@@ -208,15 +259,15 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
 
       <section className="pg-chores">
         <div className="row">
-          <h2 style={{ flex: 1 }}>Today</h2>
-          {readAloud && !asParent && left > 0 && <button className="speak-btn" aria-label="Read my chores" onClick={() => speak(`You have ${left} chore${left === 1 ? '' : 's'} left. ${board.todayItems.filter((i) => !i.routine && (i.status === 'pending' || i.status === 'rejected')).map((i) => i.title).join('. ')}`)}>🔊 My chores</button>}
+          <h2 style={{ flex: 1 }}>{t('Today')}</h2>
+          {readAloud && !asParent && left > 0 && <button className="speak-btn" aria-label="Read my chores" onClick={() => speak(`${t('You have {n} chores left.', { n: left })} ${board.todayItems.filter((i) => !i.routine && (i.status === 'pending' || i.status === 'rejected')).map((i) => i.title).join('. ')}`)}>{t('🔊 My chores')}</button>}
         </div>
         <div className="kanban">
           {COLUMNS.map((col) => {
             const items = byColumn(col.id);
             return (
               <div key={col.id} className={`kanban-col ${col.id}`}>
-                <div className="kanban-head">{col.title} <span className="pill">{items.length}</span></div>
+                <div className="kanban-head">{t(col.title)} <span className="pill">{items.length}</span></div>
                 {items.map((i) => {
                   const isBonus = board.bonus.some((b) => b.instanceId === i.id);
                   const k = i.id!;
@@ -225,11 +276,11 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
                       <span className="kanban-icon" aria-hidden>{i.icon}</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div className="kanban-title">{i.title} {readAloud && <SpeakButton text={i.title} />}</div>
-                        <div className="small muted">+{i.points} {icon}{i.surprise ? ' · 🎁 surprise ×2' : isBonus && ' · bonus'}{i.date !== board.today && ` · from ${dayName(i.date)}`}{i.auto && ' · ✨ auto'}</div>
-                        {i.dueTime && (col.id === 'todo' || col.id === 'doing') && <div className="due-tag">⏰ by {clockText(i.dueTime)}{i.latePoints != null && i.latePoints < i.points && ` (then +${i.latePoints})`}</div>}
-                        {i.late && <div className="due-tag late">⏰ late</div>}
-                        {i.status === 'rejected' && <div className="chore-note">🔁 {i.note ? `“${i.note}”` : 'Try again'}</div>}
-                        {needsSnap(i) && (col.id === 'todo' || col.id === 'doing') && <div className="small">📸 {i.status === 'rejected' ? 'Snap a new photo when it\'s done' : 'Snap a photo when it\'s done'}</div>}
+                        <div className="small muted">+{i.points} {icon}{i.surprise ? ` · ${t('🎁 surprise ×2')}` : isBonus && ` · ${t('bonus')}`}{i.date !== board.today && ` · ${t('from {day}', { day: dayName(i.date) })}`}{i.auto && ` · ${t('✨ auto')}`}</div>
+                        {i.dueTime && (col.id === 'todo' || col.id === 'doing') && <div className="due-tag">{t('⏰ by {time}', { time: clockText(i.dueTime) })}{i.latePoints != null && i.latePoints < i.points && ` ${t('(then +{n})', { n: i.latePoints })}`}</div>}
+                        {i.late && <div className="due-tag late">{t('⏰ late')}</div>}
+                        {i.status === 'rejected' && <div className="chore-note">🔁 {i.note ? `“${i.note}”` : t('Try again')}</div>}
+                        {needsSnap(i) && (col.id === 'todo' || col.id === 'doing') && <div className="small">{t(i.status === 'rejected' ? "📸 Snap a new photo when it's done" : "📸 Snap a photo when it's done")}</div>}
                         {cheerOf(i.cheer) && <div className="cheer-tag">{cheerOf(i.cheer)!.icon} {cheerOf(i.cheer)!.text}</div>}
                       </div>
                       {i.hasPhoto && <PhotoThumb src={`${base}/instances/${k}/photo?v=${i.photoVersion ?? ''}`} alt={i.title} size={48} />}
@@ -237,8 +288,11 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
                         {col.id === 'todo' && <button disabled={busy === k} onClick={() => void act(k, () => post(`/instances/${k}/start`, { started: true }))} aria-label="Start">▶</button>}
                         {(col.id === 'todo' || col.id === 'doing') && <button className="primary" disabled={busy === k} onClick={() => void done(i)} aria-label={needsSnap(i) ? 'Snap a photo and finish' : 'Done'}>{needsSnap(i) ? '📸' : '✓'}</button>}
                         {col.id === 'doing' && <button disabled={busy === k} onClick={() => void act(k, () => post(`/instances/${k}/start`, { started: false }))} aria-label="Back to to do">↩</button>}
+                        {col.id === 'todo' && !asParent && trades?.mode && trades.mode !== 'off' && !isBonus && !i.helperId && (home?.kids.length ?? 0) > 1 && i.date === board.today && (
+                          <button disabled={busy === k} onClick={() => setTrading(i)} aria-label="Swap or ask for help">🔁</button>
+                        )}
                         {col.id === 'todo' && isBonus && !i.surprise && <button disabled={busy === k} onClick={() => void act(k, () => post(`/instances/${k}/unclaim`))} aria-label="Drop bonus">✕</button>}
-                        {col.id === 'waiting' && <button disabled={busy === k} onClick={() => void act(k, () => post(`/instances/${k}/undo`))}>Not yet</button>}
+                        {col.id === 'waiting' && <button disabled={busy === k} onClick={() => void act(k, () => post(`/instances/${k}/undo`))}>{t('Not yet')}</button>}
                         {col.id === 'done' && asParent && <button disabled={busy === k} onClick={() => void act(k, async () => {
                           const r = await post(`/instances/${k}/undo`) as { paid?: number; taken?: number };
                           if (r.paid != null && r.taken != null && r.taken < r.paid) toast(`Took back ${r.taken} ${icon} (${kid.name} already spent the rest)`);
@@ -247,12 +301,20 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
                     </div>
                   );
                 })}
-                {!items.length && col.empty && <p className="small muted" style={{ margin: 0 }}>{col.empty}</p>}
+                {!items.length && col.empty && <p className="small muted" style={{ margin: 0 }}>{t(col.empty)}</p>}
               </div>
             );
           })}
         </div>
       </section>
+
+      <KidHabits memberId={memberId} kidName={kid.name} color={kid.color} asParent={asParent} readAloud={readAloud} />
+
+      <KidScreenTime memberId={memberId} asParent={asParent} readAloud={readAloud} onChange={() => void reload()} />
+
+      {!asParent && <KidLists memberId={memberId} />}
+
+      <KidDen memberId={memberId} avatar={kid.avatar} color={kid.color} asParent={asParent} readAloud={readAloud} onChange={() => void reload()} />
 
       {board.surprise?.state === 'waiting' && (
         <section className="card pg-chores surprise-card">
@@ -260,13 +322,13 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
             onClick={() => void act('surprise', async () => {
               const r = await post(`/kids/${memberId}/surprise/open`) as { item: AgendaItem };
               confetti({ colors: [kid.color, '#ffd43b', '#ff6b6b'], count: 200 });
-              setCheer({ icon: r.item.icon, text: `Surprise! ${r.item.title} for double ${home?.pointsName ?? 'points'}: +${r.item.points} ${icon}` });
+              setCheer({ icon: r.item.icon, text: t('Surprise! {title} for double {points}: +{n} {icon}', { title: r.item.title, points: home?.pointsName ?? 'points', n: r.item.points, icon }) });
               window.setTimeout(() => setCheer(null), 3200);
             })}>
             <span className="surprise-gift" aria-hidden>🎁</span>
             <span>
-              <strong>{asParent ? `${kid.name} has a surprise waiting` : 'A surprise is waiting for you!'}</strong>
-              <span className="small muted" style={{ display: 'block' }}>{asParent ? 'It opens on their board, or tap to open it now.' : 'Tap to open it'}</span>
+              <strong>{asParent ? `${kid.name} has a surprise waiting` : t('A surprise is waiting for you!')}</strong>
+              <span className="small muted" style={{ display: 'block' }}>{asParent ? 'It opens on their board, or tap to open it now.' : t('Tap to open it')}</span>
             </span>
           </button>
         </section>
@@ -274,22 +336,22 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
 
       {board.bonus.length > 0 && (
         <section className="card stack pg-chores">
-          <h2 style={{ margin: 0 }}>💪 Up for grabs</h2>
-          <p className="small muted" style={{ margin: 0 }}>Extra chores for extra {home?.pointsName}. Pick one if you want it!</p>
+          <h2 style={{ margin: 0 }}>{t('💪 Up for grabs')}</h2>
+          <p className="small muted" style={{ margin: 0 }}>{t('Extra chores for extra {points}. Pick one if you want it!', { points: home?.pointsName ?? '' })}</p>
           <div className="bonus-grid">
             {board.bonus.map((b) => (
               <div key={b.choreId} className="bonus-card">
                 <span className="kanban-icon">{b.icon}</span>
                 <div style={{ flex: 1 }}>
                   <div className="kanban-title">{b.title}</div>
-                  <div className="small muted">+{b.points} {icon}{b.claimLimit === 'one' && ' · first to grab it'}</div>
+                  <div className="small muted">+{b.points} {icon}{b.claimLimit === 'one' && ` · ${t('first to grab it')}`}</div>
                 </div>
-                {b.instanceId ? <span className="pill ok">You're on it</span>
-                  : b.takenBy ? <span className="pill">{b.takenBy} has it</span>
+                {b.instanceId ? <span className="pill ok">{t("You're on it")}</span>
+                  : b.takenBy ? <span className="pill">{t('{name} has it', { name: b.takenBy })}</span>
                     : <button className="primary" disabled={busy === b.choreId} onClick={() => void act(b.choreId, async () => {
                       await post(`/chores/${b.choreId}/claim`, asParent ? { memberId } : {});
-                      if (!asParent) celebrate(b.icon, "It's yours! Go get it.");
-                    })}>I'll do it</button>}
+                      if (!asParent) celebrate(b.icon, t("It's yours! Go get it."));
+                    })}>{t("I'll do it")}</button>}
               </div>
             ))}
           </div>
@@ -298,7 +360,7 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
 
       <div className="grid-2">
         <section className="card stack pg-goals">
-          <h2 style={{ margin: 0 }}>Goals</h2>
+          <h2 style={{ margin: 0 }}>{t('Goals')}</h2>
           {board.goals.map((g) => (
             <div key={g.id} className="goal">
               <div className="row" style={{ justifyContent: 'space-between' }}>
@@ -306,17 +368,17 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
                 <span className="small">{g.progress} / {g.targetPoints} {icon}</span>
               </div>
               <ProgressBar percent={g.percent} color={g.reached ? 'var(--ok)' : kid.color} />
-              {g.reward && <span className="small muted">Reward: {g.reward}{g.reached && ' · Ask a grown-up!'}</span>}
+              {g.reward && <span className="small muted">{t('Reward: {r}', { r: g.reward })}{g.reached && ` · ${t('Ask a grown-up!')}`}</span>}
             </div>
           ))}
-          {!board.goals.length && <p className="muted" style={{ margin: 0 }}>No goals yet. Ask a grown-up to set one!</p>}
+          {!board.goals.length && <p className="muted" style={{ margin: 0 }}>{t('No goals yet. Ask a grown-up to set one!')}</p>}
         </section>
         <section className="card stack pg-stats">
-          <h2 style={{ margin: 0 }}>This week</h2>
+          <h2 style={{ margin: 0 }}>{t('This week')}</h2>
           <div className="stats">
-            <div><span className="num">{stats.pointsThisWeek}</span><span className="small muted">{home?.pointsName} earned</span></div>
-            <div><span className="num">{stats.choresDone}</span><span className="small muted">chores done</span></div>
-            <div><span className="num">{streak.best}</span><span className="small muted">best streak</span></div>
+            <div><span className="num">{stats.pointsThisWeek}</span><span className="small muted">{t('{points} earned', { points: home?.pointsName ?? '' })}</span></div>
+            <div><span className="num">{stats.choresDone}</span><span className="small muted">{t('chores done')}</span></div>
+            <div><span className="num">{streak.best}</span><span className="small muted">{t('best streak')}</span></div>
           </div>
           {board.recent.length > 0 && (
             <div className="list">
@@ -344,7 +406,7 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
 
       {board.therapy && (board.therapy.goals.length > 0 || board.therapy.upcoming.length > 0) && (
         <section className="card stack">
-          <h2 style={{ margin: 0 }}>🌈 My big goals</h2>
+          <h2 style={{ margin: 0 }}>{t('🌈 My big goals')}</h2>
           {board.therapy.goals.map((g) => (
             <div key={g.id} className="goal">
               <div className="row" style={{ justifyContent: 'space-between' }}>
@@ -374,7 +436,7 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
 
       {(openPolls.length > 0 || decided.length > 0) && (
         <section className="card stack pg-goals">
-          <h2 style={{ margin: 0 }}>🗳️ Vote for a reward</h2>
+          <h2 style={{ margin: 0 }}>{t('🗳️ Vote for a reward')}</h2>
           {openPolls.map((p) => (
             <div key={p.id} className="stack">
               <strong>{p.title}</strong>
@@ -384,7 +446,7 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
                     onClick={() => void act(o.id, async () => { await post(`/polls/${p.id}/vote`, { optionId: o.id }); await reloadPolls(); })}>
                     <span style={{ fontSize: '2.4rem' }}>{o.icon}</span>
                     <span>{o.title}</span>
-                    {p.myVote === o.id && <span className="small">✓ Your vote</span>}
+                    {p.myVote === o.id && <span className="small">{t('✓ Your vote')}</span>}
                     {asParent && <span className="small muted">{o.votes} votes</span>}
                   </button>
                 ))}
@@ -393,13 +455,13 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
           ))}
           {decided.map((p) => {
             const w = p.options.find((o) => o.id === p.winnerOptionId);
-            return w && <p key={p.id} style={{ margin: 0 }}>🏆 <strong>{p.title}</strong> The winner is {w.icon} <strong>{w.title}</strong>!</p>;
+            return w && <p key={p.id} style={{ margin: 0 }}>🏆 <strong>{p.title}</strong> {t('The winner is {w}!', { w: `${w.icon} ${w.title}` })}</p>;
           })}
         </section>
       )}
 
       <section className="card stack pg-stats">
-        <h2 style={{ margin: 0 }}>Badges <span className="pill">{earned.length} / {board.achievements.length}</span></h2>
+        <h2 style={{ margin: 0 }}>{t('Badges')} <span className="pill">{earned.length} / {board.achievements.length}</span></h2>
         <div className="badge-grid">
           {board.achievements.map((a) => (
             <div key={a.id} className={`badge${a.earned ? ' earned' : ''}`} title={a.description}>
@@ -412,14 +474,14 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
       </section>
 
       <section className="pg-chores pg-calendar-week">
-        <Calendar kidId={memberId} title={asParent ? `${kid.name}'s calendar` : 'My calendar'} />
+        <Calendar kidId={memberId} title={asParent ? `${kid.name}'s calendar` : t('My calendar')} />
       </section>
 
       {picking && (
         <Modal onClose={() => setPicking(false)}>
           <div className="stack">
-            <h2 style={{ margin: 0 }}>Pick your animal friend</h2>
-            <p className="small muted" style={{ margin: 0 }}>Every animal is yours to pick. Level up to unlock more outfits. You're level {level.level}: {level.badge} {level.name}.</p>
+            <h2 style={{ margin: 0 }}>{t('Pick your animal friend')}</h2>
+            <p className="small muted" style={{ margin: 0 }}>{t('Every animal is yours to pick. Level up to unlock more outfits.')} {level.badge} {level.name}</p>
             <AvatarPicker value={kid.avatar} lockedAt={(o) => (asParent || outfitUnlocked(o, level.level) ? null : OUTFIT_UNLOCK_LEVEL[o] ?? null)}
               onPick={(a) => void act(`av-${a}`, async () => { await post(`/kids/${memberId}/avatar`, { avatar: a }); await refresh(); })} />
           </div>
@@ -433,5 +495,6 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
         </div>
       )}
     </div>
+    </LangProvider>
   );
 }

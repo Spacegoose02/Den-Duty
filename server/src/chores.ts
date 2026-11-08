@@ -1,5 +1,7 @@
 // The core loop: chores become daily instances per kid, kids submit them, parents approve, approvals write points.
 // Everything here takes "today" as an argument so it's easy to test and always uses the home's own calendar.
+import { awayLookup } from './away.ts';
+import { earnScreenTime, reverseScreenTime } from './screentime.ts';
 import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { tx, type Row } from './db.ts';
@@ -15,14 +17,14 @@ export type LedgerKind = 'chore' | 'bonus' | 'adjust' | 'redeem' | 'reversal';
 /** Who did something, for the ledger and review history. */
 export interface By { userId: string | null; name: string }
 
-export interface HomeInfo { id: string; name: string; timezone: string; weekStart: number; pointsName: string; pointsIcon: string; theme: string }
+export interface HomeInfo { id: string; name: string; timezone: string; weekStart: number; pointsName: string; pointsIcon: string; theme: string; language: string }
 
 export function homeInfo(db: DatabaseSync, homeId: string): HomeInfo {
-  const h = db.prepare('SELECT id, name, timezone, week_start, points_name, points_icon, theme FROM homes WHERE id = ?').get(homeId) as Row | undefined;
+  const h = db.prepare('SELECT id, name, timezone, week_start, points_name, points_icon, theme, language FROM homes WHERE id = ?').get(homeId) as Row | undefined;
   if (!h) throw new HttpError(404, 'Home not found');
   return {
     id: h.id as string, name: h.name as string, timezone: h.timezone as string, weekStart: h.week_start as number,
-    pointsName: h.points_name as string, pointsIcon: h.points_icon as string, theme: h.theme as string,
+    pointsName: h.points_name as string, pointsIcon: h.points_icon as string, theme: h.theme as string, language: (h.language as string) || 'en',
   };
 }
 
@@ -86,6 +88,7 @@ export function materialize(db: DatabaseSync, homeId: string, from: string, to: 
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   tx(db, () => {
     const paused = kidsWithPageOff(db, homeId, 'chores');
+    const away = awayLookup(db, homeId);
     const weekStart = weekStartOf(db, homeId);
     for (const c of activeChores(db, homeId)) {
       if (!c.memberIds.length || c.bonus) continue;
@@ -94,7 +97,7 @@ export function materialize(db: DatabaseSync, homeId: string, from: string, to: 
       for (const date of dateRange(start, last)) {
         if (!isScheduledOn(s, date)) continue;
         for (const m of kidsOn(c, date, weekStart)) {
-          if (!paused.has(m)) ins.run(newId(), homeId, c.id, m, date, c.title, c.icon, c.points, c.photo, c.due_time, c.late_points, c.routine, c.routine_pos, c.minutes);
+          if (!paused.has(m) && !away(m, date)) ins.run(newId(), homeId, c.id, m, date, c.title, c.icon, c.points, c.photo, c.due_time, c.late_points, c.routine, c.routine_pos, c.minutes);
         }
       }
     }
@@ -107,7 +110,7 @@ export function materialize(db: DatabaseSync, homeId: string, from: string, to: 
  */
 export function syncChore(db: DatabaseSync, homeId: string, choreId: string, today: string): void {
   const [chore] = activeChores(db, homeId, choreId);
-  const open = db.prepare("SELECT id, member_id, date FROM chore_instances WHERE chore_id = ? AND date >= ? AND status IN ('pending', 'rejected')")
+  const open = db.prepare("SELECT id, member_id, date FROM chore_instances WHERE chore_id = ? AND date >= ? AND status IN ('pending', 'rejected') AND traded = 0")
     .all(choreId, today) as Row[];
   const weekStart = weekStartOf(db, homeId);
   tx(db, () => {
@@ -254,6 +257,9 @@ export interface AgendaItem {
   minutes: number | null;
   /** Approved by itself (the chore is set to auto-approve). */
   auto: boolean;
+  /** A sibling helping with it (they split the points), and whether it was swapped with a sibling's chore. */
+  helperId: string | null;
+  traded: boolean;
 }
 
 const instanceItem = (r: Row): AgendaItem => ({
@@ -264,6 +270,7 @@ const instanceItem = (r: Row): AgendaItem => ({
   photoVersion: r.photo ? String(r.photo).replace(/^.*-|\.\w+$/g, '') : null, cheer: (r.cheer as string | null) ?? null,
   dueTime: (r.due_time as string | null) ?? null, latePoints: (r.late_points as number | null) ?? null, late: !!r.late,
   routine: (r.routine as string | null) ?? null, routinePos: (r.routine_pos as number) ?? 0, minutes: (r.minutes as number | null) ?? null, auto: !!r.auto,
+  helperId: (r.helper_id as string | null) ?? null, traded: !!r.traded,
 });
 
 /** Every chore for these kids from `from` for `days` days, with stored instances up to today and planned ones after. */
@@ -277,16 +284,18 @@ export function agenda(db: DatabaseSync, homeId: string, memberIds: string[], fr
   if (to > today) {
     const chores = activeChores(db, homeId);
     const weekStart = weekStartOf(db, homeId);
+    const away = awayLookup(db, homeId);
     for (const day of out) {
       if (day.date <= today) continue;
       for (const c of chores) {
         if (c.bonus || !isScheduledOn(scheduleOf(c), day.date)) continue;
         for (const m of kidsOn(c, day.date, weekStart)) {
-          if (!wanted.has(m)) continue;
+          if (!wanted.has(m) || away(m, day.date)) continue;
           day.items.push({
             id: null, choreId: c.id, memberId: m, date: day.date, title: c.title, icon: c.icon, points: c.points, status: 'planned', note: null,
             started: false, surprise: false, needsPhoto: !!c.photo, hasPhoto: false, photoVersion: null, cheer: null,
             dueTime: c.due_time, latePoints: c.late_points, late: false, routine: c.routine, routinePos: c.routine_pos, minutes: c.minutes, auto: false,
+            helperId: null, traded: false,
           });
         }
       }
@@ -376,13 +385,25 @@ export function approveInstance(db: DatabaseSync, homeId: string, id: string, by
     db.prepare(`UPDATE chore_instances SET status = 'approved', reviewed_at = datetime('now'), reviewed_by = ?, note = NULL,
       submitted_at = COALESCE(submitted_at, datetime('now')) WHERE id = ?`).run(by.userId, id);
     // A 0-point chore (a habit like brushing teeth) still gets approved; there's just nothing to pay.
-    if (inst.points) writeLedger(db, { homeId, memberId: inst.memberId, amount: inst.points, kind: 'chore', reason: inst.title, date: inst.date, instanceId: id, by });
+    // With a sibling helping, the helper gets half (rounded down) and the kid it belongs to keeps the rest.
+    const share = inst.helperId ? helperShare(inst.points) : 0;
+    if (inst.points - share) writeLedger(db, { homeId, memberId: inst.memberId, amount: inst.points - share, kind: 'chore', reason: inst.title, date: inst.date, instanceId: id, by });
+    if (share) {
+      const owner = (db.prepare('SELECT name FROM members WHERE id = ?').get(inst.memberId) as Row | undefined)?.name ?? 'a sibling';
+      writeLedger(db, { homeId, memberId: inst.helperId!, amount: share, kind: 'bonus', reason: `🤝 Helped ${owner}: ${inst.title}`, date: inst.date, instanceId: id, by });
+    }
+    // Screen-time bank: approved chores can earn minutes too (each kid on their own share).
+    earnScreenTime(db, homeId, inst.memberId, inst.points - share, inst.title, inst.date, id);
+    if (share) earnScreenTime(db, homeId, inst.helperId!, share, inst.title, inst.date, id);
     emit(db, homeId, 'chore_approved', inst.memberId, {
       chore: inst.title, icon: inst.icon, points: inst.points, instance_id: id, balance: balance(db, inst.memberId), by: by.name, cheer,
     });
     return { item: getInstance(db, homeId, id), awarded: inst.points };
   });
 }
+
+/** A helping sibling's half of a chore's points (rounded down, so a 1-point chore stays with its kid). */
+export const helperShare = (points: number): number => Math.floor(points / 2);
 
 export function rejectInstance(db: DatabaseSync, homeId: string, id: string, by: By, note: string | null): AgendaItem {
   const inst = getInstance(db, homeId, id);
@@ -402,11 +423,19 @@ export function unapproveInstance(db: DatabaseSync, homeId: string, id: string, 
     const inst = getInstance(db, homeId, id);
     if (inst.status !== 'approved') throw new HttpError(400, "That chore isn't approved");
     // What this approval paid (never more than the chore is worth, even after an earlier take-back stopped at zero).
-    const sum = (db.prepare("SELECT COALESCE(SUM(amount), 0) AS n FROM points_ledger WHERE instance_id = ?").get(id) as Row).n as number;
-    const paid = Math.min(sum, inst.points);
     const allowNegative = !!(db.prepare('SELECT allow_negative FROM homes WHERE id = ?').get(homeId) as Row | undefined)?.allow_negative;
-    const taken = paid > 0 && !allowNegative ? Math.min(paid, Math.max(balance(db, inst.memberId), 0)) : paid;
-    if (taken) writeLedger(db, { homeId, memberId: inst.memberId, amount: -taken, kind: 'reversal', reason: `Approval undone: ${inst.title}`, date: inst.date, instanceId: id, by });
+    // Each kid paid by this approval (the kid it belongs to, and a helping sibling) gets their own reversal.
+    const takeBack = (memberId: string, cap: number, reason: string) => {
+      const sum = (db.prepare('SELECT COALESCE(SUM(amount), 0) AS n FROM points_ledger WHERE instance_id = ? AND member_id = ?').get(id, memberId) as Row).n as number;
+      const got = Math.min(sum, cap);
+      const back = got > 0 && !allowNegative ? Math.min(got, Math.max(balance(db, memberId), 0)) : got;
+      if (back > 0) writeLedger(db, { homeId, memberId, amount: -back, kind: 'reversal', reason, date: inst.date, instanceId: id, by });
+      return { got: Math.max(got, 0), back: Math.max(back, 0) };
+    };
+    const helpers = (db.prepare('SELECT DISTINCT member_id FROM points_ledger WHERE instance_id = ? AND member_id != ?').all(id, inst.memberId) as Row[]).map((r) => r.member_id as string);
+    for (const h of helpers) takeBack(h, inst.points, `Approval undone: helped with ${inst.title}`);
+    const { got: paid, back: taken } = takeBack(inst.memberId, inst.points, `Approval undone: ${inst.title}`);
+    reverseScreenTime(db, homeId, id, inst.date);
     db.prepare("UPDATE chore_instances SET status = 'submitted', reviewed_at = NULL, reviewed_by = NULL WHERE id = ?").run(id);
     return { item: getInstance(db, homeId, id), paid, taken };
   });

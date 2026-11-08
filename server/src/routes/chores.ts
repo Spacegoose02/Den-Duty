@@ -1,3 +1,6 @@
+import { eventsByDay, type FamilyEvent } from '../familyevents.ts';
+import type { ExternalItem } from '../calendar.ts';
+import { awayToday } from '../away.ts';
 import type { FastifyInstance } from 'fastify';
 import type { DatabaseSync } from 'node:sqlite';
 import { assertCanActFor, homeCtx, type HomeCtx } from '../auth.ts';
@@ -161,10 +164,12 @@ function startParam(v: unknown, fallback: string): string {
 /** Adds school lunch, meal plan and other subscribed calendar events to each day. */
 async function withFeeds<T extends { date: string }>(db: DatabaseSync, ctx: HomeCtx, days: T[], kidId?: string) {
   if (!days.length) return [];
-  if (kidId && !pageOn(db, kidId, 'calendar')) return days.map((d) => ({ ...d, external: [] }));
+  if (kidId && !pageOn(db, kidId, 'calendar')) return days.map((d) => ({ ...d, external: [] as ExternalItem[], events: [] as FamilyEvent[] }));
   await refreshStale(db, ctx.homeId);
   const ext = externalBetween(db, ctx.homeId, days[0].date, days[days.length - 1].date, ctx.actor.kind !== 'parent');
-  return days.map((d) => ({ ...d, external: ext.get(d.date) ?? [] }));
+  // Family events: parents see all; a kid's board shows theirs and the whole family's.
+  const evs = eventsByDay(db, ctx.homeId, days[0].date, days[days.length - 1].date, ctx.actor.kind === 'parent' ? kidId : kidId ?? null);
+  return days.map((d) => ({ ...d, external: ext.get(d.date) ?? [], events: evs.get(d.date) ?? [] }));
 }
 
 export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
@@ -256,6 +261,8 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
       today,
       weekStart: start,
       kid: kidView(db, kid),
+      // At the other home today (two homes): the board says so instead of "nothing to do".
+      away: awayToday(db, memberId, today),
       stats: kidWeek(db, home, memberId, today),
       todayItems: on('chores') ? todayList(db, ctx.homeId, memberId, today) : [],
       week: withDoctors(db, await withFeeds(db, ctx, on('chores') ? agenda(db, ctx.homeId, [memberId], start, 7, today) : agenda(db, ctx.homeId, [], start, 7, today), memberId), [memberId], ctx.actor.kind !== 'parent'),

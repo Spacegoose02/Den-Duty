@@ -57,8 +57,17 @@ export const STATUS_LABEL: Record<AgendaItem['status'], string> = {
   planned: 'Coming up',
 };
 
-const DAY_FMT = new Intl.DateTimeFormat(undefined, { weekday: 'short', timeZone: 'UTC' });
-const DATE_FMT = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
+let DAY_FMT = new Intl.DateTimeFormat(undefined, { weekday: 'short', timeZone: 'UTC' });
+let DATE_FMT = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
+let dateLocale = 'en';
+/** Kid screens in another language get their day names in it too ('en' goes back to the browser's own). */
+export function setDateLocale(lang: string): void {
+  if (lang === dateLocale) return;
+  dateLocale = lang;
+  const loc = lang === 'en' ? undefined : lang;
+  DAY_FMT = new Intl.DateTimeFormat(loc, { weekday: 'short', timeZone: 'UTC' });
+  DATE_FMT = new Intl.DateTimeFormat(loc, { month: 'short', day: 'numeric', timeZone: 'UTC' });
+}
 
 export const dayName = (iso: string) => DAY_FMT.format(new Date(`${iso}T00:00:00Z`));
 export const shortDate = (iso: string) => DATE_FMT.format(new Date(`${iso}T00:00:00Z`));

@@ -1,6 +1,8 @@
+import { isLang } from '../../../shared/languages.ts';
 import type { FastifyInstance } from 'fastify';
 import type { DatabaseSync } from 'node:sqlite';
-import { addParent, DEVICE_COOKIE, homeCtx, KID_COOKIE, requireAdmin, requireUser, startDevice, type HomeCtx } from '../auth.ts';
+import { homeForCode } from '../caregivers.ts';
+import { addParent, DEVICE_COOKIE, homeCtx, isFullParent, KID_COOKIE, requireAdmin, requireUser, startDevice, type HomeCtx } from '../auth.ts';
 import { tx, type Row } from '../db.ts';
 import { config } from '../config.ts';
 import { HttpError, newId, randomToken, readableCode, requireStr, sha256, str } from '../util.ts';
@@ -67,6 +69,8 @@ export function kidView(db: DatabaseSync, r: Row) {
     readAloud: r.read_aloud === 'on' || ((r.read_aloud ?? 'auto') === 'auto' && pictureMode(setting, age)), doctorAreasOff: offList(r.doctor_areas_off, DOCTOR_AREA_IDS),
     ideasOff: r.ideas_off == null ? IDEAS_OFF_DEFAULT : offList(r.ideas_off, PRACTICE_IDEA_IDS),
     aiOn: !r.ai_off,
+    /** Their own language for their board (null = the home's). */
+    language: (r.language as string | null) ?? null,
   };
 }
 
@@ -81,6 +85,10 @@ function applyKidProfile(db: DatabaseSync, id: string, b: Row, today: string): v
   if ('pagesOff' in b) db.prepare('UPDATE members SET pages_off = ? WHERE id = ?').run(JSON.stringify(offList(b.pagesOff, KID_PAGE_IDS)), id);
   if ('doctorAreasOff' in b) db.prepare('UPDATE members SET doctor_areas_off = ? WHERE id = ?').run(JSON.stringify(offList(b.doctorAreasOff, DOCTOR_AREA_IDS)), id);
   if (typeof b.aiOn === 'boolean') db.prepare('UPDATE members SET ai_off = ? WHERE id = ?').run(b.aiOn ? 0 : 1, id);
+  if ('language' in b) {
+    if (b.language != null && b.language !== '' && !isLang(b.language)) throw new HttpError(400, 'Unknown language');
+    db.prepare('UPDATE members SET language = ? WHERE id = ?').run(b.language || null, id);
+  }
   if ('ideasOff' in b) db.prepare('UPDATE members SET ideas_off = ? WHERE id = ?').run(JSON.stringify(offList(b.ideasOff, PRACTICE_IDEA_IDS)), id);
   if ('readAloud' in b) {
     if (!['auto', 'on', 'off'].includes(String(b.readAloud))) throw new HttpError(400, 'readAloud must be auto, on or off');
@@ -115,10 +123,10 @@ export function homeRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const code = requireStr((req.body as Row)?.code, 'Join code', 20).toUpperCase().replace(/[^A-Z0-9]/g, '');
     // Join codes let you into a home as a parent, so guessing them is rate limited like a password.
     limitAuth(req, 'join', user.id);
-    const home = db.prepare('SELECT id FROM homes WHERE join_code = ?').get(code) as Row | undefined;
+    const home = homeForCode(db, code);
     if (!home) throw new HttpError(404, 'No home has that join code');
-    addParent(db, home.id as string, user);
-    return { id: home.id };
+    addParent(db, home.homeId, user, home.access);
+    return { id: home.homeId, access: home.access };
   });
 
   app.get('/api/homes/:homeId', async (req) => {
@@ -130,19 +138,21 @@ export function homeRoutes(app: FastifyInstance, db: DatabaseSync): void {
       pointsName: home.points_name as string,
       pointsIcon: home.points_icon as string,
       theme: home.theme as string,
+      language: (home.language as string) || 'en',
       timezone: home.timezone as string,
       weekStart: home.week_start as number,
       allowNegative: !!home.allow_negative,
       surprise: home.surprise as string,
       helpdeskMaxOpen: (home.helpdesk_max_open as number) ?? HELPDESK_DEFAULT_MAX,
       viewer: ctx.actor.kind,
+      access: ctx.actor.kind === 'parent' ? ctx.access ?? 'full' : null,
       kids: listKids(db, ctx.homeId),
     };
-    if (ctx.actor.kind !== 'parent') return base;
+    if (!isFullParent(ctx)) return base;
     const parents = db.prepare(`
-      SELECT m.id, m.user_id AS userId, m.name, m.avatar, m.created_at AS joinedAt FROM members m
+      SELECT m.id, m.user_id AS userId, m.name, m.avatar, m.created_at AS joinedAt, m.access, m.access_until AS accessUntil FROM members m
       WHERE m.home_id = ? AND m.role = 'parent' ORDER BY m.created_at`).all(ctx.homeId);
-    return { ...base, joinCode: home.join_code as string, parents, haWebhookUrl: home.ha_webhook_url as string | null };
+    return { ...base, joinCode: home.join_code as string, caregiverCode: home.caregiver_code as string | null, parents, haWebhookUrl: home.ha_webhook_url as string | null };
   });
 
   app.patch('/api/homes/:homeId', async (req) => {
@@ -173,6 +183,10 @@ export function homeRoutes(app: FastifyInstance, db: DatabaseSync): void {
     }
     if (typeof b.allowNegative === 'boolean') db.prepare('UPDATE homes SET allow_negative = ? WHERE id = ?').run(b.allowNegative ? 1 : 0, ctx.homeId);
     if (SURPRISE_LEVELS.includes(b.surprise as SurpriseLevel)) db.prepare('UPDATE homes SET surprise = ? WHERE id = ?').run(b.surprise as string, ctx.homeId);
+    if ('language' in b) {
+      if (!isLang(b.language)) throw new HttpError(400, 'Unknown language');
+      db.prepare('UPDATE homes SET language = ? WHERE id = ?').run(b.language, ctx.homeId);
+    }
     if (b.weekStart === 0 || b.weekStart === 1) db.prepare('UPDATE homes SET week_start = ? WHERE id = ?').run(b.weekStart, ctx.homeId);
     return { ok: true };
   });
@@ -190,13 +204,48 @@ export function homeRoutes(app: FastifyInstance, db: DatabaseSync): void {
     return { joinCode: code };
   });
 
+  // Caregivers join with their own code. Turning it off doesn't remove anyone who already joined.
+  app.post('/api/homes/:homeId/caregiver-code', async (req) => {
+    const ctx = homeCtx(db, req, 'parent');
+    const code = readableCode(8);
+    db.prepare('UPDATE homes SET caregiver_code = ? WHERE id = ?').run(code, ctx.homeId);
+    return { caregiverCode: code };
+  });
+  app.delete('/api/homes/:homeId/caregiver-code', async (req) => {
+    const ctx = homeCtx(db, req, 'parent');
+    db.prepare('UPDATE homes SET caregiver_code = NULL WHERE id = ?').run(ctx.homeId);
+    return { caregiverCode: null };
+  });
+
+  // Make someone a caregiver or a full parent, and set (or clear) when a caregiver's access ends.
+  app.patch('/api/homes/:homeId/parents/:memberId', async (req) => {
+    const ctx = homeCtx(db, req, 'parent');
+    const { memberId } = req.params as { memberId: string };
+    const b = (req.body ?? {}) as Row;
+    const parents = db.prepare("SELECT id, access, access_until FROM members WHERE home_id = ? AND role = 'parent'").all(ctx.homeId) as Row[];
+    const m = parents.find((p) => p.id === memberId);
+    if (!m) throw new HttpError(404, 'No such parent in this home');
+    const access = b.access === undefined ? m.access as string : b.access;
+    if (access !== 'full' && access !== 'caregiver') throw new HttpError(400, 'Access is full or caregiver');
+    if (access === 'caregiver' && !parents.some((p) => p.access === 'full' && p.id !== memberId)) throw new HttpError(400, 'A home needs at least one full parent');
+    let until = b.until === undefined ? m.access_until as string | null : b.until;
+    if (until !== null && !/^\d{4}-\d{2}-\d{2}$/.test(String(until))) throw new HttpError(400, 'Until is a date like 2026-12-31, or empty');
+    if (access === 'full') until = null;
+    db.prepare('UPDATE members SET access = ?, access_until = ? WHERE id = ?').run(access, until as string | null, memberId);
+    return { ok: true };
+  });
+
   // Parents can leave, and remove other parents, as long as one stays.
   app.delete('/api/homes/:homeId/parents/:memberId', async (req) => {
     const ctx = homeCtx(db, req, 'parent');
-    const { memberId } = req.params as { memberId: string };
-    const parents = db.prepare("SELECT id FROM members WHERE home_id = ? AND role = 'parent'").all(ctx.homeId) as Row[];
+    // "me": leaving (a caregiver doesn't see the parents list, so doesn't know their own id).
+    const param = (req.params as { memberId: string }).memberId;
+    const memberId = param === 'me' && ctx.actor.kind === 'parent' ? ctx.actor.memberId ?? '' : param;
+    const parents = db.prepare("SELECT id, access FROM members WHERE home_id = ? AND role = 'parent'").all(ctx.homeId) as Row[];
     if (!parents.some((p) => p.id === memberId)) throw new HttpError(404, 'No such parent in this home');
-    if (parents.length === 1) throw new HttpError(400, 'A home needs at least one parent. Invite someone else first, or delete the home.');
+    // A caregiver can only leave themselves.
+    if (!isFullParent(ctx) && ctx.actor.kind === 'parent' && ctx.actor.memberId !== memberId) throw new HttpError(403, 'Caregivers can’t remove other people');
+    if (parents.filter((p) => p.access === 'full' && p.id !== memberId).length === 0) throw new HttpError(400, 'A home needs at least one parent. Invite someone else first, or delete the home.');
     db.prepare('DELETE FROM members WHERE id = ?').run(memberId);
     return { ok: true };
   });

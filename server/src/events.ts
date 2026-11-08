@@ -10,7 +10,9 @@ export type EventType = 'chore_submitted' | 'chore_approved' | 'goal_reached' | 
   | 'reminder_due' | 'reminder_done'
   | 'reward_bought' | 'reward_given' | 'reward_refunded'
   | 'team_goal_reached'
-  | 'practice_waiting' | 'med_refill_due';
+  | 'practice_waiting' | 'med_refill_due'
+  | 'habit_logged' | 'feeling_shared' | 'list_item_added' | 'trade_waiting'
+  | 'screen_time_started' | 'screen_time_ended';
 
 /** Swapped out in tests so nothing leaves the machine. */
 export let deliver = async (url: string, payload: unknown): Promise<void> => {

@@ -101,7 +101,7 @@ export function buildPrompt(c: IdeaContext): string {
 }
 
 /** One structured request to Claude with the home's key. Throws friendly HttpErrors for the app to show. */
-async function askJson<T>(db: DatabaseSync, homeId: string, system: string, prompt: string, schema: Record<string, unknown>): Promise<T> {
+async function askJson<T>(db: DatabaseSync, homeId: string, system: string, prompt: string | Anthropic.Beta.BetaContentBlockParam[], schema: Record<string, unknown>): Promise<T> {
   const h = db.prepare('SELECT ai_enabled, ai_key, ai_model FROM homes WHERE id = ?').get(homeId) as Row;
   if (!h.ai_enabled) throw new HttpError(403, 'AI ideas are turned off. A parent can turn them on in Settings.');
   const apiKey = h.ai_key ? openKey(h.ai_key as string) : null;
@@ -283,4 +283,61 @@ export function askPrompt(age: number | null, areas: string[], goals: string[], 
 export async function askDoctor(db: DatabaseSync, homeId: string, name: string, age: number | null, areas: string[], goals: string[], question: string, behavior = false): Promise<{ answer: string; urgent: boolean }> {
   const r = await askJson<{ answer: string; urgent: boolean }>(db, homeId, ASK_SYSTEM(name), askPrompt(age, areas, goals, question, behavior), ASK_SCHEMA);
   return { answer: String(r.answer ?? '').slice(0, 2000), urgent: !!r.urgent };
+}
+
+// ---------- snap to calendar ----------
+
+export interface EventDraft { title: string; date: string; endDate: string | null; time: string | null; endTime: string | null; location: string | null; notes: string | null; forWhom: string | null }
+
+const EVENT_SCHEMA = {
+  type: 'object',
+  properties: {
+    events: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          title: { type: 'string', description: 'Short title, like "Soccer practice" or "Picture day"' },
+          date: { type: 'string', description: 'YYYY-MM-DD' },
+          endDate: { anyOf: [{ type: 'string' }, { type: 'null' }], description: 'YYYY-MM-DD for events over several days, else null' },
+          time: { anyOf: [{ type: 'string' }, { type: 'null' }], description: 'HH:MM 24-hour start time, or null for all day' },
+          endTime: { anyOf: [{ type: 'string' }, { type: 'null' }], description: 'HH:MM 24-hour end time, or null' },
+          location: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+          notes: { anyOf: [{ type: 'string' }, { type: 'null' }], description: 'What to bring, costs, deadlines: one or two short lines' },
+          forWhom: { anyOf: [{ type: 'string' }, { type: 'null' }], description: 'Who it is for as written (a class, team or grade), or null' },
+        },
+        required: ['title', 'date', 'endDate', 'time', 'endTime', 'location', 'notes', 'forWhom'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['events'],
+  additionalProperties: false,
+};
+
+export function snapPrompt(today: string, timezone: string, text: string | null): string {
+  return [
+    `Find every dated event in this ${text ? 'text' : 'picture'} (a school flyer, team schedule, invitation, newsletter or email) for a family calendar.`,
+    `Today is ${today} (${timezone}). When a year is missing, pick the next date on or after today. Skip events that are clearly over.`,
+    'Use the words on the page. Never invent times or places. If nothing is dated, return an empty list.',
+    text ? `The text:\n${text}` : '',
+  ].filter(Boolean).join('\n');
+}
+
+/** Reads events off a flyer photo or pasted text. Nothing about the kids is sent: only the picture or text and today's date. */
+export async function snapEvents(db: DatabaseSync, homeId: string, today: string, timezone: string, input: { image?: { mediaType: string; data: string }; text?: string }): Promise<EventDraft[]> {
+  const prompt: Anthropic.Beta.BetaContentBlockParam[] = [];
+  if (input.image) prompt.push({ type: 'image', source: { type: 'base64', media_type: input.image.mediaType as 'image/png', data: input.image.data } });
+  prompt.push({ type: 'text', text: snapPrompt(today, timezone, input.text ?? null) });
+  const parsed = await askJson<{ events?: EventDraft[] }>(db, homeId,
+    'You read flyers and schedules and turn them into calendar events for a busy family. Be exact and brief.', prompt, EVENT_SCHEMA);
+  const date = /^\d{4}-\d{2}-\d{2}$/;
+  const time = /^\d{2}:\d{2}$/;
+  const s = (v: unknown, n: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, n) : null);
+  return (parsed?.events ?? []).filter((e) => e && typeof e.title === 'string' && date.test(String(e.date))).slice(0, 30).map((e) => ({
+    title: e.title.trim().slice(0, 120), date: e.date,
+    endDate: e.endDate && date.test(e.endDate) && e.endDate > e.date ? e.endDate : null,
+    time: e.time && time.test(e.time) ? e.time : null, endTime: e.endTime && time.test(e.endTime) ? e.endTime : null,
+    location: s(e.location, 200), notes: s(e.notes, 500), forWhom: s(e.forWhom, 80),
+  }));
 }

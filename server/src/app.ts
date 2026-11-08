@@ -35,6 +35,19 @@ import { weatherRoutes } from './routes/weather.ts';
 import { downloadRoutes } from './routes/downloads.ts';
 import { moneyRoutes } from './routes/money.ts';
 import { pushRoutes } from './routes/push.ts';
+import { backupRoutes } from './backup.ts';
+import { habitRoutes } from './routes/habits.ts';
+import { feelingRoutes } from './routes/feelings.ts';
+import { photoFrameRoutes } from './routes/photoframe.ts';
+import { meetingRoutes } from './routes/meetings.ts';
+import { tradeRoutes } from './routes/trades.ts';
+import { voiceRoutes } from './routes/voice.ts';
+import { denRoutes } from './routes/den.ts';
+import { listRoutes } from './routes/lists.ts';
+import { awayRoutes } from './routes/away.ts';
+import { screenTimeRoutes } from './routes/screentime.ts';
+import { eventRoutes } from './routes/events.ts';
+import { calSyncRoutes } from './routes/calsync.ts';
 
 export async function buildApp(db: DatabaseSync, opts: { logger?: boolean; serveWeb?: boolean } = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 1024 * 1024, trustProxy: config.trustProxy });
@@ -81,6 +94,19 @@ export async function buildApp(db: DatabaseSync, opts: { logger?: boolean; serve
   sportsRoutes(app, db);
   weatherRoutes(app, db);
   downloadRoutes(app);
+  backupRoutes(app, db, config.dataDir);
+  habitRoutes(app, db);
+  feelingRoutes(app, db);
+  photoFrameRoutes(app, db);
+  meetingRoutes(app, db);
+  tradeRoutes(app, db);
+  voiceRoutes(app, db);
+  denRoutes(app, db);
+  listRoutes(app, db);
+  awayRoutes(app, db);
+  screenTimeRoutes(app, db);
+  eventRoutes(app, db);
+  calSyncRoutes(app, db);
 
   const hasWeb = opts.serveWeb !== false && fs.existsSync(path.join(config.webDist, 'index.html'));
   if (hasWeb) {
