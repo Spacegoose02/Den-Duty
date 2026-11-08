@@ -20,6 +20,7 @@ import { KidHabits } from '../components/Habits.tsx';
 import { KidFeelings } from '../components/Feelings.tsx';
 import { KidDen } from '../components/Den.tsx';
 import { KidLists } from '../components/Lists.tsx';
+import { KidScreenTime } from '../components/ScreenTime.tsx';
 import { KidMeetingNote } from './Meeting.tsx';
 import { KidTrades, TradeForm, useTrades } from '../components/Trades.tsx';
 import { KidSportsCards } from '../components/Sports.tsx';
@@ -299,6 +300,8 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
       </section>
 
       <KidHabits memberId={memberId} kidName={kid.name} color={kid.color} asParent={asParent} readAloud={readAloud} />
+
+      <KidScreenTime memberId={memberId} asParent={asParent} readAloud={readAloud} onChange={() => void reload()} />
 
       {!asParent && <KidLists memberId={memberId} />}
 

@@ -1,11 +1,12 @@
 import { config } from './config.ts';
 import { openDb } from './db.ts';
 import { applyPendingRestore, nightlyBackup } from './backup.ts';
+import { endFinishedSessions } from './screentime.ts';
 import { buildApp } from './app.ts';
 import { checkDueReminders } from './routes/reminders.ts';
 import { checkPush } from './push.ts';
 import { runMoney } from './money.ts';
-import { homeToday } from './chores.ts';
+import { homeInfo, homeToday } from './chores.ts';
 import type { Row } from './db.ts';
 
 // A restore an admin staged swaps in before the database opens (the old one is kept as a backup).
@@ -29,6 +30,12 @@ const reminderTimer = setInterval(() => {
   } catch (err) { app.log.error(err); }
 }, 60e3);
 reminderTimer.unref();
+
+// Screen-time sessions end on time (checked every 15 seconds, so the TV goes off when it should).
+const screenTimer = setInterval(() => {
+  try { endFinishedSessions(db, (homeId) => homeToday(homeInfo(db, homeId))); } catch (err) { app.log.error(err); }
+}, 15e3);
+screenTimer.unref();
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, async () => {

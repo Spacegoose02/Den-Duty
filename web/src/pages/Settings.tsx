@@ -1,3 +1,4 @@
+import { ScreenTimeCard } from '../components/ScreenTime.tsx';
 import { AccessControls, CaregiverControls } from '../components/Caregivers.tsx';
 import { useEffect, useState } from 'react';
 import { PushSettings } from '../components/Push.tsx';
@@ -503,6 +504,7 @@ export function Settings() {
       <WeatherCard />
       <HomeSettings />
       <TradeModeCard />
+      <ScreenTimeCard />
       <CalendarsCard />
       <AiCard />
       <Profile />

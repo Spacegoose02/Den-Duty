@@ -1071,6 +1071,37 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX kid_away_member ON kid_away(member_id, start_date);
   `,
+  // Screen-time bank: minutes kids earn from chores (or swap points for), and the sessions they spend them on.
+  // Its own ledger in minutes, append-only like points. Sessions tell Home Assistant when to switch things on and off.
+  `
+  CREATE TABLE screen_ledger (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    minutes INTEGER NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('earn', 'swap', 'grant', 'use', 'refund', 'reversal')),
+    reason TEXT NOT NULL,
+    date TEXT NOT NULL,
+    instance_id TEXT,
+    session_id TEXT,
+    by_name TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX screen_ledger_member ON screen_ledger(member_id, date);
+  CREATE INDEX screen_ledger_instance ON screen_ledger(instance_id);
+  CREATE TABLE screen_sessions (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    minutes INTEGER NOT NULL,
+    started_at TEXT NOT NULL DEFAULT (datetime('now')),
+    ends_at TEXT NOT NULL,
+    ended_at TEXT,
+    end_reason TEXT
+  );
+  CREATE INDEX screen_sessions_open ON screen_sessions(home_id, ended_at);
+  ALTER TABLE homes ADD COLUMN screen_time TEXT;
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

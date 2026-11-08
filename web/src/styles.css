@@ -475,7 +475,7 @@ td, th { text-align: left; padding: 8px; border-bottom: 1px solid var(--border);
 .switch:not(.on) strong { color: var(--muted); }
 
 /* pages a parent switched off for this kid */
-.board.off-chores .pg-chores, .board.off-goals .pg-goals, .board.off-stats .pg-stats, .board.off-habits .pg-habits, .board.off-den .pg-den, .board.off-lists .pg-lists { display: none; }
+.board.off-chores .pg-chores, .board.off-goals .pg-goals, .board.off-stats .pg-stats, .board.off-habits .pg-habits, .board.off-den .pg-den, .board.off-lists .pg-lists, .board.off-screentime .pg-screentime { display: none; }
 /* The week still shows school lunch and other feeds when only Chores is off. */
 .board.off-chores .pg-calendar-week { display: block; }
 .board.off-chores.off-calendar .pg-calendar-week { display: none; }
@@ -816,3 +816,7 @@ button.link { background: none; border: none; padding: 0; min-height: 0; color: 
 .away-day.on { background: color-mix(in srgb, var(--primary) 16%, var(--surface)); border-color: var(--primary); }
 .away-note { display: flex; align-items: center; gap: 12px; font-size: 1.15rem; font-weight: 700; }
 .wall-away { font-weight: 800; }
+
+/* ---------- screen-time bank ---------- */
+.screen-running { background: color-mix(in srgb, var(--primary) 10%, var(--surface)); border-radius: 14px; padding: 10px 14px; }
+.screen-clock { font-size: 2.4rem; font-weight: 900; font-variant-numeric: tabular-nums; }

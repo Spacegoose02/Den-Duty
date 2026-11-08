@@ -1,5 +1,6 @@
 // Home Assistant (or any automation) with an API token: per-kid sensors, today's chores, events, and actions.
 // Read tokens can only look. Control tokens can also mark chores done, approve them, and give or take points.
+import { activeSession, screenBalance, screenSettings } from '../screentime.ts';
 import type { FastifyInstance } from 'fastify';
 import type { DatabaseSync } from 'node:sqlite';
 import { homeCtx, type HomeCtx } from '../auth.ts';
@@ -58,6 +59,7 @@ export function haRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const timeouts = homeTimeouts(db, ctx.homeId);
     const helpdesk = waitingRequests(db, ctx.homeId);
     const reminders = listReminders(db, ctx.homeId).filter((r) => r.state === 'today' || r.state === 'overdue');
+    const screenOn = screenSettings(db, ctx.homeId).on;
     const kids = listKids(db, ctx.homeId).map((k) => {
       const off = new Set(k.pagesOff);
       const w = kidWeek(db, home, k.id, today);
@@ -88,6 +90,10 @@ export function haRoutes(app: FastifyInstance, db: DatabaseSync): void {
             })),
           }),
         helpdesk_waiting: off.has('helpdesk') ? null : helpdesk.filter((h) => h.memberId === k.id).length,
+        // Screen-time bank (null when off): minutes in the bank, and the running session if any.
+        ...(screenOn && !off.has('screentime')
+          ? (() => { const a = activeSession(db, k.id); return { screen_minutes: screenBalance(db, k.id), screen_time_on: !!a, screen_time_ends_at: a ? `${String(a.ends_at).replace(' ', 'T')}Z` : null }; })()
+          : { screen_minutes: null, screen_time_on: null, screen_time_ends_at: null }),
         next_goal: off.has('goals') ? null : goal?.title ?? null, next_goal_percent: off.has('goals') ? null : goal?.percent ?? null,
       };
     });

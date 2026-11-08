@@ -21,7 +21,7 @@ const WRITE = new Set([
   'POST /quick-rewards/:id/give', 'POST /trades/:id/:answer',
   'POST /lists/:id/items', 'PATCH /list-items/:id', 'DELETE /list-items/:id',
   'POST /push', 'POST /push/remove', 'POST /push/test', 'DELETE /parents/:memberId',
-  'POST /kids/:memberId/screen-time/start', 'POST /screen-time/:id/stop',
+  'POST /kids/:memberId/screen-time/start', 'POST /screen-time/:id/stop', 'POST /kids/:memberId/screen-time/grant',
 ]);
 
 /** What caregivers may not even look at. */

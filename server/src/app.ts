@@ -45,6 +45,7 @@ import { voiceRoutes } from './routes/voice.ts';
 import { denRoutes } from './routes/den.ts';
 import { listRoutes } from './routes/lists.ts';
 import { awayRoutes } from './routes/away.ts';
+import { screenTimeRoutes } from './routes/screentime.ts';
 
 export async function buildApp(db: DatabaseSync, opts: { logger?: boolean; serveWeb?: boolean } = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 1024 * 1024, trustProxy: config.trustProxy });
@@ -101,6 +102,7 @@ export async function buildApp(db: DatabaseSync, opts: { logger?: boolean; serve
   denRoutes(app, db);
   listRoutes(app, db);
   awayRoutes(app, db);
+  screenTimeRoutes(app, db);
 
   const hasWeb = opts.serveWeb !== false && fs.existsSync(path.join(config.webDist, 'index.html'));
   if (hasWeb) {

@@ -1,6 +1,7 @@
 // The core loop: chores become daily instances per kid, kids submit them, parents approve, approvals write points.
 // Everything here takes "today" as an argument so it's easy to test and always uses the home's own calendar.
 import { awayLookup } from './away.ts';
+import { earnScreenTime, reverseScreenTime } from './screentime.ts';
 import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { tx, type Row } from './db.ts';
@@ -391,6 +392,9 @@ export function approveInstance(db: DatabaseSync, homeId: string, id: string, by
       const owner = (db.prepare('SELECT name FROM members WHERE id = ?').get(inst.memberId) as Row | undefined)?.name ?? 'a sibling';
       writeLedger(db, { homeId, memberId: inst.helperId!, amount: share, kind: 'bonus', reason: `🤝 Helped ${owner}: ${inst.title}`, date: inst.date, instanceId: id, by });
     }
+    // Screen-time bank: approved chores can earn minutes too (each kid on their own share).
+    earnScreenTime(db, homeId, inst.memberId, inst.points - share, inst.title, inst.date, id);
+    if (share) earnScreenTime(db, homeId, inst.helperId!, share, inst.title, inst.date, id);
     emit(db, homeId, 'chore_approved', inst.memberId, {
       chore: inst.title, icon: inst.icon, points: inst.points, instance_id: id, balance: balance(db, inst.memberId), by: by.name, cheer,
     });
@@ -431,6 +435,7 @@ export function unapproveInstance(db: DatabaseSync, homeId: string, id: string, 
     const helpers = (db.prepare('SELECT DISTINCT member_id FROM points_ledger WHERE instance_id = ? AND member_id != ?').all(id, inst.memberId) as Row[]).map((r) => r.member_id as string);
     for (const h of helpers) takeBack(h, inst.points, `Approval undone: helped with ${inst.title}`);
     const { got: paid, back: taken } = takeBack(inst.memberId, inst.points, `Approval undone: ${inst.title}`);
+    reverseScreenTime(db, homeId, id, inst.date);
     db.prepare("UPDATE chore_instances SET status = 'submitted', reviewed_at = NULL, reviewed_by = NULL WHERE id = ?").run(id);
     return { item: getInstance(db, homeId, id), paid, taken };
   });
