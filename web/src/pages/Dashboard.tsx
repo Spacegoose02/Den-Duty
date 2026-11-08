@@ -85,6 +85,12 @@ export function Dashboard() {
         </Link>
       )}
 
+      <Link to="/meeting" className="card row recap-banner">
+        <span style={{ fontSize: '2rem' }} aria-hidden>🗓️</span>
+        <span style={{ flex: 1 }}><strong>Family meeting</strong><span className="small muted" style={{ display: 'block' }}>Look back, cheer each other on and plan the week, one step at a time</span></span>
+        <span className="btn">Start</span>
+      </Link>
+
       <section className={`card stack review-card${queue?.length ? ' has-items' : ''}`}>
         <div className="row">
           <h2 style={{ margin: 0, flex: 1 }}>To review {!!queue?.length && <span className="pill warn">{queue.length}</span>}</h2>

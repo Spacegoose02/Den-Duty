@@ -981,6 +981,19 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE homes ADD COLUMN photo_frame TEXT;
   ALTER TABLE homes ADD COLUMN immich_key TEXT;
   `,
+  // Family meetings: a guided weekly sit-down on the wall or a parent's screen. What was said is kept: each kid's
+  // "this week I'll..." (shown on their board until the next meeting), cheers (with any points given) and plans.
+  `
+  CREATE TABLE family_meetings (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    held_on TEXT NOT NULL,
+    data TEXT NOT NULL DEFAULT '{}',
+    created_by TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX family_meetings_home ON family_meetings(home_id, held_on);
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

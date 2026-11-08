@@ -22,6 +22,7 @@ import { DownloadsPage } from './pages/Downloads.tsx';
 import { SharePage } from './pages/SharePage.tsx';
 import { VisitSummaryPage } from './pages/doctors/Summary.tsx';
 import { Recap } from './pages/Recap.tsx';
+import { Meeting } from './pages/Meeting.tsx';
 import { AllowancePage } from './components/Money.tsx';
 
 const NAV = [
@@ -101,6 +102,7 @@ export function App() {
           <Route path="/rewards" element={<Rewards />} />
           <Route path="/allowance" element={<AllowancePage />} />
           <Route path="/recap" element={<Recap />} />
+          <Route path="/meeting" element={<Meeting />} />
           <Route path="/stats" element={<Stats />} />
           <Route path="/doctors" element={<Doctors />} />
           <Route path="/doctors/summary/:memberId" element={<VisitSummaryPage />} />
