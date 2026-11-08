@@ -4,6 +4,8 @@
 //   - can keep games closed until today's chores are done,
 //   - hands out game time a kid bought in the rewards shop, then claims the order so it's marked given here,
 //   - unlocks a family game night when a family goal is reached.
+// Dendrop, the family chat app, polls the same endpoint for each kid's chores line and for time-outs that pause chat
+// (the whole time, or until today's chores are done).
 // Kids whose Chores, Time-outs or Goals & rewards pages are off are left out of that part.
 import type { FastifyInstance } from 'fastify';
 import type { DatabaseSync } from 'node:sqlite';
@@ -22,6 +24,8 @@ export interface GamingKid {
   chores: { due: number; done: number; left: number } | null;
   /** Time-outs on right now that lock LootDen games. */
   locks: Array<{ id: string; what: string; games: 'all' | 'roblox'; endsAt: string }>;
+  /** Time-outs on right now that pause the kid's chat in Dendrop: 'all' the whole time, 'chores' until today's chores are done. */
+  chatLocks: Array<{ id: string; what: string; chat: 'all' | 'chores'; endsAt: string }>;
   /** Game time bought in the shop that LootDen hasn't handed out yet. */
   gameTime: Array<{ orderId: string; title: string; icon: string; minutes: number; boughtAt: string }>;
 }
@@ -44,10 +48,13 @@ export function gamingState(db: DatabaseSync, homeId: string) {
     const locks = timeoutsOff.has(id) ? [] : (db.prepare(`SELECT id, what, games, ends_at FROM timeouts
       WHERE member_id = ? AND games IS NOT NULL AND ended_at IS NULL AND starts_at <= ? AND ends_at > ? ORDER BY ends_at`).all(id, now, now) as Row[])
       .map((r) => ({ id: r.id as string, what: r.what as string, games: r.games as 'all' | 'roblox', endsAt: r.ends_at as string }));
+    const chatLocks = timeoutsOff.has(id) ? [] : (db.prepare(`SELECT id, what, chat, ends_at FROM timeouts
+      WHERE member_id = ? AND chat IS NOT NULL AND ended_at IS NULL AND starts_at <= ? AND ends_at > ? ORDER BY ends_at`).all(id, now, now) as Row[])
+      .map((r) => ({ id: r.id as string, what: r.what as string, chat: r.chat as 'all' | 'chores', endsAt: r.ends_at as string }));
     const gameTime = goalsOff.has(id) ? [] : (db.prepare(`SELECT id, title, icon, game_minutes, created_at FROM shop_orders
       WHERE member_id = ? AND status = 'waiting' AND game_minutes IS NOT NULL ORDER BY created_at`).all(id) as Row[])
       .map((r) => ({ orderId: r.id as string, title: r.title as string, icon: r.icon as string, minutes: r.game_minutes as number, boughtAt: r.created_at as string }));
-    return { id, name: k.name as string, chores, locks, gameTime };
+    return { id, name: k.name as string, chores, locks, chatLocks, gameTime };
   });
   const goals = (db.prepare(`SELECT id, title, icon, reward, status, reached_at FROM team_goals WHERE home_id = ? AND reached_at IS NOT NULL
     AND reached_at > datetime('now', '-30 days') ORDER BY reached_at DESC LIMIT 10`).all(homeId) as Row[])

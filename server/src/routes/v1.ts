@@ -124,7 +124,7 @@ export const V1_ROUTES: V1Route[] = [
   { method: 'GET', path: '/homes/:homeId/archive', from: '/homes/:homeId/archive', scope: 'read', tag: 'Stats', summary: 'The weekly archive: every finished week per kid, newest first.', query: [{ name: 'kid', in: 'query', description: 'Only this kid' }, { name: 'limit', in: 'query', description: 'Weeks, up to 104' }] },
   {
     method: 'GET', path: '/homes/:homeId/gaming', scope: 'read', tag: 'LootDen',
-    summary: "For LootDen: each kid's chores today, time-outs that lock games (all, or just Roblox), game time bought in the shop and not yet handed out, and family goals reached in the last 30 days.",
+    summary: "For LootDen and Dendrop: each kid's chores today, time-outs that lock games (all, or just Roblox), time-outs that pause Dendrop chat (all of it, or until chores are done), game time bought in the shop and not yet handed out, and family goals reached in the last 30 days.",
   },
   { method: 'POST', path: '/homes/:homeId/gaming/orders/:orderId/claim', scope: 'control', tag: 'LootDen', summary: 'LootDen handed out the game time: marks the shop order given.' },
   { method: 'GET', path: '/homes/:homeId/events', scope: 'read', tag: 'Events', summary: 'Recent events (chore done, approved, points changed, goal reached…), newest first.', query: [{ name: 'after', in: 'query', description: 'Only events after this id (poll with the last id you saw)' }] },

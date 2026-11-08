@@ -52,6 +52,7 @@ export function TimeoutCard({ t, asParent, balance, kidName, onChange }: {
           <div className="timeout-what">{asParent && kidName ? `${kidName}: ` : asParent ? '' : 'Taking a break from: '}<strong>{t.what}</strong></div>
           {t.reason && <div className="small muted">{asParent ? 'Why: ' : 'What to work on: '}{t.reason}</div>}
           {t.games && <div className="small muted">🎮 {t.games === 'all' ? 'Games are locked in LootDen' : 'Roblox is locked in LootDen'}</div>}
+          {t.chat && <div className="small muted">💬 {t.chat === 'all' ? 'Chat is paused in Dendrop' : 'Dendrop chat opens once today\'s chores are done'}</div>}
           <div className="timeout-left">
             {upcoming ? `Starts ${WHEN_FMT.format(new Date(t.startsAt))}, for ${timeLeft(left)}` : asParent ? `${timeLeft(left)} left` : `Back in ${timeLeft(left)}`}
           </div>
@@ -117,14 +118,14 @@ const IDEAS = ['No Roblox', 'No tablet', 'No TV', 'No video games', 'No phone', 
 export function TimeoutForm({ kidId, kidName, onClose, onDone }: { kidId: string; kidName: string; onClose: () => void; onDone: () => void }) {
   const { base, home, toast } = useApp();
   const icon = home?.pointsIcon ?? '✨';
-  const [f, setF] = useState({ games: '', what: '', reason: '', length: 1, unit: 'days', later: false, startsAt: '', buy: false, buyUnit: 'hour', buyPrice: 5, buyMaxUnits: 4 });
+  const [f, setF] = useState({ games: '', chat: '', what: '', reason: '', length: 1, unit: 'days', later: false, startsAt: '', buy: false, buyUnit: 'hour', buyPrice: 5, buyMaxUnits: 4 });
   const [busy, setBusy] = useState(false);
   const save = async () => {
     setBusy(true);
     try {
       await api(`${base}/kids/${kidId}/timeouts`, {
         body: {
-          what: f.what, reason: f.reason, length: f.length, unit: f.unit, games: f.games || null,
+          what: f.what, reason: f.reason, length: f.length, unit: f.unit, games: f.games || null, chat: f.chat || null,
           startsAt: f.later && f.startsAt ? new Date(f.startsAt).toISOString() : undefined,
           ...(f.buy ? { buyUnit: f.buyUnit, buyPrice: f.buyPrice, buyMaxUnits: f.buyMaxUnits } : {}),
         },
@@ -156,6 +157,14 @@ export function TimeoutForm({ kidId, kidName, onClose, onDone }: { kidId: string
             <option value="">games stay as they are</option>
             <option value="all">lock all games</option>
             <option value="roblox">lock Roblox</option>
+          </select>
+        </label>
+        <label className="row">
+          <span>💬 In Dendrop</span>
+          <select value={f.chat} onChange={(e) => setF({ ...f, chat: e.target.value })} aria-label="Pause chat in Dendrop">
+            <option value="">chat stays as it is</option>
+            <option value="all">pause chat</option>
+            <option value="chores">no chat until today's chores are done</option>
           </select>
         </label>
         <label className="row check-row"><input type="checkbox" checked={f.buy} onChange={(e) => setF({ ...f, buy: e.target.checked })} /> Let {kidName} buy time back with {home?.pointsName}</label>

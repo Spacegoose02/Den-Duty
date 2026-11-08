@@ -1,4 +1,5 @@
-// Time-outs: a parent pauses something ("No Roblox") for a while, with a reason. Kids see a kind countdown. A parent can
+// Time-outs: a parent pauses something ("No Roblox") for a while, with a reason. It can also lock games in LootDen and
+// pause chat in Dendrop (both read it from /api/v1/homes/:homeId/gaming). Kids see a kind countdown. A parent can
 // let the kid buy time back with points (a price per hour or per day, up to a cap); the kid asks on the tablet and
 // the points only move, through the ledger, once a parent says yes. Parents can end a time-out early or add time.
 import type { FastifyInstance } from 'fastify';
@@ -26,6 +27,14 @@ export function gamesLock(v: unknown): GamesLock {
   throw new HttpError(400, 'Games are locked all, roblox or not at all');
 }
 
+export type ChatLock = 'all' | 'chores' | null;
+/** Blank or missing: the time-out doesn't touch Dendrop chat. 'all' pauses it; 'chores' pauses it until today's chores are done. */
+export function chatLock(v: unknown): ChatLock {
+  if (v == null || v === '' || v === 'none') return null;
+  if (v === 'all' || v === 'chores') return v;
+  throw new HttpError(400, 'Chat is paused all the time-out, until chores are done, or not at all');
+}
+
 export function requestView(r: Row) {
   return {
     id: r.id as string, timeoutId: r.timeout_id as string, units: r.units as number, minutes: r.minutes as number,
@@ -48,6 +57,8 @@ export function timeoutView(db: DatabaseSync, r: Row, now = Date.now()) {
     state: state as 'upcoming' | 'active' | 'over', minutesLeft: state === 'over' ? 0 : left,
     /** Locks the kid's games in LootDen too: all of them, or just Roblox. */
     games: (r.games ?? null) as GamesLock,
+    /** Pauses the kid's chat in Dendrop too: the whole time-out, or until today's chores are done. */
+    chat: (r.chat ?? null) as ChatLock,
     buy: unit ? {
       unit, price: r.buy_price as number, maxMinutes: r.buy_max_minutes as number, boughtMinutes: r.bought_minutes as number,
       // How many whole hours/days the kid could still ask for.
@@ -130,11 +141,11 @@ export function timeoutRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const minutes = lengthMinutes(b.length, b.unit);
     const buy = buySettings(b);
     const id = newId();
-    db.prepare(`INSERT INTO timeouts (id, home_id, member_id, what, reason, starts_at, ends_at, buy_unit, buy_price, buy_max_minutes, created_by, games)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, ctx.homeId, memberId, requireStr(b.what, 'What', 80), str(b.reason, 300),
-      iso(start), iso(start + minutes * 60000), buy.unit, buy.price, buy.maxMinutes, ctx.user?.id ?? null, gamesLock(b.games));
+    db.prepare(`INSERT INTO timeouts (id, home_id, member_id, what, reason, starts_at, ends_at, buy_unit, buy_price, buy_max_minutes, created_by, games, chat)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, ctx.homeId, memberId, requireStr(b.what, 'What', 80), str(b.reason, 300),
+      iso(start), iso(start + minutes * 60000), buy.unit, buy.price, buy.maxMinutes, ctx.user?.id ?? null, gamesLock(b.games), chatLock(b.chat));
     const t = view(ctx, id);
-    emit(db, ctx.homeId, 'timeout_started', memberId, { kid: kid.name, what: t.what, reason: t.reason, starts_at: t.startsAt, ends_at: t.endsAt });
+    emit(db, ctx.homeId, 'timeout_started', memberId, { kid: kid.name, what: t.what, reason: t.reason, starts_at: t.startsAt, ends_at: t.endsAt, games: t.games, chat: t.chat });
     return t;
   });
 
@@ -150,6 +161,7 @@ export function timeoutRoutes(app: FastifyInstance, db: DatabaseSync): void {
           'what' in b ? requireStr(b.what, 'What', 80) : cur.what as string, 'reason' in b ? str(b.reason, 300) : cur.reason as string | null, cur.id as string);
       }
       if ('games' in b) db.prepare('UPDATE timeouts SET games = ? WHERE id = ?').run(gamesLock(b.games), cur.id as string);
+      if ('chat' in b) db.prepare('UPDATE timeouts SET chat = ? WHERE id = ?').run(chatLock(b.chat), cur.id as string);
       if ('buyUnit' in b) {
         const buy = buySettings(b);
         db.prepare('UPDATE timeouts SET buy_unit = ?, buy_price = ?, buy_max_minutes = ? WHERE id = ?').run(buy.unit, buy.price, buy.maxMinutes, cur.id as string);

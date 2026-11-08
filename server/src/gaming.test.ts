@@ -62,3 +62,39 @@ test('LootDen link: chores today, game locks from time-outs and game time from t
   const docs = (await call(mom, 'GET', '/api/v1/openapi.json')).body;
   assert.ok(docs.paths['/homes/{homeId}/gaming']);
 });
+
+test('Dendrop link: time-outs can pause chat, the whole time or until chores are done', async () => {
+  const { call, mom, base, ava, ben } = await family();
+  const homeId = base.split('/').pop();
+  const read = (await call(mom, 'POST', `${base}/tokens`, { name: 'Dendrop' })).body.token as string;
+  const gaming = async () => (await call({}, 'GET', `/api/v1/homes/${homeId}/gaming`, undefined, { authorization: `Bearer ${read}` })).body;
+
+  const paused = (await call(mom, 'POST', `${base}/kids/${ben.id}/timeouts`, { what: 'No chatting', reason: 'Up past bedtime', length: 1, unit: 'days', chat: 'all' })).body;
+  assert.equal(paused.chat, 'all');
+  const chores = (await call(mom, 'POST', `${base}/kids/${ava.id}/timeouts`, { what: 'Chores first', length: 3, unit: 'days', chat: 'chores', games: 'all' })).body;
+  assert.equal(chores.chat, 'chores');
+  await call(mom, 'POST', `${base}/kids/${ava.id}/timeouts`, { what: 'No TV', length: 2, unit: 'hours' });
+  assert.equal((await call(mom, 'POST', `${base}/kids/${ava.id}/timeouts`, { what: 'x', length: 1, unit: 'hours', chat: 'forever' })).status, 400);
+  // One that hasn't started yet doesn't pause anything.
+  await call(mom, 'POST', `${base}/kids/${ben.id}/timeouts`, { what: 'Later', length: 1, unit: 'hours', chat: 'all', startsAt: new Date(Date.now() + 86400000).toISOString() });
+
+  let state = await gaming();
+  const a = state.kids.find((k: { id: string }) => k.id === ava.id);
+  const b = state.kids.find((k: { id: string }) => k.id === ben.id);
+  assert.deepEqual(a.chatLocks.map((l: { what: string; chat: string }) => [l.what, l.chat]), [['Chores first', 'chores']]);
+  assert.deepEqual(b.chatLocks.map((l: { what: string; chat: string }) => [l.what, l.chat]), [['No chatting', 'all']]);
+  assert.equal(b.chatLocks[0].endsAt, paused.endsAt);
+  // Chat and games are separate: the chores time-out locks games too, the plain one neither.
+  assert.equal(a.locks.length, 1);
+
+  // A parent can change it later, or end it.
+  assert.equal((await call(mom, 'PATCH', `${base}/timeouts/${chores.id}`, { chat: null })).body.chat, null);
+  await call(mom, 'PATCH', `${base}/timeouts/${paused.id}`, { end: true });
+  state = await gaming();
+  for (const k of state.kids) assert.equal(k.chatLocks.length, 0);
+
+  // The event says what it pauses.
+  const events = (await call(mom, 'GET', `/api/v1/homes/${homeId}/events`, undefined, { authorization: `Bearer ${read}` })).body;
+  const started = events.find((e: { event: string; what?: string }) => e.event === 'timeout_started' && e.what === 'No chatting');
+  assert.equal(started.chat, 'all');
+});
