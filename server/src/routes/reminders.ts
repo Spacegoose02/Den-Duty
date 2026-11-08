@@ -9,13 +9,12 @@ import { HttpError, newId, num, requireStr, str } from '../util.ts';
 import { homeInfo, homeToday } from '../chores.ts';
 import { emit } from '../events.ts';
 import { getKid } from './homes.ts';
-import { APPOINTMENT_KINDS } from './therapy.ts';
+import { APPOINTMENT_KINDS, createAppointment } from './therapy.ts';
 import { addDays, addMonths, isIsoDate, timeIn } from '../../../shared/schedule.ts';
 
 const UNITS = ['day', 'week', 'month', 'year'] as const;
 type Unit = (typeof UNITS)[number];
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
-const LOCAL_DT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
 
 export function nextDate(from: string, every: number, unit: Unit): string {
   if (unit === 'day') return addDays(from, every);
@@ -173,14 +172,11 @@ export function reminderRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const r = one(ctx, (req.params as { id: string }).id);
     const b = (req.body ?? {}) as Row;
     const kid = getKid(db, ctx, String(b.kidId ?? r.kid_id ?? ''));
-    if (typeof b.startsAt !== 'string' || !LOCAL_DT.test(b.startsAt)) throw new HttpError(400, 'Pick a date and time');
     const kind = (APPOINTMENT_KINDS as readonly string[]).includes(String(b.kind)) ? String(b.kind) : (r.appt_kind as string | null) ?? 'doctor';
-    const apptId = newId();
-    tx(db, () => {
-      db.prepare(`INSERT INTO therapy_appointments (id, home_id, member_id, kind, title, provider, location, starts_at, duration_minutes, notes, created_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(apptId, ctx.homeId, kid.id as string, kind, requireStr(b.title, 'Title', 100), str(b.provider, 100),
-        str(b.location, 200), b.startsAt as string, num(b.durationMinutes), str(b.notes, 2000), ctx.user?.id ?? null);
+    const apptId = tx(db, () => {
+      const id = createAppointment(db, ctx, kid.id as string, { ...b, kind });
       if (!r.done_at) complete(ctx, r);
+      return id;
     });
     return { reminder: view(ctx, r.id as string), appointmentId: apptId };
   });

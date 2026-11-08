@@ -5,6 +5,7 @@ import { endFinishedSessions } from './screentime.ts';
 import { syncAllDue } from './calsync.ts';
 import { buildApp } from './app.ts';
 import { checkDueReminders } from './routes/reminders.ts';
+import { topUpSeries } from './routes/therapy.ts';
 import { checkPush } from './push.ts';
 import { runMoney } from './money.ts';
 import { homeInfo, homeToday } from './chores.ts';
@@ -21,10 +22,11 @@ if (restored) app.log.info('Restored the database from a backup (the one it repl
 if (!config.google) app.log.info('Google sign-in is off (set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to turn it on)');
 
 // Reminders that come due tell Home Assistant (reminder_due), checked every minute.
-// Also: due-soon nudges and the weekly recap push, and allowance / interest paydays.
+// Also: due-soon nudges and the weekly recap push, allowance / interest paydays, and the next visits of repeating appointments.
 const reminderTimer = setInterval(() => {
   try { checkDueReminders(db); } catch (err) { app.log.error(err); }
   try { checkPush(db); } catch (err) { app.log.error(err); }
+  try { topUpSeries(db); } catch (err) { app.log.error(err); }
   try { if (nightlyBackup(db, config.dataDir)) app.log.info('Nightly backup saved'); } catch (err) { app.log.error(err); }
   // Linked calendars (Google, Outlook, iCloud...): both ways, every 15 minutes.
   void syncAllDue(db).catch((err) => app.log.error(err));
