@@ -10,7 +10,7 @@ import { Calendar } from './Week.tsx';
 import { TimeoutCard, TimeoutForm } from '../components/Timeouts.tsx';
 import { KidHelpdesk } from '../components/Helpdesk.tsx';
 import { confetti } from '../components/Confetti.ts';
-import { KidShop } from '../components/Shop.tsx';
+import { KidShop, LootdenPlay } from '../components/Shop.tsx';
 import { KidTeamGoals } from '../components/TeamGoals.tsx';
 import { cheerOf, pickPhoto, PhotoThumb } from '../components/Photo.tsx';
 import { KidMedicine, PracticeMode } from '../components/KidPractice.tsx';
@@ -432,6 +432,7 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
 
       <KidTeamGoals />
 
+      <LootdenPlay kidId={kid.id} />
       <KidShop kid={kid} asParent={asParent} onBought={() => void reload()} />
 
       {(openPolls.length > 0 || decided.length > 0) && (

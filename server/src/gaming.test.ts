@@ -98,3 +98,38 @@ test('Dendrop link: time-outs can pause chat, the whole time or until chores are
   const started = events.find((e: { event: string; what?: string }) => e.event === 'timeout_started' && e.what === 'No chatting');
   assert.equal(started.chat, 'all');
 });
+
+test('LootDen reports play time and the games a reward unlocks; a kid buys one', async () => {
+  const { call, mom, base, ava, ben, tablet, asKid } = await family();
+  const homeId = base.split('/').pop();
+  const read = (await call(mom, 'POST', `${base}/tokens`, { name: 'look' })).body.token as string;
+  const control = (await call(mom, 'POST', `${base}/tokens`, { name: 'LootDen', scope: 'control' })).body.token as string;
+  const v1 = `/api/v1/homes/${homeId}`;
+  const api = (method: string, url: string, token: string, body?: unknown) => call({}, method, url, body, { authorization: `Bearer ${token}` });
+
+  // Before LootDen reports, there's nothing to pick.
+  assert.equal((await call(mom, 'GET', `${base}/gaming/lootden`)).body.linked, false);
+  assert.equal((await call(mom, 'POST', `${base}/shop`, { title: 'Fortnite night', price: 5, unlockGameId: 'g1' })).status, 400);
+
+  const report = { kids: [{ kidId: ava.id, minutes: 75, playing: 'Minecraft', remaining: 45 }, { kidId: 'someone-else', minutes: 9 }], games: [{ id: 'g1', title: 'Fortnite' }, { id: '', title: 'no id' }] };
+  assert.equal((await api('POST', `${v1}/gaming/report`, read, report)).status, 403, 'needs a control token');
+  assert.deepEqual((await api('POST', `${v1}/gaming/report`, control, report)).body, { ok: true, kids: 1, games: 1 });
+  const seen = (await call(mom, 'GET', `${base}/gaming/lootden`)).body;
+  assert.deepEqual(seen.games, [{ id: 'g1', title: 'Fortnite' }]);
+  assert.deepEqual(seen.play.map((p: { name: string; minutes: number; playing: string; remaining: number }) => [p.name, p.minutes, p.playing, p.remaining]), [['Avaleigh', 75, 'Minecraft', 45]]);
+
+  // A reward that unlocks Fortnite for two days.
+  assert.equal((await call(mom, 'POST', `${base}/shop`, { title: 'x', price: 5, unlockGameId: 'g1', unlockHours: 500 })).status, 400);
+  const item = (await call(mom, 'POST', `${base}/shop`, { title: 'Fortnite weekend', icon: '🎮', price: 10, unlockGameId: 'g1', unlockHours: 48 })).body;
+  assert.deepEqual([item.unlockGame, item.unlockHours], [{ id: 'g1', title: 'Fortnite' }, 48]);
+  await call(mom, 'POST', `${base}/kids/${ben.id}/points`, { amount: 12, reason: 'Start' });
+  await asKid(ben);
+  // A kid only sees their own play, and no game list.
+  const own = (await call(tablet, 'GET', `${base}/gaming/lootden`)).body;
+  assert.deepEqual([own.play.length, own.games.length], [0, 0]);
+  const order = (await call(tablet, 'POST', `${base}/kids/${ben.id}/shop/${item.id}/buy`)).body.order;
+  const b = (await api('GET', `${v1}/gaming`, read)).body.kids.find((k: { id: string }) => k.id === ben.id);
+  assert.deepEqual(b.gameUnlocks.map((u: { orderId: string; gameId: string; gameTitle: string; hours: number }) => [u.orderId, u.gameId, u.gameTitle, u.hours]), [[order.id, 'g1', 'Fortnite', 48]]);
+  assert.deepEqual((await api('POST', `${v1}/gaming/orders/${order.id}/claim`, control, {})).body, { ok: true, already: false });
+  assert.equal((await api('GET', `${v1}/gaming`, read)).body.kids.find((k: { id: string }) => k.id === ben.id).gameUnlocks.length, 0);
+});

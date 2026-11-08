@@ -5,7 +5,8 @@ import type { DatabaseSync } from 'node:sqlite';
 import { assertCanActFor, homeCtx, type HomeCtx } from '../auth.ts';
 import { tx, type Row } from '../db.ts';
 import { emit } from '../events.ts';
-import { HttpError, newId, num, requireStr } from '../util.ts';
+import { HttpError, newId, num, parseJson, requireStr } from '../util.ts';
+import { lootdenReport } from './gaming.ts';
 import { balance, homeInfo, homeToday, writeLedger } from '../chores.ts';
 import { cleanIcon, getKid, pageOn } from './homes.ts';
 import { byOf } from './chores.ts';
@@ -34,15 +35,33 @@ function gameMinutes(v: unknown): number | null {
   return n;
 }
 
+/** A LootDen game a reward unlocks for a while: one LootDen reported, or null to clear it. */
+function unlockGame(db: DatabaseSync, homeId: string, v: unknown): string | null {
+  if (v == null || v === '') return null;
+  const g = lootdenReport(db, homeId).games.find((x) => x.id === String(v));
+  if (!g) throw new HttpError(400, 'Pick one of the games LootDen sent over');
+  return JSON.stringify(g);
+}
+
+function unlockHours(v: unknown): number {
+  const n = v == null || v === '' ? 24 : num(v);
+  if (n == null || !Number.isInteger(n) || n < 1 || n > 168) throw new HttpError(400, 'A game unlocks for 1 to 168 hours');
+  return n;
+}
+
+const unlockOf = (r: Row) => (r.unlock_game ? parseJson<{ id: string; title: string } | null>(r.unlock_game, null) : null);
+
 const itemView = (r: Row) => ({
   id: r.id as string, title: r.title as string, icon: r.icon as string, price: r.price as number, stock: r.stock as number | null,
   gameMinutes: (r.game_minutes ?? null) as number | null,
+  unlockGame: unlockOf(r), unlockHours: (r.unlock_hours ?? null) as number | null,
 });
 
 const orderView = (r: Row) => ({
   id: r.id as string, memberId: r.member_id as string, kidName: r.kid_name as string, itemId: r.item_id as string | null,
   title: r.title as string, icon: r.icon as string, price: r.price as number, status: r.status as 'waiting' | 'given' | 'refunded',
   gameMinutes: (r.game_minutes ?? null) as number | null,
+  unlockGame: unlockOf(r), unlockHours: (r.unlock_hours ?? null) as number | null,
   createdAt: r.created_at as string, closedAt: r.closed_at as string | null, closedBy: r.closed_by as string | null,
 });
 
@@ -73,8 +92,10 @@ export function shopRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const count = (db.prepare('SELECT COUNT(*) AS n FROM shop_items WHERE home_id = ?').get(ctx.homeId) as Row).n as number;
     if (count >= SHOP_MAX_ITEMS) throw new HttpError(400, `The shop is full (${SHOP_MAX_ITEMS} rewards max)`);
     const id = newId();
-    db.prepare('INSERT INTO shop_items (id, home_id, title, icon, price, stock, position, game_minutes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(id, ctx.homeId, requireStr(b.title, 'Reward', 60), cleanIcon(b.icon, '🎁'), price(b.price), stock(b.stock), count, gameMinutes(b.gameMinutes));
+    const unlock = unlockGame(db, ctx.homeId, b.unlockGameId);
+    db.prepare('INSERT INTO shop_items (id, home_id, title, icon, price, stock, position, game_minutes, unlock_game, unlock_hours) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(id, ctx.homeId, requireStr(b.title, 'Reward', 60), cleanIcon(b.icon, '🎁'), price(b.price), stock(b.stock), count, gameMinutes(b.gameMinutes),
+        unlock, unlock ? unlockHours(b.unlockHours) : null);
     return itemView(getItem(db, ctx, id));
   });
 
@@ -87,6 +108,10 @@ export function shopRoutes(app: FastifyInstance, db: DatabaseSync): void {
     if ('price' in b) db.prepare('UPDATE shop_items SET price = ? WHERE id = ?').run(price(b.price), item.id as string);
     if ('stock' in b) db.prepare('UPDATE shop_items SET stock = ? WHERE id = ?').run(stock(b.stock), item.id as string);
     if ('gameMinutes' in b) db.prepare('UPDATE shop_items SET game_minutes = ? WHERE id = ?').run(gameMinutes(b.gameMinutes), item.id as string);
+    if ('unlockGameId' in b) {
+      const unlock = unlockGame(db, ctx.homeId, b.unlockGameId);
+      db.prepare('UPDATE shop_items SET unlock_game = ?, unlock_hours = ? WHERE id = ?').run(unlock, unlock ? unlockHours(b.unlockHours) : null, item.id as string);
+    } else if ('unlockHours' in b && item.unlock_game) db.prepare('UPDATE shop_items SET unlock_hours = ? WHERE id = ?').run(unlockHours(b.unlockHours), item.id as string);
     return itemView(getItem(db, ctx, item.id as string));
   });
 
@@ -116,8 +141,9 @@ export function shopRoutes(app: FastifyInstance, db: DatabaseSync): void {
         homeId: ctx.homeId, memberId, amount: -cost, kind: 'redeem', reason: `Bought: ${item.icon} ${item.title}`,
         date: homeToday(homeInfo(db, ctx.homeId)), by,
       });
-      db.prepare('INSERT INTO shop_orders (id, home_id, member_id, item_id, title, icon, price, game_minutes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-        .run(orderId, ctx.homeId, memberId, item.id as string, item.title as string, item.icon as string, cost, (item.game_minutes ?? null) as number | null);
+      db.prepare('INSERT INTO shop_orders (id, home_id, member_id, item_id, title, icon, price, game_minutes, unlock_game, unlock_hours) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(orderId, ctx.homeId, memberId, item.id as string, item.title as string, item.icon as string, cost, (item.game_minutes ?? null) as number | null,
+          (item.unlock_game ?? null) as string | null, (item.unlock_hours ?? null) as number | null);
       if (item.stock != null) db.prepare('UPDATE shop_items SET stock = stock - 1 WHERE id = ?').run(item.id as string);
       emit(db, ctx.homeId, 'reward_bought', memberId, { reward: item.title, icon: item.icon, price: cost, order_id: orderId, balance: have - cost });
       return { order: orderView(db.prepare(`${ORDER_SELECT} WHERE o.id = ?`).get(orderId) as Row), balance: have - cost };

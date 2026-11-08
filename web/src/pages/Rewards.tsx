@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api, type Poll, type QuickReward } from '../api.ts';
 import { useApp, useLoad } from '../state.tsx';
-import { ShopManager } from '../components/Shop.tsx';
+import { ShopManager, LootdenPlay } from '../components/Shop.tsx';
 import { TeamGoalManager } from '../components/TeamGoals.tsx';
 
 const REWARD_ICONS = ['🌟', '🤝', '🧠', '🎒', '💖', '🧘', '🦁', '🎨', '📚', '🍽️', '😊', '🙌'];
@@ -107,6 +107,7 @@ export function Rewards() {
     <div className="stack">
       <div className="topbar"><h1>Rewards</h1></div>
       <TeamGoalManager />
+      <LootdenPlay />
       <ShopManager />
       <QuickRewards />
       <Votes />

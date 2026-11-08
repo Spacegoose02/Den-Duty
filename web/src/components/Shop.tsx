@@ -1,6 +1,6 @@
 // The rewards shop: kids spend points on rewards their parents set up, and a grown-up hands them over.
 import { useState } from 'react';
-import { api, type Kid, type ShopItem, type ShopOrder } from '../api.ts';
+import { api, type Kid, type LootdenReport, type ShopItem, type ShopOrder } from '../api.ts';
 import { useApp, useLoad } from '../state.tsx';
 import { Modal, ProgressBar } from './Bits.tsx';
 import { RaccoonAvatar } from './Raccoon.tsx';
@@ -42,6 +42,7 @@ export function KidShop({ kid, asParent, onBought }: { kid: Kid; asParent: boole
             <button key={it.id} className={`shop-item${afford && !soldOut ? ' can-buy' : ''}`} disabled={soldOut} onClick={() => setBuying(it)}>
               <span className="shop-icon" aria-hidden>{it.icon}</span>
               <span className="shop-title">{it.title}</span>
+              {it.unlockGame && <span className="small muted">🔓 {it.unlockGame.title} for {hoursText(it.unlockHours ?? 24)}</span>}
               <span className="shop-price">{it.price} {icon}</span>
               {soldOut ? <span className="small muted">Sold out</span>
                 : afford ? <span className="small" style={{ color: 'var(--ok)', fontWeight: 700 }}>You can get this!</span>
@@ -116,12 +117,38 @@ export function ShopOrdersCard({ kids, onChange }: { kids: Kid[]; onChange: () =
   );
 }
 
+const hoursText = (h: number) => (h % 24 === 0 ? `${h / 24} day${h === 24 ? '' : 's'}` : `${h} hour${h === 1 ? '' : 's'}`);
+const playText = (m: number) => (m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`);
+
+/** What a kid played in LootDen today, from LootDen's reports. Nothing when LootDen isn't linked. */
+export function LootdenPlay({ kidId }: { kidId?: string }) {
+  const { base } = useApp();
+  const [r] = useLoad<LootdenReport>(`${base}/gaming/lootden`);
+  const rows = (r?.play ?? []).filter((p) => !kidId || p.memberId === kidId);
+  if (!r?.linked || !rows.length) return null;
+  return (
+    <section className="card stack">
+      <h2 style={{ margin: 0 }}>🎮 In LootDen today</h2>
+      {rows.map((p) => (
+        <div key={p.memberId} className="row small">
+          <strong style={{ flex: 1 }}>{kidId ? 'You' : p.name}</strong>
+          <span>{playText(p.minutes)} played</span>
+          {p.playing && <span className="pill ok">Playing {p.playing}</span>}
+          {p.remaining != null && <span className="muted">{playText(p.remaining)} left</span>}
+        </div>
+      ))}
+    </section>
+  );
+}
+
 /** Rewards page: stock the shop. */
 export function ShopManager() {
   const { base, home, toast } = useApp();
   const [items, reload] = useLoad<ShopItem[]>(`${base}/shop`);
   const [orders] = useLoad<ShopOrder[]>(`${base}/shop/orders`);
-  const blank = { title: '', icon: '🎁', price: 20, stock: '', gameMinutes: '' };
+  const [lootden] = useLoad<LootdenReport>(`${base}/gaming/lootden`);
+  const games = lootden?.games ?? [];
+  const blank = { title: '', icon: '🎁', price: 20, stock: '', gameMinutes: '', unlockGameId: '', unlockHours: '24' };
   const [d, setD] = useState(blank);
   const icon = home?.pointsIcon ?? '✨';
   const save = async (it: ShopItem, patch: Partial<{ price: number; stock: number | string | null }>) => {
@@ -133,12 +160,13 @@ export function ShopManager() {
     <section className="card stack">
       <h2 style={{ margin: 0 }}>🛍️ Rewards shop</h2>
       <p className="small muted" style={{ margin: 0 }}>
-        Rewards kids can buy with their {home?.pointsName ?? 'points'} on their own board. The points come off when they buy, and the reward shows up on Home for you to hand over (or refund). Fill in 🎮 minutes for game time: with LootDen linked, it adds the time by itself.
+        Rewards kids can buy with their {home?.pointsName ?? 'points'} on their own board. The points come off when they buy, and the reward shows up on Home for you to hand over (or refund). Fill in 🎮 minutes for game time: with LootDen linked, it adds the time by itself. Or pick a 🔓 game: LootDen keeps games you mark there locked until a reward like this unlocks them.
       </p>
       {items?.map((it) => (
         <div key={it.id} className="row">
           <span style={{ fontSize: '1.6rem' }} aria-hidden>{it.icon}</span>
-          <strong style={{ flex: 1, minWidth: 140 }}>{it.title}{it.gameMinutes ? <span className="small muted"> · 🎮 {it.gameMinutes} min in LootDen</span> : null}</strong>
+          <strong style={{ flex: 1, minWidth: 140 }}>{it.title}{it.gameMinutes ? <span className="small muted"> · 🎮 {it.gameMinutes} min in LootDen</span> : null}
+            {it.unlockGame ? <span className="small muted"> · 🔓 {it.unlockGame.title} for {hoursText(it.unlockHours ?? 24)}</span> : null}</strong>
           <label className="row small" style={{ gap: 4 }}>
             <input type="number" min={1} defaultValue={it.price} style={{ width: 80 }} aria-label={`Price of ${it.title}`}
               onBlur={(e) => { const v = Math.round(Number(e.target.value)); if (v >= 1 && v !== it.price) void save(it, { price: v }); }} /> {icon}
@@ -153,7 +181,11 @@ export function ShopManager() {
       {items && !items.length && <p className="muted" style={{ margin: 0 }}>The shop is empty. Add a few rewards, from small treats to big ones worth saving up for.</p>}
       <form className="row" onSubmit={async (e) => {
         e.preventDefault();
-        try { await api(`${base}/shop`, { body: { ...d, stock: d.stock === '' ? null : Number(d.stock), gameMinutes: d.gameMinutes === '' ? null : Number(d.gameMinutes) } }); setD(blank); await reload(); } catch (err) { toast((err as Error).message); }
+        try {
+          await api(`${base}/shop`, { body: { ...d, stock: d.stock === '' ? null : Number(d.stock), gameMinutes: d.gameMinutes === '' ? null : Number(d.gameMinutes),
+            unlockGameId: d.unlockGameId || null, unlockHours: Number(d.unlockHours) } });
+          setD(blank); await reload();
+        } catch (err) { toast((err as Error).message); }
       }}>
         <select value={d.icon} onChange={(e) => setD({ ...d, icon: e.target.value })} style={{ width: 80 }} aria-label="Icon">
           {SHOP_ICONS.map((i) => <option key={i}>{i}</option>)}
@@ -163,6 +195,17 @@ export function ShopManager() {
         <input type="number" min={0} placeholder="∞ left" value={d.stock} onChange={(e) => setD({ ...d, stock: e.target.value })} style={{ width: 90 }} aria-label="How many (blank for unlimited)" />
         <input type="number" min={5} max={600} placeholder="🎮 min" value={d.gameMinutes} onChange={(e) => setD({ ...d, gameMinutes: e.target.value })} style={{ width: 90 }}
           aria-label="Game time in LootDen, in minutes (blank for an ordinary reward)" title="Game time LootDen hands out by itself, in minutes. Blank for an ordinary reward." />
+        {games.length > 0 && (
+          <select value={d.unlockGameId} onChange={(e) => setD({ ...d, unlockGameId: e.target.value })} aria-label="A LootDen game this reward unlocks" style={{ maxWidth: 200 }}>
+            <option value="">🔓 No game</option>
+            {games.map((g) => <option key={g.id} value={g.id}>🔓 {g.title}</option>)}
+          </select>
+        )}
+        {d.unlockGameId && (
+          <select value={d.unlockHours} onChange={(e) => setD({ ...d, unlockHours: e.target.value })} aria-label="How long the game stays unlocked">
+            {[2, 4, 24, 48, 168].map((h) => <option key={h} value={h}>for {hoursText(h)}</option>)}
+          </select>
+        )}
         <button disabled={!d.title.trim()}>Add</button>
       </form>
       {recent.length > 0 && (
