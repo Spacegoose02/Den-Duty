@@ -68,10 +68,14 @@ export interface Kid {
   aiOn: boolean;
   /** Read chores and messages out loud ('auto' = on with the picture board). */
   readAloudSetting: 'auto' | 'on' | 'off'; readAloud: boolean;
+  /** The kid's own language for their screens (null = the family's). */
+  language?: string | null;
 }
 
 export interface HomeDetail {
   id: string; name: string; pointsName: string; pointsIcon: string; theme: string; timezone: string; weekStart: 0 | 1; allowNegative?: boolean; surprise?: 'off' | 'sometimes' | 'often' | 'daily'; helpdeskMaxOpen?: number;
+  /** The language kid screens and the wall use (en, es, fr). */
+  language?: string;
   viewer: 'parent' | 'kid' | 'device' | 'token';
   /** For a parent: caregivers get the day-to-day only. */
   access: 'full' | 'caregiver' | null;

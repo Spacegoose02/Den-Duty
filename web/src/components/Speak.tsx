@@ -1,5 +1,9 @@
 // Read-aloud for kids who can't read yet: the browser's own speech, nothing leaves the device.
 
+let speechLang = 'en-US';
+/** The language read-aloud speaks in (set by the kid board or the wall). */
+export function setSpeechLang(code: string): void { speechLang = code; }
+
 export const canSpeak = (): boolean => typeof window !== 'undefined' && 'speechSynthesis' in window;
 
 /** Says something out loud, stopping whatever was being said. Emoji are skipped. */
@@ -9,6 +13,7 @@ export function speak(text: string): void {
   if (!clean) return;
   window.speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(clean);
+  u.lang = speechLang;
   u.rate = 0.92;
   u.pitch = 1.1;
   window.speechSynthesis.speak(u);

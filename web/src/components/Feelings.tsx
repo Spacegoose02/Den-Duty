@@ -5,6 +5,7 @@ import { useApp, useLoad } from '../state.tsx';
 import { dayName } from './Bits.tsx';
 import { RaccoonAvatar } from './Raccoon.tsx';
 import { speak } from './Speak.tsx';
+import { useT } from '../i18n.tsx';
 import { FEELINGS, FEELING_REASONS, feelingOf, type FeelingId, type FeelingReason } from '../../../shared/feelings.ts';
 
 interface Feeling { date: string; feeling: FeelingId; reasons: FeelingReason[]; note: string | null }
@@ -15,6 +16,7 @@ export function KidFeelings({ memberId, kidName, asParent, readAloud, picture }:
   const [picking, setPicking] = useState(false);
   const [reasons, setReasons] = useState<FeelingReason[]>([]);
   const [note, setNote] = useState('');
+  const t = useT();
   if (!data?.on) return null;
   const today = data.today;
   const save = async (feeling: FeelingId, rs: FeelingReason[] = reasons, n = note) => {
@@ -36,39 +38,39 @@ export function KidFeelings({ memberId, kidName, asParent, readAloud, picture }:
   const f = today ? feelingOf(today.feeling) : null;
   return (
     <section className="card stack feelings-card">
-      <h2 style={{ margin: 0 }}>{asking ? '💛 How are you feeling?' : `${f?.icon} You're feeling ${f?.label.toLowerCase()} today`}</h2>
+      <h2 style={{ margin: 0 }}>{asking ? t('💛 How are you feeling?') : `${f?.icon} ${t("You're feeling {f} today", { f: t(f?.label ?? '').toLowerCase() })}`}</h2>
       {asking ? (
         <div className="feelings-grid">
           {FEELINGS.map((x) => (
-            <button key={x.id} className={`feeling${today?.feeling === x.id ? ' on' : ''}`} aria-label={x.label}
-              onClick={() => { if (readAloud) speak(x.label); setPicking(false); setReasons([]); setNote(''); void save(x.id, [], ''); }}>
+            <button key={x.id} className={`feeling${today?.feeling === x.id ? ' on' : ''}`} aria-label={t(x.label)}
+              onClick={() => { if (readAloud) speak(t(x.label)); setPicking(false); setReasons([]); setNote(''); void save(x.id, [], ''); }}>
               <span className="feeling-face" aria-hidden>{x.icon}</span>
-              <span>{x.label}</span>
+              <span>{t(x.label)}</span>
             </button>
           ))}
         </div>
       ) : (
         <>
-          {f?.alert && <p style={{ margin: 0 }}>Thanks for telling us. {picture ? 'A grown-up can give you a hug. 🤗' : 'It helps to talk about it with a grown-up. 🤗'}</p>}
+          {f?.alert && <p style={{ margin: 0 }}>{t('Thanks for telling us.')} {t(picture ? 'A grown-up can give you a hug. 🤗' : 'It helps to talk about it with a grown-up. 🤗')}</p>}
           <div className="row" style={{ gap: 6 }}>
-            <span className="small muted">Because of…</span>
+            <span className="small muted">{t('Because of…')}</span>
             {FEELING_REASONS.map((r) => {
               const on = today!.reasons.includes(r.id);
               return (
                 <button key={r.id} type="button" className={`chip${on ? ' on' : ''}`} aria-pressed={on}
                   onClick={() => void save(today!.feeling, on ? today!.reasons.filter((x) => x !== r.id) : [...today!.reasons, r.id], today!.note ?? '')}>
-                  {r.icon} {r.label}
+                  {r.icon} {t(r.label)}
                 </button>
               );
             })}
           </div>
           {!picture && (
             <div className="row">
-              <input placeholder="Want to say more? (only grown-ups see it)" value={note || today!.note || ''} onChange={(e) => setNote(e.target.value)} style={{ flex: 1 }} maxLength={300} />
-              <button disabled={!note.trim()} onClick={() => void save(today!.feeling, today!.reasons, note).then(() => toast('Sent to your grown-ups 💛'))}>Send</button>
+              <input placeholder={t('Want to say more? (only grown-ups see it)')} value={note || today!.note || ''} onChange={(e) => setNote(e.target.value)} style={{ flex: 1 }} maxLength={300} />
+              <button disabled={!note.trim()} onClick={() => void save(today!.feeling, today!.reasons, note).then(() => toast(t('Sent to your grown-ups 💛')))}>{t('Send')}</button>
             </div>
           )}
-          <button className="ghost" style={{ alignSelf: 'flex-start' }} onClick={() => setPicking(true)}>I feel different now</button>
+          <button className="ghost" style={{ alignSelf: 'flex-start' }} onClick={() => setPicking(true)}>{t('I feel different now')}</button>
         </>
       )}
     </section>

@@ -3,6 +3,7 @@ import { api, type HelpRequest, type HomeHelpRequest } from '../api.ts';
 import { useApp, useLoad } from '../state.tsx';
 import { Modal, dayName, shortDate } from './Bits.tsx';
 import { RaccoonAvatar } from './Raccoon.tsx';
+import { useT } from '../i18n.tsx';
 import { HELP_PICKS, type HelpPick } from '../../../shared/pages.ts';
 import { addDays, weekdayOf } from '../../../shared/schedule.ts';
 
@@ -66,6 +67,7 @@ function CloseTicket({ r, kidName, onClose, onDone }: { r: HelpRequest; kidName:
 
 /** The kid's 🛎️ Helpdesk on their board: big quick picks, optional words and "by when", and how each ask is going. */
 export function KidHelpdesk({ memberId, kidName, picture, asParent }: { memberId: string; kidName: string; picture: boolean; asParent: boolean }) {
+  const t = useT();
   const { base, toast } = useApp();
   const [items, reload] = useLoad<HelpRequest[]>(`${base}/kids/${memberId}/helpdesk`, [memberId]);
   const [asking, setAsking] = useState(false);
@@ -93,8 +95,8 @@ export function KidHelpdesk({ memberId, kidName, picture, asParent }: { memberId
   return (
     <section className="card stack pg-helpdesk">
       <div className="row">
-        <h2 style={{ margin: 0, flex: 1 }}>🛎️ Helpdesk</h2>
-        <button className="primary" onClick={() => setAsking(true)}>{asParent ? `＋ Ask for ${kidName}` : '🛎️ Ask a grown-up'}</button>
+        <h2 style={{ margin: 0, flex: 1 }}>{t('🛎️ Helpdesk')}</h2>
+        <button className="primary" onClick={() => setAsking(true)}>{asParent ? `＋ Ask for ${kidName}` : t('🛎️ Ask a grown-up')}</button>
       </div>
       {open.map((r) => (
         <HelpRow key={r.id} r={r}>
@@ -110,7 +112,7 @@ export function KidHelpdesk({ memberId, kidName, picture, asParent }: { memberId
             }}>👍 All set, thanks!</button>}
         </HelpRow>
       ))}
-      {items && !open.length && <p className="small muted" style={{ margin: 0 }}>Need help with something? Tap the bell and a grown-up will see it.</p>}
+      {items && !open.length && <p className="small muted" style={{ margin: 0 }}>{t('Need help with something? Tap the bell and a grown-up will see it.')}</p>}
       {history.length > 0 && (
         <details className="help-history">
           <summary className="small">History ({history.length})</summary>

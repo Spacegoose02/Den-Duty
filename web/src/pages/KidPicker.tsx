@@ -4,19 +4,21 @@ import { api, type Kid } from '../api.ts';
 import { useApp, useLoad } from '../state.tsx';
 import { RaccoonAvatar } from '../components/Raccoon.tsx';
 import { Modal, PinPad } from '../components/Bits.tsx';
+import { LangProvider, useT, type T } from '../i18n.tsx';
 
-interface Kiosk { home: { id: string; name: string; pointsName: string; pointsIcon: string }; kids: Kid[] }
+interface Kiosk { home: { id: string; name: string; pointsName: string; pointsIcon: string; language?: string }; kids: Kid[] }
 
-function greeting(): string {
+function greeting(t: T): string {
   const h = new Date().getHours();
-  if (h < 12) return 'Good morning!';
-  if (h < 17) return 'Good afternoon!';
-  return 'Good evening!';
+  if (h < 12) return t('Good morning!');
+  if (h < 17) return t('Good afternoon!');
+  return t('Good evening!');
 }
 
 /** A kid signs in on the family tablet: straight in, or with their PIN first. Shared by the picker and the family wall. */
 export function useKidSignIn(): { start: (kid: Pick<Kid, 'id' | 'name' | 'avatar' | 'hasPin'>) => void; error: string | null; modal: ReactNode } {
   const { refresh } = useApp();
+  const t = useT();
   const [picked, setPicked] = useState<Pick<Kid, 'id' | 'name' | 'avatar' | 'hasPin'> | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,7 +39,7 @@ export function useKidSignIn(): { start: (kid: Pick<Kid, 'id' | 'name' | 'avatar
       <Modal onClose={() => { setPicked(null); setError(null); }}>
         <div className="stack" style={{ alignItems: 'center', textAlign: 'center' }}>
           <RaccoonAvatar variant={picked.avatar} size={96} />
-          <h2 style={{ margin: 0 }}>Hi {picked.name}! What's your PIN?</h2>
+          <h2 style={{ margin: 0 }}>{t("Hi {name}! What's your PIN?", { name: picked.name })}</h2>
           <PinPad onDone={(pin) => void signIn(picked, pin)} error={error} />
         </div>
       </Modal>
@@ -48,14 +50,19 @@ export function useKidSignIn(): { start: (kid: Pick<Kid, 'id' | 'name' | 'avatar
 /** Every kid's raccoon, tap yours. The family tablet's front screen when a parent picks it over the family wall. */
 export function KidPicker({ wallLink = false }: { wallLink?: boolean }) {
   const [data] = useLoad<Kiosk>('/api/kiosk');
+  return <LangProvider lang={data?.home.language}><PickerView data={data} wallLink={wallLink} /></LangProvider>;
+}
+
+function PickerView({ data, wallLink }: { data: Kiosk | null; wallLink: boolean }) {
   const sign = useKidSignIn();
+  const t = useT();
 
   return (
     <div className="kiosk">
       <header className="kiosk-head">
         <div>
-          <h1>{greeting()}</h1>
-          <p className="muted" style={{ margin: 0 }}>{data?.home.name} · Who's doing chores?</p>
+          <h1>{greeting(t)}</h1>
+          <p className="muted" style={{ margin: 0 }}>{data?.home.name}</p>
         </div>
       </header>
       <div className="kid-grid">
@@ -70,8 +77,8 @@ export function KidPicker({ wallLink = false }: { wallLink?: boolean }) {
       </div>
       {sign.error && <p style={{ color: 'var(--danger)', textAlign: 'center' }}>{sign.error}</p>}
       <footer className="kiosk-foot row">
-        {wallLink && <Link to="/" className="btn ghost">🏠 Family wall</Link>}
-        <Link to="/login" className="btn ghost">🔒 Parents</Link>
+        {wallLink && <Link to="/" className="btn ghost">{t('🏠 Family wall')}</Link>}
+        <Link to="/login" className="btn ghost">{t('🔒 Parents')}</Link>
       </footer>
       {sign.modal}
     </div>

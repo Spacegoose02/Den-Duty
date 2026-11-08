@@ -1,3 +1,4 @@
+import { isLang } from '../../../shared/languages.ts';
 import type { FastifyInstance } from 'fastify';
 import type { DatabaseSync } from 'node:sqlite';
 import { homeForCode } from '../caregivers.ts';
@@ -68,6 +69,8 @@ export function kidView(db: DatabaseSync, r: Row) {
     readAloud: r.read_aloud === 'on' || ((r.read_aloud ?? 'auto') === 'auto' && pictureMode(setting, age)), doctorAreasOff: offList(r.doctor_areas_off, DOCTOR_AREA_IDS),
     ideasOff: r.ideas_off == null ? IDEAS_OFF_DEFAULT : offList(r.ideas_off, PRACTICE_IDEA_IDS),
     aiOn: !r.ai_off,
+    /** Their own language for their board (null = the home's). */
+    language: (r.language as string | null) ?? null,
   };
 }
 
@@ -82,6 +85,10 @@ function applyKidProfile(db: DatabaseSync, id: string, b: Row, today: string): v
   if ('pagesOff' in b) db.prepare('UPDATE members SET pages_off = ? WHERE id = ?').run(JSON.stringify(offList(b.pagesOff, KID_PAGE_IDS)), id);
   if ('doctorAreasOff' in b) db.prepare('UPDATE members SET doctor_areas_off = ? WHERE id = ?').run(JSON.stringify(offList(b.doctorAreasOff, DOCTOR_AREA_IDS)), id);
   if (typeof b.aiOn === 'boolean') db.prepare('UPDATE members SET ai_off = ? WHERE id = ?').run(b.aiOn ? 0 : 1, id);
+  if ('language' in b) {
+    if (b.language != null && b.language !== '' && !isLang(b.language)) throw new HttpError(400, 'Unknown language');
+    db.prepare('UPDATE members SET language = ? WHERE id = ?').run(b.language || null, id);
+  }
   if ('ideasOff' in b) db.prepare('UPDATE members SET ideas_off = ? WHERE id = ?').run(JSON.stringify(offList(b.ideasOff, PRACTICE_IDEA_IDS)), id);
   if ('readAloud' in b) {
     if (!['auto', 'on', 'off'].includes(String(b.readAloud))) throw new HttpError(400, 'readAloud must be auto, on or off');
@@ -131,6 +138,7 @@ export function homeRoutes(app: FastifyInstance, db: DatabaseSync): void {
       pointsName: home.points_name as string,
       pointsIcon: home.points_icon as string,
       theme: home.theme as string,
+      language: (home.language as string) || 'en',
       timezone: home.timezone as string,
       weekStart: home.week_start as number,
       allowNegative: !!home.allow_negative,
@@ -175,6 +183,10 @@ export function homeRoutes(app: FastifyInstance, db: DatabaseSync): void {
     }
     if (typeof b.allowNegative === 'boolean') db.prepare('UPDATE homes SET allow_negative = ? WHERE id = ?').run(b.allowNegative ? 1 : 0, ctx.homeId);
     if (SURPRISE_LEVELS.includes(b.surprise as SurpriseLevel)) db.prepare('UPDATE homes SET surprise = ? WHERE id = ?').run(b.surprise as string, ctx.homeId);
+    if ('language' in b) {
+      if (!isLang(b.language)) throw new HttpError(400, 'Unknown language');
+      db.prepare('UPDATE homes SET language = ? WHERE id = ?').run(b.language, ctx.homeId);
+    }
     if (b.weekStart === 0 || b.weekStart === 1) db.prepare('UPDATE homes SET week_start = ? WHERE id = ?').run(b.weekStart, ctx.homeId);
     return { ok: true };
   });

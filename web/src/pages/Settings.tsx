@@ -14,6 +14,7 @@ import { CalendarsCard } from './Calendars.tsx';
 import { AiCard } from '../components/Ideas.tsx';
 import { BackupsCard } from '../components/Backups.tsx';
 import { PhotoFrameCard } from '../components/PhotoFrame.tsx';
+import { LANGUAGES } from '../../../shared/languages.ts';
 import { TradeModeCard } from '../components/Trades.tsx';
 
 function Profile() {
@@ -159,6 +160,17 @@ function HomeSettings() {
       <h3>Home theme</h3>
       <p className="small muted" style={{ margin: 0 }}>Used on the family tablet and by anyone who hasn't picked their own. Each kid can have their own in Kids → Edit.</p>
       <ThemePicker value={home.theme} onPick={(t) => t && void patch({ theme: t }, 'Theme changed')} />
+
+      <h3>Language</h3>
+      <div className="row">
+        <span>Kid screens and the family wall</span>
+        <div className="chips">
+          {LANGUAGES.map((l) => (
+            <button key={l.id} className={`chip${(home.language ?? 'en') === l.id ? ' on' : ''}`} onClick={() => void patch({ language: l.id }, `Kid screens: ${l.name}`)}>{l.name}</button>
+          ))}
+        </div>
+      </div>
+      <p className="small muted" style={{ margin: 0 }}>Boards, the kid picker, the wall and read-aloud use it. Each kid can have their own in Kids → Edit. The parent app stays in English.</p>
 
       <h3>Calendar</h3>
       <div className="row">

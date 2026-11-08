@@ -123,7 +123,7 @@ export async function wallData(db: DatabaseSync, homeId: string) {
   }));
 
   return {
-    home: { name: home.name, pointsName: home.pointsName, pointsIcon: home.pointsIcon, theme: home.theme, timezone: home.timezone },
+    home: { name: home.name, pointsName: home.pointsName, pointsIcon: home.pointsIcon, theme: home.theme, timezone: home.timezone, language: home.language },
     today, tomorrow, settings: { landing: settings.landing, dim: settings.dim },
     kids: kidCards, family, lunch: lunch.map((x) => ({ title: x.title, time: x.time })), polls,
     teamGoals: teamGoals(db, homeId).filter((g) => g.status === 'active'),

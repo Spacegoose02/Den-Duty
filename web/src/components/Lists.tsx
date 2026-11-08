@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from 'react';
 import { api } from '../api.ts';
 import { useApp, useLoad } from '../state.tsx';
+import { useT } from '../i18n.tsx';
 
 export interface ListItem { id: string; text: string; note: string | null; done: boolean; by: string | null; byMemberId: string | null }
 export interface FamilyList { id: string; name: string; icon: string; kidsCanAdd: boolean; onWall: boolean; items: ListItem[] }
@@ -19,6 +20,7 @@ export function ListCard({ list, mode, memberId, onChange, compact }: {
   list: FamilyList; mode: 'parent' | 'kid' | 'wall'; memberId?: string; onChange: (l?: FamilyList) => void; compact?: boolean;
 }) {
   const { base, toast } = useApp();
+  const t = useT();
   const [text, setText] = useState('');
   const [showDone, setShowDone] = useState(false);
   const canAdd = mode === 'parent' || list.kidsCanAdd;
@@ -50,11 +52,11 @@ export function ListCard({ list, mode, memberId, onChange, compact }: {
     <div className="stack list-card">
       {canAdd && (
         <form className="row" onSubmit={add} style={{ flexWrap: 'nowrap' }}>
-          <input value={text} onChange={(e) => setText(e.target.value)} placeholder={mode === 'kid' ? 'We need…' : 'Add something'} maxLength={120} aria-label={`Add to ${list.name}`} style={{ flex: 1 }} />
-          <button className="primary" disabled={!text.trim()}>Add</button>
+          <input value={text} onChange={(e) => setText(e.target.value)} placeholder={mode === 'parent' ? 'Add something' : t('We need…')} maxLength={120} aria-label={`Add to ${list.name}`} style={{ flex: 1 }} />
+          <button className="primary" disabled={!text.trim()}>{t('Add')}</button>
         </form>
       )}
-      {!open.length && <p className="small muted" style={{ margin: 0 }}>Nothing on the list.</p>}
+      {!open.length && <p className="small muted" style={{ margin: 0 }}>{t('Nothing on the list.')}</p>}
       <ul className="list-items">{open.map(row)}</ul>
       {done.length > 0 && !compact && (
         <div className="row">
@@ -119,12 +121,13 @@ export function KidLists({ memberId }: { memberId: string }) {
   const [lists, reload] = useLoad<FamilyList[]>(`${base}/lists`);
   const mine = lists?.filter((l) => l.kidsCanAdd) ?? [];
   const [open, setOpen] = useState<string | null>(null);
+  const t = useT();
   if (!mine.length) return null;
   const cur = mine.find((l) => l.id === open) ?? mine[0];
   return (
     <section className="card stack pg-lists">
       <div className="row">
-        <h2 style={{ margin: 0, flex: 1 }}>📝 Family lists</h2>
+        <h2 style={{ margin: 0, flex: 1 }}>{t('📝 Family lists')}</h2>
         {mine.length > 1 && <div className="seg" role="group" aria-label="Lists">{mine.map((l) => <button key={l.id} className={l.id === cur.id ? 'on' : ''} onClick={() => setOpen(l.id)}>{l.icon} {l.name}</button>)}</div>}
       </div>
       <ListCard list={cur} mode="kid" memberId={memberId} onChange={() => void reload()} />

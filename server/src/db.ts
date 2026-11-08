@@ -1153,6 +1153,11 @@ export const MIGRATIONS: string[] = [
   );
   CREATE UNIQUE INDEX event_links_remote ON event_links(account_id, remote_id);
   `,
+  // Languages: the home's language for kid screens and the family wall, and a kid's own (null = the home's).
+  `
+  ALTER TABLE homes ADD COLUMN language TEXT NOT NULL DEFAULT 'en';
+  ALTER TABLE members ADD COLUMN language TEXT;
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

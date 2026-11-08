@@ -5,6 +5,7 @@ import { useApp, useLoad } from '../state.tsx';
 import { confetti } from './Confetti.ts';
 import { SpeakButton } from './Speak.tsx';
 import { RaccoonAvatar } from './Raccoon.tsx';
+import { useT } from '../i18n.tsx';
 
 interface Settings { on: boolean; perChorePoint: number; perPoint: number; dailyMax: number; bankMax: number }
 interface View {
@@ -20,14 +21,15 @@ export function KidScreenTime({ memberId, asParent, readAloud, onChange }: { mem
   const [v, reload] = useLoad<View | null>(`${base}/kids/${memberId}/screen-time`, [memberId]);
   const [now, setNow] = useState(Date.now());
   const [busy, setBusy] = useState(false);
+  const t = useT();
   const running = v?.session;
   useEffect(() => {
     if (!running) return;
-    const t = window.setInterval(() => {
+    const timer = window.setInterval(() => {
       setNow(Date.now());
       if (Date.parse(running.endsAt) <= Date.now()) void reload();
     }, 1000);
-    return () => window.clearInterval(t);
+    return () => window.clearInterval(timer);
   }, [running, reload]);
   if (!v) return null;
   const icon = home?.pointsIcon ?? '✨';
@@ -38,34 +40,34 @@ export function KidScreenTime({ memberId, asParent, readAloud, onChange }: { mem
   };
   const choices = [15, 30, 45, 60].filter((m) => m <= can);
   const swaps = [1, 2, 5, 10].filter((p) => v.settings.perPoint && p <= v.points && (!v.settings.bankMax || v.bank + p * v.settings.perPoint <= v.settings.bankMax));
-  const say = running ? `Screen time: ${Math.ceil((Date.parse(running.endsAt) - now) / 60000)} minutes left.` : `You have ${v.bank} minutes of screen time.`;
+  const say = running ? t('Screen time: {n} minutes left.', { n: Math.ceil((Date.parse(running.endsAt) - now) / 60000) }) : t('You have {n} minutes of screen time.', { n: v.bank });
   return (
     <section className="card stack pg-screentime">
       <div className="row">
-        <h2 style={{ margin: 0, flex: 1 }}>📺 Screen time</h2>
-        <span className="pill">{v.bank} min in the bank</span>
-        {v.leftToday != null && <span className="pill">{v.leftToday} min left today</span>}
+        <h2 style={{ margin: 0, flex: 1 }}>{t('📺 Screen time')}</h2>
+        <span className="pill">{t('{n} min in the bank', { n: v.bank })}</span>
+        {v.leftToday != null && <span className="pill">{t('{n} min left today', { n: v.leftToday })}</span>}
         {readAloud && !asParent && <SpeakButton text={say} />}
       </div>
       {running ? (
         <div className="row screen-running">
           <span className="screen-clock" aria-live="polite">{mmss(Date.parse(running.endsAt) - now)}</span>
-          <span style={{ flex: 1 }}>of {running.minutes} minutes</span>
-          <button disabled={busy} onClick={() => void run(`/screen-time/${running.id}/stop`, {}, 'Stopped. The minutes you didn\'t use went back in the bank.')}>⏹ Stop and save the rest</button>
+          <span style={{ flex: 1 }}>{t('of {n} minutes', { n: running.minutes })}</span>
+          <button disabled={busy} onClick={() => void run(`/screen-time/${running.id}/stop`, {}, t("Stopped. The minutes you didn't use went back in the bank."))}>{t('⏹ Stop and save the rest')}</button>
         </div>
       ) : (
         <div className="stack" style={{ gap: 8 }}>
           {choices.length ? (
             <div className="row">
-              <span>Start</span>
-              {choices.map((m) => <button key={m} className="primary" disabled={busy} onClick={() => void run(`/kids/${memberId}/screen-time/start`, { minutes: m }, `${m} minutes, go! 🎮`)}>{m} min</button>)}
+              <span>{t('Start')}</span>
+              {choices.map((m) => <button key={m} className="primary" disabled={busy} onClick={() => void run(`/kids/${memberId}/screen-time/start`, { minutes: m }, t('{n} minutes, go! 🎮', { n: m }))}>{t('{n} min', { n: m })}</button>)}
               {can > 0 && !choices.includes(can) && can < 60 && <button className="primary" disabled={busy} onClick={() => void run(`/kids/${memberId}/screen-time/start`, { minutes: can })}>{can} min</button>}
             </div>
-          ) : <p className="small muted" style={{ margin: 0 }}>{v.bank ? 'That\'s all the screen time for today.' : v.settings.perChorePoint ? `Chores earn screen time: ${v.settings.perChorePoint} minutes for each ${icon}.` : 'No minutes in the bank yet.'}</p>}
+          ) : <p className="small muted" style={{ margin: 0 }}>{v.bank ? t("That's all the screen time for today.") : v.settings.perChorePoint ? t('Chores earn screen time: {n} minutes for each {icon}.', { n: v.settings.perChorePoint, icon }) : t('No minutes in the bank yet.')}</p>}
           {swaps.length > 0 && (
             <div className="row">
-              <span className="small">Swap {home?.pointsName ?? 'points'}:</span>
-              {swaps.map((p) => <button key={p} disabled={busy} onClick={() => { if (asParent || confirm(`Swap ${p} ${icon} for ${p * v.settings.perPoint} minutes?`)) void run(`/kids/${memberId}/screen-time/swap`, { points: p }, `+${p * v.settings.perPoint} minutes`).then(() => confetti({ count: 40 })); }}>{p} {icon} → {p * v.settings.perPoint} min</button>)}
+              <span className="small">{t('Swap {points}:', { points: home?.pointsName ?? 'points' })}</span>
+              {swaps.map((p) => <button key={p} disabled={busy} onClick={() => { if (asParent || confirm(t('Swap {p} {icon} for {m} minutes?', { p, icon, m: p * v.settings.perPoint }))) void run(`/kids/${memberId}/screen-time/swap`, { points: p }, t('+{n} minutes', { n: p * v.settings.perPoint })).then(() => confetti({ count: 40 })); }}>{p} {icon} → {p * v.settings.perPoint} min</button>)}
             </div>
           )}
         </div>
