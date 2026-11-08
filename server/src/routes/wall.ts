@@ -17,6 +17,7 @@ import { listKids } from './homes.ts';
 import { lootdenWall } from './lootden.ts';
 import { kidSports } from './sports.ts';
 import { homeWeather } from './weather.ts';
+import { framePhotos } from './photoframe.ts';
 import { addDays } from '../../../shared/schedule.ts';
 
 export interface WallSettings {
@@ -123,6 +124,8 @@ export async function wallData(db: DatabaseSync, homeId: string) {
     lootden: await lootdenWall(db, homeId),
     // Weather Scout (when linked): today's weather, the recess light and any alerts.
     weather: await homeWeather(db, homeId),
+    // The photo frame (when on): an Immich album and this week's photo-proof highlights.
+    photoFrame: await framePhotos(db, homeId),
   };
 }
 

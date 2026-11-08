@@ -36,6 +36,8 @@ interface Wall {
   lootden?: LootDenWall | null;
   /** Today's weather from Weather Scout, when it's linked. */
   weather?: HomeWeather;
+  /** The photo frame: an Immich album and this week's photo-proof highlights, when it's on. */
+  photoFrame?: { seconds: number; photos: { url: string; caption: string | null; kind: 'immich' | 'proof' }[] } | null;
 }
 interface LootDenWall {
   nowPlaying: { name: string; title: string; device: string; playedFor: string }[];
@@ -55,6 +57,28 @@ function ShotShow({ shots }: { shots: LootDenWall['screenshots'] }) {
     <figure className="wall-shot">
       <img src={s.imageUrl} alt={s.caption ?? `${s.by}'s screenshot`} />
       <figcaption className="wall-sub">📸 {s.by}{s.game ? ` · ${s.game}` : ''}{s.caption ? ` · “${s.caption}”` : ''}</figcaption>
+    </figure>
+  );
+}
+
+/** The photo frame: one picture at a time, fading to the next. Pictures that fail to load are skipped. */
+function PhotoFrame({ frame }: { frame: NonNullable<Wall['photoFrame']> }) {
+  const [i, setI] = useState(0);
+  const [broken, setBroken] = useState<Set<string>>(new Set());
+  const photos = frame.photos.filter((p) => !broken.has(p.url));
+  useEffect(() => {
+    const t = window.setInterval(() => setI((x) => x + 1), frame.seconds * 1000);
+    return () => window.clearInterval(t);
+  }, [frame.seconds]);
+  if (!photos.length) return null;
+  const p = photos[i % photos.length];
+  const next = photos[(i + 1) % photos.length];
+  return (
+    <figure className="wall-shot wall-frame">
+      <img key={p.url} src={p.url} alt={p.caption ?? 'Family photo'} onError={() => setBroken((b) => new Set(b).add(p.url))} />
+      {/* Load the next one early so the change is instant. */}
+      {next !== p && <link rel="prefetch" href={next.url} />}
+      {p.caption && <figcaption className="wall-sub">{p.kind === 'proof' ? '📸 ' : '🖼️ '}{p.caption}</figcaption>}
     </figure>
   );
 }
@@ -221,6 +245,7 @@ export function FamilyWall() {
               <div className="wall-sub">{wall.lootden.nextGameNight.players.map((p) => p.name).join(', ')}{wall.lootden.nextGameNight.goal ? ` · earned with ${wall.lootden.nextGameNight.goal.icon} ${wall.lootden.nextGameNight.goal.title}` : ''}</div>
             </div>
           )}
+          {wall.photoFrame?.photos.length ? <div className="wall-day wall-day-frame"><PhotoFrame frame={wall.photoFrame} /></div> : null}
           {wall.lootden?.screenshots.length ? <div className="wall-day"><ShotShow shots={wall.lootden.screenshots} /></div> : null}
           {wall.polls.map((p) => (
             <div key={p.id} className="wall-day">

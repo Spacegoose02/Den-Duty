@@ -38,6 +38,7 @@ import { pushRoutes } from './routes/push.ts';
 import { backupRoutes } from './backup.ts';
 import { habitRoutes } from './routes/habits.ts';
 import { feelingRoutes } from './routes/feelings.ts';
+import { photoFrameRoutes } from './routes/photoframe.ts';
 
 export async function buildApp(db: DatabaseSync, opts: { logger?: boolean; serveWeb?: boolean } = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 1024 * 1024, trustProxy: config.trustProxy });
@@ -87,6 +88,7 @@ export async function buildApp(db: DatabaseSync, opts: { logger?: boolean; serve
   backupRoutes(app, db, config.dataDir);
   habitRoutes(app, db);
   feelingRoutes(app, db);
+  photoFrameRoutes(app, db);
 
   const hasWeb = opts.serveWeb !== false && fs.existsSync(path.join(config.webDist, 'index.html'));
   if (hasWeb) {

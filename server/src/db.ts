@@ -975,6 +975,12 @@ export const MIGRATIONS: string[] = [
   );
   ALTER TABLE homes ADD COLUMN feelings_alert INTEGER NOT NULL DEFAULT 1;
   `,
+  // Photo frame on the family wall: an Immich album (its address, album and a sealed API key) and/or this week's
+  // photo-proof highlights. Settings are one JSON blob per home.
+  `
+  ALTER TABLE homes ADD COLUMN photo_frame TEXT;
+  ALTER TABLE homes ADD COLUMN immich_key TEXT;
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

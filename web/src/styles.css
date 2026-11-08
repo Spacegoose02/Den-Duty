@@ -575,6 +575,10 @@ a.agenda-ext.duty { text-decoration: none; color: var(--text); border-left-color
 .wall-line { font-size: 1rem; padding-left: 8px; border-left: 4px solid var(--border); }
 .wall-shot { margin: 0; display: flex; flex-direction: column; gap: 4px; }
 .wall-shot img { width: 100%; max-height: 220px; object-fit: cover; border-radius: 12px; }
+.wall-day-frame { min-width: min(420px, 100%); }
+.wall-frame img { max-height: 320px; animation: frame-in .8s ease; }
+@keyframes frame-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .wall-frame img { animation: none; } }
 .wall-error { position: fixed; bottom: 12px; left: 0; right: 0; text-align: center; color: var(--danger); font-weight: 700; }
 
 /* Practice idea chips with their reason shown right under them (never a silent grey-out) */
