@@ -35,6 +35,7 @@ import { weatherRoutes } from './routes/weather.ts';
 import { downloadRoutes } from './routes/downloads.ts';
 import { moneyRoutes } from './routes/money.ts';
 import { pushRoutes } from './routes/push.ts';
+import { backupRoutes } from './backup.ts';
 
 export async function buildApp(db: DatabaseSync, opts: { logger?: boolean; serveWeb?: boolean } = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 1024 * 1024, trustProxy: config.trustProxy });
@@ -81,6 +82,7 @@ export async function buildApp(db: DatabaseSync, opts: { logger?: boolean; serve
   sportsRoutes(app, db);
   weatherRoutes(app, db);
   downloadRoutes(app);
+  backupRoutes(app, db, config.dataDir);
 
   const hasWeb = opts.serveWeb !== false && fs.existsSync(path.join(config.webDist, 'index.html'));
   if (hasWeb) {

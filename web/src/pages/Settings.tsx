@@ -9,6 +9,7 @@ import { POINT_ICONS } from '../../../shared/catalog.ts';
 import { ThemePicker } from '../components/ThemePicker.tsx';
 import { CalendarsCard } from './Calendars.tsx';
 import { AiCard } from '../components/Ideas.tsx';
+import { BackupsCard } from '../components/Backups.tsx';
 
 function Profile() {
   const { who, home, refresh, toast } = useApp();
@@ -481,6 +482,7 @@ export function Settings() {
       <Profile />
       <SecurityCard />
       {who?.user?.isAdmin && <Admin />}
+      {who?.user?.isAdmin && <BackupsCard />}
       <p className="small muted">Den Duty is open source under the MIT license.</p>
     </div>
   );
