@@ -1264,6 +1264,15 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE homes ADD COLUMN tts_key TEXT;
   ALTER TABLE homes ADD COLUMN tts_voice TEXT;
   `,
+  // Wishes, the family's wishlist app: a Helpdesk "Add to my wishlist" ask goes onto the kid's Wishes list.
+  `
+  ALTER TABLE homes ADD COLUMN wishes_url TEXT;
+  ALTER TABLE homes ADD COLUMN wishes_token TEXT;
+  ALTER TABLE members ADD COLUMN wishes_profile_id INTEGER;
+  ALTER TABLE helpdesk_requests ADD COLUMN wishes_status TEXT;
+  ALTER TABLE helpdesk_requests ADD COLUMN wishes_link TEXT;
+  ALTER TABLE helpdesk_requests ADD COLUMN wishes_error TEXT;
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

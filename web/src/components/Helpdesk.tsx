@@ -11,6 +11,8 @@ const STATUS: Record<HelpRequest['status'], { mark: string; text: string; cls: s
   waiting: { mark: '⏳', text: 'Waiting for a grown-up', cls: '' },
   yes: { mark: '✅', text: "Yes! Added to the grown-ups' list", cls: 'ok' },
   shopping: { mark: '🛒', text: "Yes! It's on the shopping list", cls: 'ok' },
+  wishlist: { mark: '🎁', text: 'Sent to your wishlist! A grown-up will check it.', cls: 'ok' },
+  already: { mark: '🎁', text: "It's already on your wishlist", cls: 'ok' },
   doing: { mark: '🛠️', text: 'A grown-up is on it', cls: 'ok' },
   done: { mark: '🎉', text: 'Done!', cls: 'ok' },
   no: { mark: '💛', text: 'Not this time', cls: 'warn' },
@@ -18,6 +20,8 @@ const STATUS: Record<HelpRequest['status'], { mark: string; text: string; cls: s
   closed: { mark: '📁', text: 'Closed', cls: '' },
 };
 
+/** Closed here, or handed to Nighttime Ninja or Wishes: nothing left to close. */
+const DONE_ELSEWHERE = new Set<HelpRequest['status']>(['closed', 'shopping', 'wishlist', 'already']);
 const isOpen = (r: HelpRequest) => r.status === 'waiting' || r.status === 'yes' || r.status === 'doing';
 
 const localToday = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -34,7 +38,7 @@ function HelpRow({ r, children }: { r: HelpRequest; children?: ReactNode }) {
         <div className={`small help-status ${s.cls}`}>{s.mark} {s.text}{r.status === 'closed' && r.closedByKid ? ' by you' : ''}</div>
         {r.status === 'no' && r.note && <div className="help-note">“{r.note}”</div>}
         {r.status === 'closed' && r.closeNote && <div className="help-note">“{r.closeNote}”</div>}
-        {r.status === 'shopping' && r.closeNote && <div className="small muted">{r.closeNote}</div>}
+        {(r.status === 'shopping' || r.status === 'wishlist' || r.status === 'already') && r.closeNote && <div className="small muted">{r.closeNote}</div>}
       </div>
       {children}
     </div>
@@ -119,8 +123,8 @@ export function KidHelpdesk({ memberId, kidName, picture, asParent }: { memberId
         <details className="help-history">
           <summary className="small">History ({history.length})</summary>
           <div className="stack" style={{ gap: 8, marginTop: 8 }}>
-            {history.map((r) => <HelpRow key={r.id} r={r}>{asParent && r.status !== 'closed' && r.status !== 'shopping' && <button className="ghost" onClick={() => setClosing(r)}>Close</button>}</HelpRow>)}
-            {asParent && history.some((r) => r.status === 'closed' || r.status === 'shopping') && (
+            {history.map((r) => <HelpRow key={r.id} r={r}>{asParent && !DONE_ELSEWHERE.has(r.status) && <button className="ghost" onClick={() => setClosing(r)}>Close</button>}</HelpRow>)}
+            {asParent && history.some((r) => DONE_ELSEWHERE.has(r.status)) && (
               <button className="ghost danger" style={{ alignSelf: 'flex-start' }} onClick={async () => {
                 if (!confirm(`Clear ${kidName}'s closed requests?`)) return;
                 try { const r = await api<{ cleared: number }>(`${base}/kids/${memberId}/helpdesk/closed`, { method: 'DELETE' }); toast(`Cleared ${r.cleared}`); await reload(); } catch (e) { toast((e as Error).message); }
@@ -145,8 +149,8 @@ export function KidHelpdesk({ memberId, kidName, picture, asParent }: { memberId
             </div>
             {pick && (
               <>
-                <input value={text} onChange={(e) => setText(e.target.value)} maxLength={200} autoFocus={pick === 'other'}
-                  placeholder={pick === 'other' ? 'Tell us what you need' : 'Tell us more (if you want)'} />
+                <input value={text} onChange={(e) => setText(e.target.value)} maxLength={200} autoFocus={pick === 'other' || pick === 'wish'}
+                  placeholder={pick === 'other' ? 'Tell us what you need' : pick === 'wish' ? 'What do you wish for?' : 'Tell us more (if you want)'} />
                 <div className="chips">
                   <span className="small" style={{ alignSelf: 'center' }}>By when?</span>
                   {[['', 'No rush'], [today, 'Today'], [addDays(today, 1), 'Tomorrow'], [sat, 'This weekend']].map(([v, l]) => (
@@ -159,7 +163,7 @@ export function KidHelpdesk({ memberId, kidName, picture, asParent }: { memberId
             <div className="row">
               <span className="spacer" />
               <button type="button" className="ghost" onClick={reset}>Cancel</button>
-              <button className="primary" disabled={busy || !pick || (pick === 'other' && !text.trim())}>🛎️ Send</button>
+              <button className="primary" disabled={busy || !pick || ((pick === 'other' || pick === 'wish') && !text.trim())}>🛎️ Send</button>
             </div>
           </form>
         </Modal>
@@ -205,7 +209,8 @@ export function HelpdeskCard({ items, onChange }: { items: HomeHelpRequest[]; on
           <span className="help-icon" aria-hidden>{r.icon}</span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontWeight: 700 }}>{r.kind === 'other' ? r.text : r.label}{r.kind !== 'other' && r.text && <span className="muted" style={{ fontWeight: 500 }}>: {r.text}</span>}</div>
-            <div className="small muted">{r.kid.name}{r.dueDate && ` · by ${whenText(r.dueDate)}`}{r.inNinja && ' · also in Nighttime Ninja Requests'}</div>
+            <div className="small muted">{r.kid.name}{r.dueDate && ` · by ${whenText(r.dueDate)}`}{r.inNinja && ' · also in Nighttime Ninja Requests'}{r.toWishes && ' · on its way to Wishes'}</div>
+            {r.wishesError && <div className="small warn">⚠️ Couldn't add it to Wishes: {r.wishesError}</div>}
           </div>
           <button className="ghost" disabled={busy} onClick={() => setClosing(r)} title="Close without a yes or no">Close</button>
           <button className="ghost" disabled={busy} onClick={() => open(r, false)}>Not this time</button>
