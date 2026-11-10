@@ -16,6 +16,7 @@ import { BackupsCard } from '../components/Backups.tsx';
 import { PhotoFrameCard } from '../components/PhotoFrame.tsx';
 import { LANGUAGES } from '../../../shared/languages.ts';
 import { TradeModeCard } from '../components/Trades.tsx';
+import { ReadAloudVoiceCard } from '../components/ReadAloudVoice.tsx';
 
 function Profile() {
   const { who, home, refresh, toast } = useApp();
@@ -560,6 +561,7 @@ export function Settings() {
       <NinjaCard />
       <SportsCard />
       <WeatherCard />
+      <ReadAloudVoiceCard />
       <HomeSettings />
       <TradeModeCard />
       <ScreenTimeCard />

@@ -76,6 +76,8 @@ export interface HomeDetail {
   id: string; name: string; pointsName: string; pointsIcon: string; theme: string; timezone: string; weekStart: 0 | 1; allowNegative?: boolean; twoHomes?: boolean; surprise?: 'off' | 'sometimes' | 'often' | 'daily'; helpdeskMaxOpen?: number;
   /** The language kid screens and the wall use (en, es, fr). */
   language?: string;
+  /** Read-aloud's Kokoro voice (Settings → Read-aloud voice), or null for the device's own voice. */
+  kokoroVoice?: string | null;
   viewer: 'parent' | 'kid' | 'device' | 'token';
   /** For a parent: caregivers get the day-to-day only. */
   access: 'full' | 'caregiver' | null;

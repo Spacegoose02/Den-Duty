@@ -3,9 +3,10 @@
 // when the server can't be reached. Answers from the cache carry x-den-duty-offline: 1 so the app can say so.
 // Only GET requests are touched; a kid's taps while offline wait in the app's outbox (web/src/offline.tsx).
 const CACHE = 'den-duty-v1';
-// API answers worth having offline: who's signed in and the home's pages (not exports, files or the admin area).
+// API answers worth having offline: who's signed in and the home's pages (not exports, files, read-aloud audio or the
+// admin area).
 const API_OFFLINE = /^\/api\/(whoami$|kiosk\/|homes\/)/;
-const API_SKIP = /\/(export|ics|backups?|upload)|\.(csv|pdf|ics)$/;
+const API_SKIP = /\/(export|ics|backups?|upload|tts)|\.(csv|pdf|ics)$/;
 
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (e) => e.waitUntil((async () => {
