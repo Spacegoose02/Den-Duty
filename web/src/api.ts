@@ -73,7 +73,7 @@ export interface Kid {
 }
 
 export interface HomeDetail {
-  id: string; name: string; pointsName: string; pointsIcon: string; theme: string; timezone: string; weekStart: 0 | 1; allowNegative?: boolean; surprise?: 'off' | 'sometimes' | 'often' | 'daily'; helpdeskMaxOpen?: number;
+  id: string; name: string; pointsName: string; pointsIcon: string; theme: string; timezone: string; weekStart: 0 | 1; allowNegative?: boolean; twoHomes?: boolean; surprise?: 'off' | 'sometimes' | 'often' | 'daily'; helpdeskMaxOpen?: number;
   /** The language kid screens and the wall use (en, es, fr). */
   language?: string;
   viewer: 'parent' | 'kid' | 'device' | 'token';

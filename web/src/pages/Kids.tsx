@@ -213,7 +213,7 @@ function KidCard({ kid, onChange }: { kid: Kid; onChange: () => Promise<void> })
       </form>
       <IdeasButton kind="goal" kidId={kid.id} onPick={(i) => setGoal({ title: i.title, targetPoints: i.points, reward: i.detail.slice(0, 200) })} />
       </>)}
-      <TwoHomesCard kidId={kid.id} kidName={kid.name} />
+      {home?.twoHomes && <TwoHomesCard kidId={kid.id} kidName={kid.name} />}
       {kid.pagesOff.length > 0 && <p className="small muted" style={{ margin: 0 }}>Turned off for {kid.name}: {kid.pagesOff.map((p) => KID_PAGES.find((x) => x.id === p)?.label).join(', ')} (Edit to change).</p>}
 
       <h3 style={{ margin: 0 }}>Bonus or take-back</h3>

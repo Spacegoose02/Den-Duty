@@ -138,6 +138,15 @@ function HomeSettings() {
       </label>
       <p className="small muted" style={{ margin: 0 }}>Off by default: a penalty takes what's there and stops at zero.</p>
 
+      <h3>🏠🏠 Two homes</h3>
+      <label className="row" style={{ fontWeight: 600 }}>
+        <input type="checkbox" checked={!!home.twoHomes} onChange={(e) => void patch({ twoHomes: e.target.checked }, e.target.checked ? 'Two homes on' : 'Two homes off')} style={{ width: 24, minHeight: 24 }} />
+        Some kids live in two homes
+      </label>
+      <p className="small muted" style={{ margin: 0 }}>
+        On: each kid on the Kids page gets a schedule for days at the other home, when no chores are due here. Off: it's hidden and every day counts as here. Schedules you set are kept for next time.
+      </p>
+
       <h3>🎁 Surprise bonus</h3>
       <div className="chips">
         {([['off', 'Off'], ['sometimes', 'Sometimes'], ['often', 'Often'], ['daily', 'Every day']] as const).map(([v, label]) => (

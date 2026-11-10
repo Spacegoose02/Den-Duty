@@ -1244,6 +1244,12 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX ai_chats_home ON ai_chats(home_id, kind, created_at);
   `,
+  // Two homes becomes a switch in Settings, off by default. Homes that already set a kid's pattern or away dates keep it on.
+  `
+  ALTER TABLE homes ADD COLUMN two_homes INTEGER NOT NULL DEFAULT 0;
+  UPDATE homes SET two_homes = 1 WHERE id IN (SELECT m.home_id FROM members m WHERE m.role = 'kid'
+    AND (m.away_plan IS NOT NULL OR EXISTS (SELECT 1 FROM kid_away a WHERE a.member_id = m.id)));
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

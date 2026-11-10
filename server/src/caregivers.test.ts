@@ -61,6 +61,8 @@ test("two homes: no chores on days away, the board and voice say where they are"
   await call(mom, 'POST', `${base}/chores`, { title: 'Dishes', icon: '🍽️', points: 2, schedule: 'daily', memberIds: [ava.id] });
   await asKid(ava);
   assert.equal((await call(tablet, 'GET', `${base}/kids/${ava.id}/board`)).body.todayItems.length, 1);
+  assert.equal((await call(mom, 'GET', base)).body.twoHomes, false, 'off by default');
+  await call(mom, 'PATCH', base, { twoHomes: true });
   // Away today and tomorrow, back the day after.
   const v = (await call(mom, 'POST', `${base}/kids/${ava.id}/away/dates`, { start: today, end: addDays(today, 1), label: "At Dad's" })).body;
   assert.equal(v.today.label, "At Dad's");
@@ -80,4 +82,24 @@ test("two homes: no chores on days away, the board and voice say where they are"
   const p = (await call(mom, 'PUT', `${base}/kids/${ava.id}/away/plan`, { label: "At Dad's", anchor: today, days: v.presets[0].days })).body;
   assert.equal(p.today, null);
   assert.equal((await call(mom, 'PUT', `${base}/kids/${ava.id}/away/plan`, { anchor: today, days: [true] })).status, 400);
+});
+
+test('two homes: the Settings switch hides it and keeps the dates', async () => {
+  const { call, mom, base, ava, tablet, asKid, today } = await family();
+  await call(mom, 'POST', `${base}/chores`, { title: 'Dishes', icon: '🍽️', points: 2, schedule: 'daily', memberIds: [ava.id] });
+  await asKid(ava);
+  await call(mom, 'PATCH', base, { twoHomes: true });
+  await call(mom, 'POST', `${base}/kids/${ava.id}/away/dates`, { start: today, end: today, label: 'Camp' });
+  assert.equal((await call(tablet, 'GET', `${base}/kids/${ava.id}/board`)).body.todayItems.length, 0);
+  // Off: every day counts as here, the board doesn't say she's away, and the dates are still there.
+  await call(mom, 'PATCH', base, { twoHomes: false });
+  const off = (await call(tablet, 'GET', `${base}/kids/${ava.id}/board`)).body;
+  assert.equal(off.away, null);
+  assert.equal(off.todayItems.length, 1);
+  assert.equal((await call(mom, 'GET', `${base}/kids/${ava.id}/away`)).body.ranges.length, 1);
+  // Back on: today's not-started chore goes away again.
+  await call(mom, 'PATCH', base, { twoHomes: true });
+  const on = (await call(tablet, 'GET', `${base}/kids/${ava.id}/board`)).body;
+  assert.equal(on.away.label, 'Camp');
+  assert.equal(on.todayItems.length, 0);
 });

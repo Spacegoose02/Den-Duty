@@ -13,6 +13,7 @@ import { DOCTOR_AREA_IDS, IDEAS_OFF_DEFAULT, KID_PAGE_IDS, offList, PRACTICE_IDE
 import { defaultAvatar, isAvatar, isKidColor, KID_COLORS, POINT_ICONS } from '../../../shared/catalog.ts';
 import { isIsoDate, isTimeZone } from '../../../shared/schedule.ts';
 import { isThemeId } from '../../../shared/themes.ts';
+import { dropAwayChores } from './away.ts';
 
 export const STARTER_QUICK_REWARDS = [
   { title: 'Great attitude', icon: '🌟', amount: 2 },
@@ -142,6 +143,7 @@ export function homeRoutes(app: FastifyInstance, db: DatabaseSync): void {
       timezone: home.timezone as string,
       weekStart: home.week_start as number,
       allowNegative: !!home.allow_negative,
+      twoHomes: !!home.two_homes,
       surprise: home.surprise as string,
       helpdeskMaxOpen: (home.helpdesk_max_open as number) ?? HELPDESK_DEFAULT_MAX,
       viewer: ctx.actor.kind,
@@ -182,6 +184,14 @@ export function homeRoutes(app: FastifyInstance, db: DatabaseSync): void {
       db.prepare('UPDATE homes SET helpdesk_max_open = ? WHERE id = ?').run(n, ctx.homeId);
     }
     if (typeof b.allowNegative === 'boolean') db.prepare('UPDATE homes SET allow_negative = ? WHERE id = ?').run(b.allowNegative ? 1 : 0, ctx.homeId);
+    if (typeof b.twoHomes === 'boolean') {
+      db.prepare('UPDATE homes SET two_homes = ? WHERE id = ?').run(b.twoHomes ? 1 : 0, ctx.homeId);
+      // Back on: chores already handed out for days a kid is away go, like when the dates were first set.
+      if (b.twoHomes) {
+        const today = homeToday(homeInfo(db, ctx.homeId));
+        for (const k of db.prepare(`SELECT id FROM members WHERE home_id = ? AND role = 'kid'`).all(ctx.homeId) as Row[]) dropAwayChores(db, ctx.homeId, k.id as string, today);
+      }
+    }
     if (SURPRISE_LEVELS.includes(b.surprise as SurpriseLevel)) db.prepare('UPDATE homes SET surprise = ? WHERE id = ?').run(b.surprise as string, ctx.homeId);
     if ('language' in b) {
       if (!isLang(b.language)) throw new HttpError(400, 'Unknown language');
