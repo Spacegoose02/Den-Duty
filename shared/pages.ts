@@ -117,6 +117,7 @@ export const HELP_PICKS = [
   { id: 'fix', icon: '🔧', label: 'Fix something' },
   { id: 'buy', icon: '🛒', label: 'Buy something' },
   { id: 'clothes', icon: '👟', label: 'Clothes or shoes' },
+  { id: 'wish', icon: '🎁', label: 'Add to my wishlist' },
   { id: 'ride', icon: '🚗', label: 'A ride somewhere' },
   { id: 'friend', icon: '🤝', label: 'See a friend' },
   { id: 'talk', icon: '💬', label: 'Talk about something' },

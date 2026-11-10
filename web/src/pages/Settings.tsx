@@ -432,6 +432,58 @@ function NinjaCard() {
   );
 }
 
+/** Wishes, the family's wishlist app: where a kid's Helpdesk "Add to my wishlist" goes. */
+function WishesCard() {
+  const { base, toast } = useApp();
+  const [s, reload] = useLoad<{ url: string; hasToken: boolean; linked: boolean; reachable: boolean | null;
+    wishKids: { profileId: number; name: string; isKid: boolean }[]; kids: { id: string; name: string; profileId: number | null }[] }>(`${base}/wishes`);
+  const [url, setUrl] = useState<string | null>(null);
+  const [token, setToken] = useState('');
+  if (!s) return null;
+  const save = async (body: { url: string; token?: string }) => {
+    try {
+      const r = await api<{ user?: string | null }>(`${base}/wishes`, { method: 'PUT', body });
+      toast(!body.url ? 'Wishes unlinked' : `Linked to Wishes${r.user ? ` as ${r.user}` : ''}`);
+      setToken('');
+      setUrl(null);
+      await reload();
+    } catch (e) { toast((e as Error).message); }
+  };
+  const match = async (memberId: string, profileId: number | null) => {
+    try { await api(`${base}/kids/${memberId}/wishes`, { method: 'PUT', body: { profileId } }); await reload(); } catch (e) { toast((e as Error).message); }
+  };
+  return (
+    <div className="card stack" id="wishes">
+      <h2 style={{ margin: 0 }}>🎁 Wishes</h2>
+      <p className="small muted" style={{ margin: 0 }}>
+        Link Wishes, the family's wishlist app, so a kid's Helpdesk <strong>Add to my wishlist</strong> goes straight onto their Wishes list.
+        It waits there for a grown-up's OK, like kid mode. In Wishes, open Settings, Sign-in &amp; 2FA, Connected apps and make a key for Den Duty.
+      </p>
+      <div className="row">
+        <input placeholder="https://wishes.example.com" value={url ?? s.url} onChange={(e) => setUrl(e.target.value)} style={{ flex: 2, minWidth: 220 }} aria-label="Wishes' address" />
+        <input type="password" placeholder={s.hasToken ? 'Key saved' : 'Wishes API key (wsh_…)'} value={token} onChange={(e) => setToken(e.target.value)} style={{ flex: 1, minWidth: 160 }} aria-label="Wishes API key" autoComplete="off" />
+        <button className="primary" onClick={() => void save({ url: (url ?? s.url).trim(), ...(token.trim() ? { token: token.trim() } : {}) })}>Save</button>
+        {s.url && <button className="ghost" onClick={() => void save({ url: '' })}>Unlink</button>}
+      </div>
+      {s.linked && s.reachable === false && <p className="small" style={{ margin: 0 }}>⚠️ Wishes isn't answering right now. Asks wait here and go when it's back.</p>}
+      {s.linked && s.reachable && s.kids.length > 0 && (
+        <div className="stack" style={{ gap: 6 }}>
+          <p className="small" style={{ margin: 0 }}>✅ Linked. Which Wishes kid is each kid here?</p>
+          {s.kids.map((k) => (
+            <label key={k.id} className="row" style={{ gap: 8 }}>
+              <span style={{ minWidth: 120 }}>{k.name}</span>
+              <select value={k.profileId ?? ''} onChange={(e) => void match(k.id, e.target.value ? Number(e.target.value) : null)} aria-label={`${k.name} in Wishes`}>
+                <option value="">Match by name</option>
+                {s.wishKids.map((w) => <option key={w.profileId} value={w.profileId}>{w.name}{w.isKid ? '' : ' (you)'}</option>)}
+              </select>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** The family's sports tracker: its address, and each kid's private key so their followed teams show on their board. */
 function SportsCard() {
   const { base, toast } = useApp();
@@ -558,6 +610,7 @@ export function Settings() {
       <PhotoFrameCard />
       <LootDenCard />
       <NinjaCard />
+      <WishesCard />
       <SportsCard />
       <WeatherCard />
       <HomeSettings />

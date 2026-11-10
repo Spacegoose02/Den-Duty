@@ -1257,6 +1257,15 @@ export const MIGRATIONS: string[] = [
   UPDATE helpdesk_requests SET ninja_status = 'sending' WHERE kind = 'buy' AND text IS NOT NULL AND status = 'waiting' AND closed_at IS NULL
     AND home_id IN (SELECT id FROM homes WHERE ninja_home_id IS NOT NULL AND ninja_token IS NOT NULL);
   `,
+  // Wishes, the family's wishlist app: a Helpdesk "Add to my wishlist" ask goes onto the kid's Wishes list.
+  `
+  ALTER TABLE homes ADD COLUMN wishes_url TEXT;
+  ALTER TABLE homes ADD COLUMN wishes_token TEXT;
+  ALTER TABLE members ADD COLUMN wishes_profile_id INTEGER;
+  ALTER TABLE helpdesk_requests ADD COLUMN wishes_status TEXT;
+  ALTER TABLE helpdesk_requests ADD COLUMN wishes_link TEXT;
+  ALTER TABLE helpdesk_requests ADD COLUMN wishes_error TEXT;
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

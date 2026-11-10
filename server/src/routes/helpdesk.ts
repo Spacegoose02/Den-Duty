@@ -2,6 +2,7 @@
 // (it becomes a card on that kid's Parent Duty board, with the due date on the calendar) or "not this time" with a
 // kind note. Only parents and the asking kid ever see a request: never the family wall or another kid's board.
 // With Nighttime Ninja linked, "Buy something" also goes to its Requests tab: a yes there puts it on the shopping list.
+// With Wishes linked, "Add to my wishlist" goes straight onto the kid's Wishes list, which has its own grown-up OK.
 import type { FastifyInstance } from 'fastify';
 import type { DatabaseSync } from 'node:sqlite';
 import { assertCanActFor, homeCtx, type HomeCtx } from '../auth.ts';
@@ -13,9 +14,10 @@ import { rateLimit } from '../security.ts';
 import { getKid, pageOn } from './homes.ts';
 import { HELP_PICKS } from '../../../shared/pages.ts';
 import { dropHelpdeskAsk, ninjaLinked, sendHelpdeskAsk, syncRequests } from './ninja.ts';
+import { sendWish, syncWishes, wishesLinked } from './wishes.ts';
 import { isIsoDate } from '../../../shared/schedule.ts';
 
-type KidStatus = 'waiting' | 'yes' | 'shopping' | 'doing' | 'done' | 'no' | 'cancelled' | 'closed';
+type KidStatus = 'waiting' | 'yes' | 'shopping' | 'wishlist' | 'already' | 'doing' | 'done' | 'no' | 'cancelled' | 'closed';
 
 const pickOf = (kind: string) => HELP_PICKS.find((p) => p.id === kind) ?? HELP_PICKS[HELP_PICKS.length - 1];
 
@@ -23,7 +25,9 @@ const pickOf = (kind: string) => HELP_PICKS.find((p) => p.id === kind) ?? HELP_P
 export function requestView(r: Row) {
   const pick = pickOf(r.kind as string);
   // A yes in Nighttime Ninja: it's on the shopping list, nothing more for anyone to do here.
-  const status: KidStatus = r.ninja_status === 'approved' ? 'shopping' : r.closed_at ? 'closed' : r.status === 'waiting' ? 'waiting' : r.status === 'denied' ? 'no' : r.status === 'cancelled' ? 'cancelled'
+  // On the kid's Wishes list (or already was): Wishes takes it from there.
+  const status: KidStatus = r.ninja_status === 'approved' ? 'shopping' : r.wishes_status === 'sent' ? 'wishlist' : r.wishes_status === 'duplicate' ? 'already'
+    : r.closed_at ? 'closed' : r.status === 'waiting' ? 'waiting' : r.status === 'denied' ? 'no' : r.status === 'cancelled' ? 'cancelled'
     : r.duty_status === 'done' ? 'done' : r.duty_status === 'doing' ? 'doing' : 'yes';
   return {
     id: r.id as string, memberId: r.member_id as string, kind: pick.id, icon: pick.icon, label: pick.label,
@@ -31,6 +35,8 @@ export function requestView(r: Row) {
     dutyId: r.duty_id as string | null, createdAt: r.created_at as string, decidedAt: r.decided_at as string | null,
     closedAt: r.closed_at as string | null, closeNote: r.close_note as string | null, closedByKid: !!r.closed_by_kid,
     inNinja: r.ninja_status === 'sending' || r.ninja_status === 'waiting',
+    /** Why Wishes turned it away (for grown-ups), or that it's still on its way there. */
+    wishesError: (r.wishes_error as string | null) ?? null, toWishes: r.wishes_status === 'sending',
   };
 }
 
@@ -51,6 +57,10 @@ export function helpdeskRoutes(app: FastifyInstance, db: DatabaseSync): void {
     if (!r) throw new HttpError(404, 'That request is gone');
     return r;
   };
+  // Answered here first: a wish that hadn't gone to Wishes yet stays here.
+  const stopWish = (r: Row) => {
+    if (r.wishes_status === 'sending' || r.wishes_status === 'failed') db.prepare('UPDATE helpdesk_requests SET wishes_status = NULL, wishes_error = NULL WHERE id = ?').run(r.id as string);
+  };
   const waiting = (r: Row) => { if (r.status !== 'waiting' || r.closed_at) throw new HttpError(400, 'That request was already answered'); };
   const on = (memberId: string, name: unknown) => {
     if (!pageOn(db, memberId, 'helpdesk')) throw new HttpError(403, `Helpdesk is turned off for ${name}`);
@@ -65,6 +75,7 @@ export function helpdeskRoutes(app: FastifyInstance, db: DatabaseSync): void {
     getKid(db, ctx, memberId);
     if (!pageOn(db, memberId, 'helpdesk')) return [];
     await syncRequests(db, ctx.homeId);
+    await syncWishes(db, ctx.homeId);
     // Open ones always; finished, answered and closed ones as history for 60 days (until a parent clears them).
     return (db.prepare(`${SELECT} WHERE r.member_id = ? AND r.status != 'cancelled'
       AND ((r.closed_at IS NULL AND (r.status = 'waiting' OR (r.status = 'approved' AND COALESCE(h.status, '') != 'done')))
@@ -85,6 +96,7 @@ export function helpdeskRoutes(app: FastifyInstance, db: DatabaseSync): void {
     if (!pick) throw new HttpError(400, 'Pick what you need help with');
     const text = str(b.text, 200);
     if (pick.id === 'other' && !text) throw new HttpError(400, 'Tell us what you need');
+    if (pick.id === 'wish' && !text) throw new HttpError(400, 'Tell us what you wish for');
     const due = b.dueDate == null || b.dueDate === '' ? null : b.dueDate;
     if (due != null && (!isIsoDate(due) || due < homeToday(homeInfo(db, ctx.homeId)))) throw new HttpError(400, 'Pick today or a day after');
     // No spamming the grown-ups: a cap on open requests per kid (Settings, 0 = no limit), and a handful of asks a minute at most.
@@ -99,6 +111,11 @@ export function helpdeskRoutes(app: FastifyInstance, db: DatabaseSync): void {
       db.prepare("UPDATE helpdesk_requests SET ninja_status = 'sending' WHERE id = ?").run(id);
       await sendHelpdeskAsk(db, ctx.homeId, id);
     }
+    // "Add to my wishlist": straight onto their Wishes list.
+    if (pick.id === 'wish' && wishesLinked(db, ctx.homeId)) {
+      db.prepare("UPDATE helpdesk_requests SET wishes_status = 'sending' WHERE id = ?").run(id);
+      await sendWish(db, ctx.homeId, id);
+    }
     emit(db, ctx.homeId, 'helpdesk_requested', memberId, { request: text ? `${pick.label}: ${text}` : pick.label, due_date: due, request_id: id });
     return requestView(own(ctx, id));
   });
@@ -111,6 +128,7 @@ export function helpdeskRoutes(app: FastifyInstance, db: DatabaseSync): void {
     if (ctx.actor.kind !== 'kid' && ctx.actor.kind !== 'parent') throw new HttpError(403, 'Tap your raccoon first');
     waiting(r);
     await dropHelpdeskAsk(db, ctx.homeId, r);
+    stopWish(r);
     db.prepare("UPDATE helpdesk_requests SET status = 'cancelled', decided_at = datetime('now') WHERE id = ?").run(r.id as string);
     return { ok: true };
   });
@@ -129,6 +147,7 @@ export function helpdeskRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const note = str(b.note, 200) ?? (byKid ? 'All set, thanks!' : null);
     const finishCard = byKid || b.finishCard !== false;
     await dropHelpdeskAsk(db, ctx.homeId, r);
+    stopWish(r);
     tx(db, () => {
       db.prepare("UPDATE helpdesk_requests SET closed_at = datetime('now'), close_note = ?, closed_by_kid = ? WHERE id = ?").run(note, byKid ? 1 : 0, r.id as string);
       if (r.duty_id && finishCard) {
@@ -153,6 +172,7 @@ export function helpdeskRoutes(app: FastifyInstance, db: DatabaseSync): void {
   app.get('/api/homes/:homeId/helpdesk', async (req) => {
     const ctx = homeCtx(db, req, 'parent');
     await syncRequests(db, ctx.homeId);
+    await syncWishes(db, ctx.homeId);
     return waitingRequests(db, ctx.homeId);
   });
 
@@ -175,6 +195,7 @@ export function helpdeskRoutes(app: FastifyInstance, db: DatabaseSync): void {
     // If Parent Duty is switched off for this kid, the card goes on the general list (named) so it isn't hidden.
     const dutyOn = pageOn(db, kid.id as string, 'parentduty');
     await dropHelpdeskAsk(db, ctx.homeId, r);
+    stopWish(r);
     const dutyId = newId();
     tx(db, () => {
       const pos = (((db.prepare("SELECT MAX(position) AS p FROM honeydo WHERE home_id = ? AND status = 'todo' AND kid_id IS ?").get(ctx.homeId, dutyOn ? kid.id as string : null) as Row).p as number | null) ?? 0) + 1;
@@ -194,6 +215,7 @@ export function helpdeskRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const r = own(ctx, (req.params as { id: string }).id);
     waiting(r);
     await dropHelpdeskAsk(db, ctx.homeId, r);
+    stopWish(r);
     db.prepare("UPDATE helpdesk_requests SET status = 'denied', note = ?, decided_by = ?, decided_at = datetime('now') WHERE id = ?")
       .run(str((req.body as Row | undefined)?.note, 200), ctx.user?.id ?? null, r.id as string);
     emit(db, ctx.homeId, 'helpdesk_answered', r.member_id as string, { answer: 'not this time', request_id: r.id });

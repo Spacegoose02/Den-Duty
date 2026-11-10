@@ -18,6 +18,7 @@ import { dutyDue } from './parentduty.ts';
 import { homeTimeouts, kidTimeouts } from './timeouts.ts';
 import { waitingRequests } from './helpdesk.ts';
 import { syncRequests } from './ninja.ts';
+import { syncWishes } from './wishes.ts';
 import { listReminders, remindersDue } from './reminders.ts';
 import { roomMessage } from '../roommessage.ts';
 import { kidMoney, runMoney } from '../money.ts';
@@ -475,6 +476,7 @@ export function choreRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const ctx = homeCtx(db, req, 'parent');
     // Helpdesk asks answered in Nighttime Ninja drop off the waiting list here.
     await syncRequests(db, ctx.homeId);
+    await syncWishes(db, ctx.homeId);
     const home = homeInfo(db, ctx.homeId);
     const today = homeToday(home);
     const weekStart = startOfWeek(today, home.weekStart);
