@@ -11,8 +11,14 @@ export function awayOf(db: DatabaseSync, memberId: string): { plan: AwayPlan | n
   return { plan: parseJson<AwayPlan | null>(m?.away_plan, null), ranges };
 }
 
+/** Two homes is a switch in Settings. Off, nobody counts as away; their patterns and dates are kept for turning it back on. */
+export function twoHomesOn(db: DatabaseSync, homeId: string): boolean {
+  return !!(db.prepare('SELECT two_homes FROM homes WHERE id = ?').get(homeId) as Row | undefined)?.two_homes;
+}
+
 /** A lookup for every kid in a home: (memberId, date) → where they are, or null when they're here. */
 export function awayLookup(db: DatabaseSync, homeId: string): (memberId: string, date: string) => string | null {
+  if (!twoHomesOn(db, homeId)) return () => null;
   const kids = db.prepare(`SELECT id FROM members m WHERE home_id = ? AND role = 'kid'
     AND (away_plan IS NOT NULL OR EXISTS (SELECT 1 FROM kid_away a WHERE a.member_id = m.id))`).all(homeId) as Row[];
   if (!kids.length) return () => null;
@@ -25,6 +31,8 @@ export function awayLookup(db: DatabaseSync, homeId: string): (memberId: string,
 
 /** For a board: where they are today and when they're back. */
 export function awayToday(db: DatabaseSync, memberId: string, today: string): { label: string; back: string | null } | null {
+  const home = db.prepare('SELECT home_id FROM members WHERE id = ?').get(memberId) as Row | undefined;
+  if (!home || !twoHomesOn(db, home.home_id as string)) return null;
   const { plan, ranges } = awayOf(db, memberId);
   const label = awayOn(plan, ranges, today);
   return label ? { label, back: backOn(plan, ranges, today) } : null;
