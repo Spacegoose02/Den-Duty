@@ -14,6 +14,7 @@ import { defaultAvatar, isAvatar, isKidColor, KID_COLORS, POINT_ICONS } from '..
 import { isIsoDate, isTimeZone } from '../../../shared/schedule.ts';
 import { isThemeId } from '../../../shared/themes.ts';
 import { dropAwayChores } from './away.ts';
+import { DEFAULT_VOICE } from './tts.ts';
 
 export const STARTER_QUICK_REWARDS = [
   { title: 'Great attitude', icon: '🌟', amount: 2 },
@@ -146,6 +147,8 @@ export function homeRoutes(app: FastifyInstance, db: DatabaseSync): void {
       twoHomes: !!home.two_homes,
       surprise: home.surprise as string,
       helpdeskMaxOpen: (home.helpdesk_max_open as number) ?? HELPDESK_DEFAULT_MAX,
+      /** Read-aloud's Kokoro voice (Settings → Read-aloud voice), or null for the device's own voice. */
+      kokoroVoice: home.tts_url ? (home.tts_voice as string | null) || DEFAULT_VOICE : null,
       viewer: ctx.actor.kind,
       access: ctx.actor.kind === 'parent' ? ctx.access ?? 'full' : null,
       kids: listKids(db, ctx.homeId),
