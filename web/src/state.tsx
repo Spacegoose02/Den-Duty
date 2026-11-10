@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { api, type HomeDetail, type Whoami } from './api.ts';
+import { setKokoro } from './components/Speak.tsx';
 import { THEME_DEFS } from '../../shared/themes.ts';
 
 interface AppState {
@@ -50,6 +51,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => { void refreshHome(); }, [refreshHome, who]);
+
+  // Read-aloud uses the home's Kokoro voice when one is set up, else the device's own.
+  const kokoroVoice = home?.kokoroVoice ?? null;
+  useEffect(() => { setKokoro(homeId && kokoroVoice ? `/api/homes/${homeId}/tts/say` : null, kokoroVoice); }, [homeId, kokoroVoice]);
 
   // Parents see their own theme (or the home's); the family tablet shows the kid's theme, else the home's.
   const homeTheme = home?.theme ?? 'sunny';

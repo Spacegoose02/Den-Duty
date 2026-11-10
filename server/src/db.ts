@@ -1257,6 +1257,13 @@ export const MIGRATIONS: string[] = [
   UPDATE helpdesk_requests SET ninja_status = 'sending' WHERE kind = 'buy' AND text IS NOT NULL AND status = 'waiting' AND closed_at IS NULL
     AND home_id IN (SELECT id FROM homes WHERE ninja_home_id IS NOT NULL AND ninja_token IS NOT NULL);
   `,
+  // Read-aloud with Kokoro: the address of the family's Kokoro speech server (e.g. Kokoro-FastAPI), an optional key,
+  // and the voice to read with. No address means the device's own voice, as before.
+  `
+  ALTER TABLE homes ADD COLUMN tts_url TEXT;
+  ALTER TABLE homes ADD COLUMN tts_key TEXT;
+  ALTER TABLE homes ADD COLUMN tts_voice TEXT;
+  `,
   // Wishes, the family's wishlist app: a Helpdesk "Add to my wishlist" ask goes onto the kid's Wishes list.
   `
   ALTER TABLE homes ADD COLUMN wishes_url TEXT;

@@ -14,3 +14,11 @@ services:
         required: false
     environment:
       PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8080}
+
+  # Optional: natural-sounding read-aloud voices (Settings → Read-aloud voice → http://kokoro:8880). See docs/read-aloud.md.
+  # kokoro:
+  #   image: ghcr.io/remsky/kokoro-fastapi-cpu:latest
+  #   container_name: kokoro
+  #   restart: unless-stopped
+  #   ports:
+  #     - "8880:8880"

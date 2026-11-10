@@ -33,6 +33,7 @@ import { gamingRoutes } from './routes/gaming.ts';
 import { lootdenRoutes } from './routes/lootden.ts';
 import { sportsRoutes } from './routes/sports.ts';
 import { weatherRoutes } from './routes/weather.ts';
+import { ttsRoutes } from './routes/tts.ts';
 import { downloadRoutes } from './routes/downloads.ts';
 import { moneyRoutes } from './routes/money.ts';
 import { pushRoutes } from './routes/push.ts';
@@ -97,6 +98,7 @@ export async function buildApp(db: DatabaseSync, opts: { logger?: boolean; serve
   lootdenRoutes(app, db);
   sportsRoutes(app, db);
   weatherRoutes(app, db);
+  ttsRoutes(app, db);
   downloadRoutes(app);
   backupRoutes(app, db, config.dataDir);
   habitRoutes(app, db);
