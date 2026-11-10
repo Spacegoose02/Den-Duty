@@ -1,6 +1,7 @@
 // Helpdesk: a kid asks a grown-up for help ("help with my science project", "can we buy new shoes"). Parents say yes
 // (it becomes a card on that kid's Parent Duty board, with the due date on the calendar) or "not this time" with a
 // kind note. Only parents and the asking kid ever see a request: never the family wall or another kid's board.
+// With Nighttime Ninja linked, "Buy something" also goes to its Requests tab: a yes there puts it on the shopping list.
 import type { FastifyInstance } from 'fastify';
 import type { DatabaseSync } from 'node:sqlite';
 import { assertCanActFor, homeCtx, type HomeCtx } from '../auth.ts';
@@ -11,22 +12,25 @@ import { emit } from '../events.ts';
 import { rateLimit } from '../security.ts';
 import { getKid, pageOn } from './homes.ts';
 import { HELP_PICKS } from '../../../shared/pages.ts';
+import { dropHelpdeskAsk, ninjaLinked, sendHelpdeskAsk, syncRequests } from './ninja.ts';
 import { isIsoDate } from '../../../shared/schedule.ts';
 
-type KidStatus = 'waiting' | 'yes' | 'doing' | 'done' | 'no' | 'cancelled' | 'closed';
+type KidStatus = 'waiting' | 'yes' | 'shopping' | 'doing' | 'done' | 'no' | 'cancelled' | 'closed';
 
 const pickOf = (kind: string) => HELP_PICKS.find((p) => p.id === kind) ?? HELP_PICKS[HELP_PICKS.length - 1];
 
 /** A request plus how it's going, from the kid's side: a yes follows its Parent Duty card (doing, done). */
 export function requestView(r: Row) {
   const pick = pickOf(r.kind as string);
-  const status: KidStatus = r.closed_at ? 'closed' : r.status === 'waiting' ? 'waiting' : r.status === 'denied' ? 'no' : r.status === 'cancelled' ? 'cancelled'
+  // A yes in Nighttime Ninja: it's on the shopping list, nothing more for anyone to do here.
+  const status: KidStatus = r.ninja_status === 'approved' ? 'shopping' : r.closed_at ? 'closed' : r.status === 'waiting' ? 'waiting' : r.status === 'denied' ? 'no' : r.status === 'cancelled' ? 'cancelled'
     : r.duty_status === 'done' ? 'done' : r.duty_status === 'doing' ? 'doing' : 'yes';
   return {
     id: r.id as string, memberId: r.member_id as string, kind: pick.id, icon: pick.icon, label: pick.label,
     text: r.text as string | null, dueDate: r.due_date as string | null, status, note: r.note as string | null,
     dutyId: r.duty_id as string | null, createdAt: r.created_at as string, decidedAt: r.decided_at as string | null,
     closedAt: r.closed_at as string | null, closeNote: r.close_note as string | null, closedByKid: !!r.closed_by_kid,
+    inNinja: r.ninja_status === 'sending' || r.ninja_status === 'waiting',
   };
 }
 
@@ -60,6 +64,7 @@ export function helpdeskRoutes(app: FastifyInstance, db: DatabaseSync): void {
     assertCanActFor(ctx, memberId);
     getKid(db, ctx, memberId);
     if (!pageOn(db, memberId, 'helpdesk')) return [];
+    await syncRequests(db, ctx.homeId);
     // Open ones always; finished, answered and closed ones as history for 60 days (until a parent clears them).
     return (db.prepare(`${SELECT} WHERE r.member_id = ? AND r.status != 'cancelled'
       AND ((r.closed_at IS NULL AND (r.status = 'waiting' OR (r.status = 'approved' AND COALESCE(h.status, '') != 'done')))
@@ -89,6 +94,11 @@ export function helpdeskRoutes(app: FastifyInstance, db: DatabaseSync): void {
     rateLimit(`helpdesk:${memberId}`, 10, 60e3);
     const id = newId();
     db.prepare('INSERT INTO helpdesk_requests (id, home_id, member_id, kind, text, due_date) VALUES (?, ?, ?, ?, ?, ?)').run(id, ctx.homeId, memberId, pick.id, text, due);
+    // "Buy something" with what to buy: it's a shopping request in Nighttime Ninja too.
+    if (pick.id === 'buy' && text && ninjaLinked(db, ctx.homeId)) {
+      db.prepare("UPDATE helpdesk_requests SET ninja_status = 'sending' WHERE id = ?").run(id);
+      await sendHelpdeskAsk(db, ctx.homeId, id);
+    }
     emit(db, ctx.homeId, 'helpdesk_requested', memberId, { request: text ? `${pick.label}: ${text}` : pick.label, due_date: due, request_id: id });
     return requestView(own(ctx, id));
   });
@@ -100,6 +110,7 @@ export function helpdeskRoutes(app: FastifyInstance, db: DatabaseSync): void {
     assertCanActFor(ctx, r.member_id as string);
     if (ctx.actor.kind !== 'kid' && ctx.actor.kind !== 'parent') throw new HttpError(403, 'Tap your raccoon first');
     waiting(r);
+    await dropHelpdeskAsk(db, ctx.homeId, r);
     db.prepare("UPDATE helpdesk_requests SET status = 'cancelled', decided_at = datetime('now') WHERE id = ?").run(r.id as string);
     return { ok: true };
   });
@@ -117,6 +128,7 @@ export function helpdeskRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const byKid = ctx.actor.kind === 'kid';
     const note = str(b.note, 200) ?? (byKid ? 'All set, thanks!' : null);
     const finishCard = byKid || b.finishCard !== false;
+    await dropHelpdeskAsk(db, ctx.homeId, r);
     tx(db, () => {
       db.prepare("UPDATE helpdesk_requests SET closed_at = datetime('now'), close_note = ?, closed_by_kid = ? WHERE id = ?").run(note, byKid ? 1 : 0, r.id as string);
       if (r.duty_id && finishCard) {
@@ -138,7 +150,11 @@ export function helpdeskRoutes(app: FastifyInstance, db: DatabaseSync): void {
     return { cleared: Number(n) };
   });
 
-  app.get('/api/homes/:homeId/helpdesk', async (req) => waitingRequests(db, homeCtx(db, req, 'parent').homeId));
+  app.get('/api/homes/:homeId/helpdesk', async (req) => {
+    const ctx = homeCtx(db, req, 'parent');
+    await syncRequests(db, ctx.homeId);
+    return waitingRequests(db, ctx.homeId);
+  });
 
   // Yes: becomes a Parent Duty card for that kid (title, due date and which parent can be changed here).
   app.post('/api/homes/:homeId/helpdesk/:id/approve', async (req) => {
@@ -158,6 +174,7 @@ export function helpdeskRoutes(app: FastifyInstance, db: DatabaseSync): void {
     }
     // If Parent Duty is switched off for this kid, the card goes on the general list (named) so it isn't hidden.
     const dutyOn = pageOn(db, kid.id as string, 'parentduty');
+    await dropHelpdeskAsk(db, ctx.homeId, r);
     const dutyId = newId();
     tx(db, () => {
       const pos = (((db.prepare("SELECT MAX(position) AS p FROM honeydo WHERE home_id = ? AND status = 'todo' AND kid_id IS ?").get(ctx.homeId, dutyOn ? kid.id as string : null) as Row).p as number | null) ?? 0) + 1;
@@ -176,6 +193,7 @@ export function helpdeskRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const ctx = homeCtx(db, req, 'parent');
     const r = own(ctx, (req.params as { id: string }).id);
     waiting(r);
+    await dropHelpdeskAsk(db, ctx.homeId, r);
     db.prepare("UPDATE helpdesk_requests SET status = 'denied', note = ?, decided_by = ?, decided_at = datetime('now') WHERE id = ?")
       .run(str((req.body as Row | undefined)?.note, 200), ctx.user?.id ?? null, r.id as string);
     emit(db, ctx.homeId, 'helpdesk_answered', r.member_id as string, { answer: 'not this time', request_id: r.id });
