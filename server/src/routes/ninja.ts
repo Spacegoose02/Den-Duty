@@ -1,13 +1,15 @@
 // Nighttime Ninja grocery requests. Nighttime Ninja is the family's kitchen app. With its address and a home API token
 // saved here, a list marked "Kids' picks are requests" sends what a kid (or the family tablet) adds to Nighttime
 // Ninja's Requests tab. A parent says yes there, onto the shopping list they pick, or no, and the answer shows back on
-// the kid's list. Nothing waits on Nighttime Ninja being up: an ask that couldn't be sent goes on the next sync.
+// the kid's list. A kid's Helpdesk "Buy something" ask goes there the same way, and the answer shows on their Helpdesk.
+// Nothing waits on Nighttime Ninja being up: an ask that couldn't be sent goes on the next sync.
 import type { FastifyInstance } from 'fastify';
 import type { DatabaseSync } from 'node:sqlite';
 import { homeCtx } from '../auth.ts';
 import type { Row } from '../db.ts';
 import { HttpError, str } from '../util.ts';
 import { openKey, sealKey } from '../ai.ts';
+import { emit } from '../events.ts';
 
 /** How Nighttime Ninja knows the asks from here. */
 const SOURCE = 'den-duty';
@@ -67,6 +69,46 @@ function settle(db: DatabaseSync, itemId: string, status: RequestStatus, listNam
   }
 }
 
+/** Sends one Helpdesk "Buy something" ask, like a list item. */
+export async function sendHelpdeskAsk(db: DatabaseSync, homeId: string, requestId: string): Promise<void> {
+  const l = link(db, homeId);
+  const r = db.prepare(`SELECT r.*, m.name AS kid_name FROM helpdesk_requests r JOIN members m ON m.id = r.member_id
+    WHERE r.id = ? AND r.ninja_status = 'sending'`).get(requestId) as Row | undefined;
+  if (!l || !r) return;
+  const res = await call<{ status: RequestStatus; listName: string | null }>(l, 'POST', '/shopping/requests', {
+    name: r.text, note: r.due_date ? `Needed by ${r.due_date as string}` : null, requestedBy: r.kid_name ?? null, source: SOURCE, externalId: r.id,
+  });
+  if (res) settleHelpdesk(db, requestId, res.status, res.listName);
+}
+
+/** An answer from Nighttime Ninja to a Helpdesk ask: yes closes the ticket as on the shopping list, no is "not this time". */
+function settleHelpdesk(db: DatabaseSync, requestId: string, status: RequestStatus, listName: string | null): void {
+  const r = db.prepare('SELECT * FROM helpdesk_requests WHERE id = ?').get(requestId) as Row | undefined;
+  if (!r) return;
+  // Already answered here (or taken back): Nighttime Ninja's copy no longer matters.
+  if (r.status !== 'waiting' || r.closed_at) {
+    db.prepare("UPDATE helpdesk_requests SET ninja_status = NULL WHERE id = ? AND ninja_status IN ('sending', 'waiting')").run(requestId);
+    return;
+  }
+  if (status === 'approved') {
+    db.prepare(`UPDATE helpdesk_requests SET status = 'approved', ninja_status = 'approved', decided_at = datetime('now'),
+      closed_at = datetime('now'), close_note = ? WHERE id = ?`).run(listName ? `On the ${listName} list` : null, requestId);
+    emit(db, r.home_id as string, 'helpdesk_answered', r.member_id as string, { answer: 'yes', request: r.text, request_id: requestId, via: 'nighttime-ninja' });
+  } else if (status === 'declined') {
+    db.prepare("UPDATE helpdesk_requests SET status = 'denied', ninja_status = 'declined', decided_at = datetime('now') WHERE id = ?").run(requestId);
+    emit(db, r.home_id as string, 'helpdesk_answered', r.member_id as string, { answer: 'not this time', request_id: requestId, via: 'nighttime-ninja' });
+  } else {
+    db.prepare("UPDATE helpdesk_requests SET ninja_status = 'waiting' WHERE id = ? AND ninja_status = 'sending'").run(requestId);
+  }
+}
+
+/** A Helpdesk ask was answered, closed or taken back here: it leaves Nighttime Ninja's Requests tab. */
+export async function dropHelpdeskAsk(db: DatabaseSync, homeId: string, r: Row): Promise<void> {
+  if (r.ninja_status !== 'sending' && r.ninja_status !== 'waiting') return;
+  db.prepare('UPDATE helpdesk_requests SET ninja_status = NULL WHERE id = ?').run(r.id as string);
+  await withdrawRequest(db, homeId, r.id as string);
+}
+
 const lastSync = new Map<string, number>();
 
 /**
@@ -80,16 +122,26 @@ export async function syncRequests(db: DatabaseSync, homeId: string, force = fal
   lastSync.set(homeId, Date.now());
   const open = db.prepare(`SELECT i.id, i.request_status FROM list_items i JOIN lists l ON l.id = i.list_id
     WHERE l.home_id = ? AND i.request_status IN ('sending', 'waiting') ORDER BY i.created_at LIMIT 200`).all(homeId) as Row[];
+  const asks = db.prepare(`SELECT id, ninja_status FROM helpdesk_requests WHERE home_id = ? AND ninja_status IN ('sending', 'waiting')
+    ORDER BY created_at LIMIT 200`).all(homeId) as Row[];
   for (const it of open.filter((x) => x.request_status === 'sending')) await sendRequest(db, homeId, it.id as string);
+  for (const r of asks.filter((x) => x.ninja_status === 'sending')) await sendHelpdeskAsk(db, homeId, r.id as string);
   const waiting = open.filter((x) => x.request_status === 'waiting').map((x) => x.id as string);
-  if (!waiting.length) return;
+  const waitingAsks = new Set(asks.filter((x) => x.ninja_status === 'waiting').map((x) => x.id as string));
+  const ids = [...waiting, ...waitingAsks];
+  if (!ids.length) return;
   const answers = await call<{ externalId: string; status: RequestStatus; listName: string | null }[]>(l, 'GET',
-    `/shopping/requests?source=${SOURCE}&ids=${waiting.map(encodeURIComponent).join(',')}`);
+    `/shopping/requests?source=${SOURCE}&ids=${ids.map(encodeURIComponent).join(',')}`);
   if (!answers) return;
-  for (const a of answers) settle(db, a.externalId, a.status, a.listName);
-  // Gone on that side without an answer (deleted there): back to a plain item, so it isn't stuck waiting forever.
+  for (const a of answers) {
+    if (waitingAsks.has(a.externalId)) settleHelpdesk(db, a.externalId, a.status, a.listName);
+    else settle(db, a.externalId, a.status, a.listName);
+  }
+  // Gone on that side without an answer (deleted there): back to a plain item, or a Helpdesk ask only answered here,
+  // so it isn't stuck waiting forever.
   const known = new Set(answers.map((a) => a.externalId));
   for (const id of waiting.filter((x) => !known.has(x))) db.prepare('UPDATE list_items SET request_status = NULL WHERE id = ?').run(id);
+  for (const id of [...waitingAsks].filter((x) => !known.has(x))) db.prepare('UPDATE helpdesk_requests SET ninja_status = NULL WHERE id = ?').run(id);
 }
 
 /** The kid took it back before anyone answered: it leaves Nighttime Ninja's Requests tab too. */
@@ -152,6 +204,9 @@ export function ninjaRoutes(app: FastifyInstance, db: DatabaseSync): void {
     if (!who?.homeId) throw new HttpError(502, "Couldn't reach Nighttime Ninja at that address. Check it and try again.");
     db.prepare('UPDATE homes SET ninja_url = ?, ninja_home_id = ?, ninja_token = ? WHERE id = ?').run(url, who.homeId, sealKey(token), ctx.homeId);
     pickCache.delete(ctx.homeId);
+    // Helpdesk "Buy something" asks already waiting go over too.
+    db.prepare(`UPDATE helpdesk_requests SET ninja_status = 'sending' WHERE home_id = ? AND kind = 'buy' AND text IS NOT NULL
+      AND status = 'waiting' AND closed_at IS NULL AND ninja_status IS NULL`).run(ctx.homeId);
     await syncRequests(db, ctx.homeId, true);
     return { url, hasToken: true, linked: true, home: who.name };
   });

@@ -1250,6 +1250,13 @@ export const MIGRATIONS: string[] = [
   UPDATE homes SET two_homes = 1 WHERE id IN (SELECT m.home_id FROM members m WHERE m.role = 'kid'
     AND (m.away_plan IS NOT NULL OR EXISTS (SELECT 1 FROM kid_away a WHERE a.member_id = m.id)));
   `,
+  // Helpdesk "Buy something" asks go to Nighttime Ninja's Requests tab too, when it's linked. Asks already waiting in a
+  // linked home go over on the next sync.
+  `
+  ALTER TABLE helpdesk_requests ADD COLUMN ninja_status TEXT;
+  UPDATE helpdesk_requests SET ninja_status = 'sending' WHERE kind = 'buy' AND text IS NOT NULL AND status = 'waiting' AND closed_at IS NULL
+    AND home_id IN (SELECT id FROM homes WHERE ninja_home_id IS NOT NULL AND ninja_token IS NOT NULL);
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

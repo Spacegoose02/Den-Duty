@@ -104,3 +104,44 @@ test('Nighttime Ninja grocery requests: kids ask, a parent answers there, the ki
   await call(mom, 'PUT', `${base}/ninja`, { url: '' });
   assert.equal((await call(tablet, 'POST', `${base}/lists/${groceries.id}/items`, { text: 'Candy' })).body.request, false);
 });
+
+test('Helpdesk "Buy something" asks go to Nighttime Ninja, and its answer shows on the kid\'s Helpdesk', async () => {
+  const { db, call, mom, base, ava, tablet, asKid } = await family();
+  const nn = fakeNinja();
+  const sync = async () => {
+    const { syncRequests } = await import('./routes/ninja.ts');
+    await syncRequests(db, (db.prepare('SELECT id FROM homes').get() as { id: string }).id, true);
+  };
+  await asKid(ava);
+  // Asked before Nighttime Ninja was linked: it goes over when it's linked.
+  const cookies = (await call(tablet, 'POST', `${base}/kids/${ava.id}/helpdesk`, { kind: 'buy', text: 'cookies' })).body;
+  assert.equal(cookies.inNinja, false);
+  await call(mom, 'PUT', `${base}/ninja`, { url: 'http://ninja.lan:8080', token: 'nnk_ok' });
+  assert.deepEqual(nn.asks.get(cookies.id), { name: 'cookies', requestedBy: 'Avaleigh', status: 'waiting', listName: null });
+
+  // New asks go right away; only "Buy something" with words, never other kinds.
+  const chips = (await call(tablet, 'POST', `${base}/kids/${ava.id}/helpdesk`, { kind: 'buy', text: 'chips', dueDate: null })).body;
+  const gum = (await call(tablet, 'POST', `${base}/kids/${ava.id}/helpdesk`, { kind: 'buy', text: 'gum' })).body;
+  const shoes = (await call(tablet, 'POST', `${base}/kids/${ava.id}/helpdesk`, { kind: 'clothes', text: 'shoes' })).body;
+  const candy = (await call(tablet, 'POST', `${base}/kids/${ava.id}/helpdesk`, { kind: 'buy', text: 'candy' })).body;
+  assert.ok(chips.inNinja && nn.asks.has(chips.id));
+  assert.ok(!shoes.inNinja && !nn.asks.has(shoes.id));
+  assert.ok((await call(mom, 'GET', `${base}/helpdesk`)).body.find((r: { id: string }) => r.id === chips.id).inNinja);
+
+  // Yes in Nighttime Ninja (onto Main), no to chips there; mom answers gum here and Ava takes back candy.
+  nn.asks.get(cookies.id)!.status = 'approved';
+  nn.asks.get(cookies.id)!.listName = 'Main';
+  nn.asks.get(chips.id)!.status = 'declined';
+  await call(mom, 'POST', `${base}/helpdesk/${gum.id}/deny`, { note: 'Not today' });
+  assert.ok(!nn.asks.has(gum.id), 'answering here takes it off Nighttime Ninja');
+  await call(tablet, 'DELETE', `${base}/helpdesk/${candy.id}`);
+  assert.ok(!nn.asks.has(candy.id));
+  await sync();
+  const mine = (await call(tablet, 'GET', `${base}/kids/${ava.id}/helpdesk`)).body as { id: string; status: string; closeNote: string | null }[];
+  const of = (id: string) => mine.find((r) => r.id === id)!;
+  assert.equal(of(cookies.id).status, 'shopping');
+  assert.equal(of(cookies.id).closeNote, 'On the Main list');
+  assert.equal(of(chips.id).status, 'no');
+  assert.equal(of(gum.id).status, 'no');
+  assert.deepEqual((await call(mom, 'GET', `${base}/helpdesk`)).body.map((r: { id: string }) => r.id), [shoes.id]);
+});

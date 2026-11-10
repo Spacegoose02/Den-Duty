@@ -10,6 +10,7 @@ import { addDays, weekdayOf } from '../../../shared/schedule.ts';
 const STATUS: Record<HelpRequest['status'], { mark: string; text: string; cls: string }> = {
   waiting: { mark: '⏳', text: 'Waiting for a grown-up', cls: '' },
   yes: { mark: '✅', text: "Yes! Added to the grown-ups' list", cls: 'ok' },
+  shopping: { mark: '🛒', text: "Yes! It's on the shopping list", cls: 'ok' },
   doing: { mark: '🛠️', text: 'A grown-up is on it', cls: 'ok' },
   done: { mark: '🎉', text: 'Done!', cls: 'ok' },
   no: { mark: '💛', text: 'Not this time', cls: 'warn' },
@@ -33,6 +34,7 @@ function HelpRow({ r, children }: { r: HelpRequest; children?: ReactNode }) {
         <div className={`small help-status ${s.cls}`}>{s.mark} {s.text}{r.status === 'closed' && r.closedByKid ? ' by you' : ''}</div>
         {r.status === 'no' && r.note && <div className="help-note">“{r.note}”</div>}
         {r.status === 'closed' && r.closeNote && <div className="help-note">“{r.closeNote}”</div>}
+        {r.status === 'shopping' && r.closeNote && <div className="small muted">{r.closeNote}</div>}
       </div>
       {children}
     </div>
@@ -117,8 +119,8 @@ export function KidHelpdesk({ memberId, kidName, picture, asParent }: { memberId
         <details className="help-history">
           <summary className="small">History ({history.length})</summary>
           <div className="stack" style={{ gap: 8, marginTop: 8 }}>
-            {history.map((r) => <HelpRow key={r.id} r={r}>{asParent && r.status !== 'closed' && <button className="ghost" onClick={() => setClosing(r)}>Close</button>}</HelpRow>)}
-            {asParent && history.some((r) => r.status === 'closed') && (
+            {history.map((r) => <HelpRow key={r.id} r={r}>{asParent && r.status !== 'closed' && r.status !== 'shopping' && <button className="ghost" onClick={() => setClosing(r)}>Close</button>}</HelpRow>)}
+            {asParent && history.some((r) => r.status === 'closed' || r.status === 'shopping') && (
               <button className="ghost danger" style={{ alignSelf: 'flex-start' }} onClick={async () => {
                 if (!confirm(`Clear ${kidName}'s closed requests?`)) return;
                 try { const r = await api<{ cleared: number }>(`${base}/kids/${memberId}/helpdesk/closed`, { method: 'DELETE' }); toast(`Cleared ${r.cleared}`); await reload(); } catch (e) { toast((e as Error).message); }
@@ -203,7 +205,7 @@ export function HelpdeskCard({ items, onChange }: { items: HomeHelpRequest[]; on
           <span className="help-icon" aria-hidden>{r.icon}</span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontWeight: 700 }}>{r.kind === 'other' ? r.text : r.label}{r.kind !== 'other' && r.text && <span className="muted" style={{ fontWeight: 500 }}>: {r.text}</span>}</div>
-            <div className="small muted">{r.kid.name}{r.dueDate && ` · by ${whenText(r.dueDate)}`}</div>
+            <div className="small muted">{r.kid.name}{r.dueDate && ` · by ${whenText(r.dueDate)}`}{r.inNinja && ' · also in Nighttime Ninja Requests'}</div>
           </div>
           <button className="ghost" disabled={busy} onClick={() => setClosing(r)} title="Close without a yes or no">Close</button>
           <button className="ghost" disabled={busy} onClick={() => open(r, false)}>Not this time</button>
