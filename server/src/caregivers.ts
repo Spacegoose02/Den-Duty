@@ -14,7 +14,7 @@ const H = '/api/homes/:homeId';
 const WRITE = new Set([
   'POST /instances/:id/approve', 'POST /instances/:id/reject', 'POST /instances/:id/done', 'POST /instances/:id/photo',
   'POST /instances/:id/start', 'POST /instances/:id/undo', 'POST /instances/:id/unclaim', 'POST /review/approve',
-  'POST /habit-logs/:id/approve', 'POST /habit-logs/:id/reject',
+  'POST /habit-logs/:id/approve', 'POST /habit-logs/:id/reject', 'POST /finished-books/:id/approve', 'POST /finished-books/:id/reject',
   'POST /helpdesk/:id/approve', 'POST /helpdesk/:id/close', 'POST /helpdesk/:id/deny',
   'POST /kids/:memberId/timeouts', 'PATCH /timeouts/:id', 'DELETE /timeouts/:id',
   'POST /timeout-requests/:rid/approve', 'POST /timeout-requests/:rid/deny',
@@ -26,7 +26,7 @@ const WRITE = new Set([
 
 /** What caregivers may not even look at. */
 const HIDDEN = [
-  /\/(doctors|therapy|health|meds|share-links|feelings|money|ai|tokens|backups?|export|archive|devices|honeydo|meetings|parent-duty|ha|calendars|weather-link|lootden|photo-frame|caregiver-code|calendar-sync)(\/|$)/,
+  /\/(doctors|therapy|health|meds|share-links|feelings|money|ai|tokens|backups?|export|archive|devices|honeydo|meetings|parent-duty|ha|calendars|weather-link|lootden|bookbandit|photo-frame|caregiver-code|calendar-sync)(\/|$)/,
 ];
 
 export type Access = 'full' | 'caregiver';

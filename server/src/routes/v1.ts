@@ -121,6 +121,12 @@ export const V1_ROUTES: V1Route[] = [
   },
   { method: 'POST', path: '/homes/:homeId/parent-duty/:id/reopen', from: '/homes/:homeId/parent-duty/:id/reopen', scope: 'control', tag: 'Parent Duty', summary: 'Put a closed card back on the board.' },
 
+  {
+    method: 'GET', path: '/homes/:homeId/kids/:kidId/habits', from: '/homes/:homeId/kids/:memberId/habits', scope: 'read', tag: 'Practice',
+    summary: "A kid's practices and habits (\"Reading, 20 minutes, 5 days a week\"): points, whether a grown-up checks it, and this week's days with minutes.",
+    query: [KID],
+  },
+
   { method: 'GET', path: '/homes/:homeId/archive', from: '/homes/:homeId/archive', scope: 'read', tag: 'Stats', summary: 'The weekly archive: every finished week per kid, newest first.', query: [{ name: 'kid', in: 'query', description: 'Only this kid' }, { name: 'limit', in: 'query', description: 'Weeks, up to 104' }] },
   {
     method: 'GET', path: '/homes/:homeId/gaming', scope: 'read', tag: 'LootDen',
@@ -131,6 +137,11 @@ export const V1_ROUTES: V1Route[] = [
     method: 'POST', path: '/homes/:homeId/gaming/report', scope: 'control', tag: 'LootDen',
     summary: "LootDen's report: each kid's play time today, what they're playing and minutes left, plus the games a shop reward can unlock.",
     body: [{ name: 'kids', type: 'array', description: '[{ kidId, minutes, playing?, remaining? }]' }, { name: 'games', type: 'array', description: '[{ id, title }] games a reward can unlock' }],
+  },
+  {
+    method: 'POST', path: '/homes/:homeId/reading/report', scope: 'control', tag: 'BookBandit',
+    summary: "BookBandit's report: each kid's reading minutes for a day go into their Reading practice (waits for a grown-up unless trusted, pays the practice's points once a day), and books they finished pay the home's \"Finished a book\" bonus once per book. minutes is the running total for that day: send it again as it grows, only the difference is added. Unknown kids or habits, a habit that isn't that kid's, and dates outside the last 7 days are skipped. Answers { ok, kids: [{ kidId, minutes, habitPaid, finishedPaid }] } with the points paid by this report.",
+    body: [{ name: 'kids', type: 'array', description: '[{ kidId, habitId, date: "YYYY-MM-DD" (home-local), minutes: 0 to 1440, finished?: [{ id, title? }] }]', required: true }],
   },
   { method: 'GET', path: '/homes/:homeId/events', scope: 'read', tag: 'Events', summary: 'Recent events (chore done, approved, points changed, goal reached…), newest first.', query: [{ name: 'after', in: 'query', description: 'Only events after this id (poll with the last id you saw)' }] },
 ];

@@ -15,7 +15,7 @@ export interface Habit {
   week: { days: { date: string; status: 'waiting' | 'approved' | 'rejected' | null; minutes: number }[]; doneDays: number; minutes: number; reached: boolean };
   today: 'waiting' | 'approved' | 'rejected' | null; todayMinutes: number;
 }
-interface WaitingLog { id: string; date: string; minutes: number; title: string; icon: string; points: number; kid: { name: string; avatar: string } }
+interface WaitingLog { kind: 'practice' | 'book'; id: string; date: string; minutes: number; title: string; icon: string; points: number; kid: { name: string; avatar: string } }
 
 export function KidHabits({ memberId, kidName, color, asParent, readAloud }: { memberId: string; kidName: string; color: string; asParent: boolean; readAloud: boolean }) {
   const { base, home } = useApp();
@@ -150,9 +150,10 @@ export function HabitsWaitingCard({ onChange }: { onChange?: () => void }) {
   const [logs, reload] = useLoad<WaitingLog[]>(`${base}/habit-logs`);
   const [busy, setBusy] = useState(false);
   if (!logs?.length) return null;
-  const act = async (path: string, body: object = {}) => {
+  // Finished books BookBandit reported wait here too, when the book bonus needs an OK.
+  const act = async (l: WaitingLog, what: 'approve' | 'reject', body: object = {}) => {
     setBusy(true);
-    try { await api(`${base}/habit-logs/${path}`, { body }); await reload(); onChange?.(); } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
+    try { await api(`${base}/${l.kind === 'book' ? 'finished-books' : 'habit-logs'}/${l.id}/${what}`, { body }); await reload(); onChange?.(); } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
   };
   return (
     <section className="card stack review-card has-items">
@@ -165,8 +166,8 @@ export function HabitsWaitingCard({ onChange }: { onChange?: () => void }) {
             <div style={{ fontWeight: 700 }}>{l.title}{l.minutes ? `, ${l.minutes} min` : ''}</div>
             <div className="small muted">{l.kid.name} · {dayName(l.date)} {shortDate(l.date)}{l.points ? ` · +${l.points} ${home?.pointsIcon ?? '✨'}` : ''}</div>
           </div>
-          <button className="ghost danger" disabled={busy} onClick={() => void act(`${l.id}/reject`, { note: prompt('A note for them? (optional)') ?? '' })}>Not yet</button>
-          <button className="primary" disabled={busy} onClick={() => void act(`${l.id}/approve`)}>Approve</button>
+          <button className="ghost danger" disabled={busy} onClick={() => void act(l, 'reject', l.kind === 'book' ? {} : { note: prompt('A note for them? (optional)') ?? '' })}>Not yet</button>
+          <button className="primary" disabled={busy} onClick={() => void act(l, 'approve')}>Approve</button>
         </div>
       ))}
     </section>

@@ -1273,6 +1273,29 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE helpdesk_requests ADD COLUMN wishes_link TEXT;
   ALTER TABLE helpdesk_requests ADD COLUMN wishes_error TEXT;
   `,
+  // BookBandit, the family's book library: it reports each kid's reading minutes into their Reading practice and the
+  // books they finish. external_minutes is BookBandit's running total for that day, kept apart from the kid's own taps
+  // so a repeated report only adds the difference. A finished book pays the home's book bonus once per book.
+  `
+  ALTER TABLE habit_logs ADD COLUMN external_minutes INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE homes ADD COLUMN book_bonus INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE homes ADD COLUMN book_bonus_needs_ok INTEGER NOT NULL DEFAULT 1;
+  CREATE TABLE finished_books (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    book_id TEXT NOT NULL,
+    title TEXT,
+    date TEXT NOT NULL,
+    points INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'waiting' CHECK (status IN ('waiting', 'approved', 'rejected')),
+    reviewed_at TEXT,
+    reviewed_by TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (member_id, book_id)
+  );
+  CREATE INDEX finished_books_home ON finished_books(home_id, status);
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

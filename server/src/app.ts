@@ -39,6 +39,7 @@ import { moneyRoutes } from './routes/money.ts';
 import { pushRoutes } from './routes/push.ts';
 import { backupRoutes } from './backup.ts';
 import { habitRoutes } from './routes/habits.ts';
+import { bookbanditRoutes } from './routes/bookbandit.ts';
 import { feelingRoutes } from './routes/feelings.ts';
 import { photoFrameRoutes } from './routes/photoframe.ts';
 import { meetingRoutes } from './routes/meetings.ts';
@@ -102,6 +103,7 @@ export async function buildApp(db: DatabaseSync, opts: { logger?: boolean; serve
   downloadRoutes(app);
   backupRoutes(app, db, config.dataDir);
   habitRoutes(app, db);
+  bookbanditRoutes(app, db);
   feelingRoutes(app, db);
   photoFrameRoutes(app, db);
   meetingRoutes(app, db);

@@ -39,19 +39,33 @@ export function kidHabits(db: DatabaseSync, homeId: string, memberId: string) {
     .map((h) => habitView(db, h, today, home.weekStart));
 }
 
-/** Practices waiting for a grown-up, for the parent home. */
-export function habitsWaiting(db: DatabaseSync, homeId: string) {
+/** Something waiting for a grown-up on the parent home's practice card: a practice, or a book BookBandit says a kid finished. */
+export interface WaitingPractice {
+  kind: 'practice' | 'book';
+  id: string; habitId: string | null; memberId: string; date: string; minutes: number; title: string; icon: string; points: number;
+  kid: { name: string; avatar: string };
+}
+
+/** Practices (and finished books) waiting for a grown-up, for the parent home. */
+export function habitsWaiting(db: DatabaseSync, homeId: string): WaitingPractice[] {
   return (db.prepare(`SELECT l.*, h.title, h.icon, h.points, m.name AS kid_name, m.avatar AS kid_avatar FROM habit_logs l
     JOIN habits h ON h.id = l.habit_id JOIN members m ON m.id = l.member_id
-    WHERE l.home_id = ? AND l.status = 'waiting' ORDER BY l.date, l.created_at`).all(homeId) as Row[]).map((r) => ({
-    id: r.id as string, habitId: r.habit_id as string, memberId: r.member_id as string, date: r.date as string, minutes: r.minutes as number,
+    WHERE l.home_id = ? AND l.status = 'waiting' ORDER BY l.date, l.created_at`).all(homeId) as Row[]).map((r): WaitingPractice => ({
+    kind: 'practice',
+    id: r.id as string, habitId: r.habit_id as string | null, memberId: r.member_id as string, date: r.date as string, minutes: r.minutes as number,
     title: r.title as string, icon: r.icon as string, points: r.paid ? 0 : r.points as number,
     kid: { name: r.kid_name as string, avatar: r.kid_avatar as string },
-  }));
+  })).concat((db.prepare(`SELECT b.*, m.name AS kid_name, m.avatar AS kid_avatar FROM finished_books b JOIN members m ON m.id = b.member_id
+    WHERE b.home_id = ? AND b.status = 'waiting' ORDER BY b.date, b.created_at`).all(homeId) as Row[]).map((r): WaitingPractice => ({
+    // A book BookBandit says they finished, waiting for a grown-up before its bonus pays (routes/bookbandit.ts).
+    kind: 'book', id: r.id as string, habitId: null, memberId: r.member_id as string, date: r.date as string, minutes: 0,
+    title: r.title ? `Finished “${r.title as string}”` : 'Finished a book', icon: '📕', points: r.points as number,
+    kid: { name: r.kid_name as string, avatar: r.kid_avatar as string },
+  })));
 }
 
 /** Approves a practice: points once per habit per day (a second practice that day only adds minutes). */
-function approveLog(db: DatabaseSync, homeId: string, log: Row, by: By): number {
+export function approveLog(db: DatabaseSync, homeId: string, log: Row, by: By): number {
   const h = db.prepare('SELECT * FROM habits WHERE id = ?').get(log.habit_id as string) as Row;
   const pay = !log.paid && (h.points as number) > 0 ? h.points as number : 0;
   db.prepare("UPDATE habit_logs SET status = 'approved', paid = paid + ?, reviewed_at = datetime('now'), reviewed_by = ?, note = NULL WHERE id = ?")

@@ -398,6 +398,36 @@ function LootDenCard() {
   );
 }
 
+/** BookBandit, the family's book library: its reading counts toward a kid's Reading practice; finished books can pay a bonus. */
+function BookBanditCard() {
+  const { base, toast, home } = useApp();
+  const [s, reload] = useLoad<{ points: number; needsOk: boolean }>(`${base}/bookbandit`);
+  if (!s) return null;
+  const save = async (body: { points?: number; needsOk?: boolean }) => {
+    try { await api(`${base}/bookbandit`, { method: 'PUT', body }); await reload(); toast('Saved'); } catch (e) { toast((e as Error).message); }
+  };
+  return (
+    <div className="card stack" id="bookbandit">
+      <h2 style={{ margin: 0 }}>📚 BookBandit</h2>
+      <p className="small muted" style={{ margin: 0 }}>
+        BookBandit, the family's book library, can count each kid's reading toward their Reading practice. Give each kid a practice (on their board),
+        make a <strong>control</strong> token under Home Assistant and API tokens, and pick each kid's practice in BookBandit (Settings, Den Duty).
+      </p>
+      <form className="row" onSubmit={(e) => { e.preventDefault(); void save({ points: Number((e.currentTarget.elements.namedItem('bb') as HTMLInputElement).value) || 0 }); }}>
+        <label htmlFor="bb-points" style={{ fontWeight: 600 }}>Finished a book bonus</label>
+        <input id="bb-points" name="bb" type="number" min={0} max={1000} defaultValue={s.points} key={s.points} style={{ width: 100 }} />
+        <span>{home?.pointsIcon ?? '✨'} (0 = off)</span>
+        <button>Save</button>
+      </form>
+      <label className="row" style={{ fontWeight: 600 }}>
+        <input type="checkbox" checked={s.needsOk} onChange={(e) => void save({ needsOk: e.target.checked })} style={{ width: 24, minHeight: 24 }} />
+        A grown-up checks finished books first
+      </label>
+      <p className="small muted" style={{ margin: 0 }}>Each book pays once. Books waiting for an OK show with practice to check on Home.</p>
+    </div>
+  );
+}
+
 /** Nighttime Ninja, the family's kitchen app: where kids' grocery requests go for a yes or no. */
 function NinjaCard() {
   const { base, toast } = useApp();
@@ -610,6 +640,7 @@ export function Settings() {
       <FamilyWallCard />
       <PhotoFrameCard />
       <LootDenCard />
+      <BookBanditCard />
       <NinjaCard />
       <WishesCard />
       <SportsCard />
