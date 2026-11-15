@@ -11,8 +11,8 @@ import { config } from './config.ts';
 import { tx, type Row } from './db.ts';
 import { HttpError, randomToken, requireStr, sha256, str } from './util.ts';
 import {
-  addParent, createUser, cookieOpts, getUser, hasUsers, localLoginMode, publicUser, requireAdmin, requireUser, setSetting,
-  signupMode, startMfa, startSession, type User,
+  addParent, callbackUrl, createUser, cookieOpts, discover, getUser, hasUsers, localLoginMode, oidcSettings, publicUser,
+  requireAdmin, requireUser, saveOidcSettings, setSetting, signupMode, startMfa, startSession, type User,
 } from './auth.ts';
 import {
   clearRateLimit, hashPassword, limitAuth, newRecoveryCodes, newTotpSecret, otpauthUrl, passwordProblem,
@@ -164,10 +164,22 @@ export function accountRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const passkeys = db.prepare('SELECT id, name, created_at AS createdAt, last_used_at AS lastUsedAt FROM passkeys WHERE user_id = ? ORDER BY created_at').all(user.id);
     const left = (db.prepare('SELECT COUNT(*) AS n FROM recovery_codes WHERE user_id = ? AND used_at IS NULL').get(user.id) as Row).n;
     return {
-      username: user.username, hasPassword: !!user.password_hash, google: !!user.google_sub, email: user.email,
+      username: user.username, hasPassword: !!user.password_hash, google: !!user.google_sub, oidc: !!user.oidc_sub, oidcProvider: oidcSettings(db)?.name ?? null, email: user.email,
       totpEnabled: !!user.totp_enabled, recoveryCodesLeft: left, passkeys,
       passkeyOrigin: rp().origin,
     };
+  });
+
+  // Unlinks the OpenID Connect (TinyAuth...) account, as long as there's still another way in.
+  app.post('/api/auth/oidc/unlink', async (req) => {
+    const user = requireUser(req);
+    await requireReauth(db, req, user);
+    const passkeys = db.prepare('SELECT 1 FROM passkeys WHERE user_id = ?').get(user.id);
+    if (!user.password_hash && !user.google_sub && !user.forward_user && !passkeys) {
+      throw new HttpError(400, 'Set a password or add a passkey first, or you would have no way to sign in');
+    }
+    db.prepare('UPDATE users SET oidc_sub = NULL WHERE id = ?').run(user.id);
+    return { ok: true };
   });
 
   app.post('/api/auth/password', async (req) => {
@@ -355,6 +367,69 @@ export function accountRoutes(app: FastifyInstance, db: DatabaseSync): void {
     return { signupMode: signupMode(db), localLogin: localLoginMode(db) };
   });
 
+  // ----- the OpenID Connect sign-in provider (TinyAuth, Authentik, Authelia, Keycloak, Pocket ID...) -----
+  // The client secret never comes back out: the editor only learns whether one is saved.
+  const ssoView = () => {
+    const o = oidcSettings(db);
+    return {
+      provider: o ? { name: o.name, issuer: o.issuer, clientId: o.clientId, hasSecret: !!o.clientSecret, extraScopes: o.extraScopes,
+        autoCreate: o.autoCreate, showOnLogin: o.showOnLogin, source: o.source } : null,
+      callbackUrl: callbackUrl('oidc'),
+      publicUrl: config.publicUrl,
+    };
+  };
+
+  app.get('/api/admin/sso', async (req) => {
+    requireAdmin(req);
+    return ssoView();
+  });
+
+  app.put('/api/admin/sso', async (req) => {
+    requireAdmin(req);
+    const b = body(req);
+    const issuer = requireStr(b.issuer, 'Issuer URL', 300).trim();
+    let url: URL;
+    try { url = new URL(issuer); } catch { throw new HttpError(400, 'The issuer URL should look like https://auth.example.com'); }
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new HttpError(400, 'The issuer URL should start with https://');
+    const before = oidcSettings(db);
+    const secret = typeof b.clientSecret === 'string' ? b.clientSecret.trim() : '';
+    saveOidcSettings(db, {
+      name: str(b.name, 40) ?? 'single sign-on',
+      issuer,
+      clientId: requireStr(b.clientId, 'Client ID', 200).trim(),
+      // Empty keeps the saved secret, as the editor says.
+      clientSecret: secret || before?.clientSecret || '',
+      extraScopes: str(b.extraScopes, 200) ?? '',
+      autoCreate: !!b.autoCreate,
+      showOnLogin: b.showOnLogin !== false,
+    });
+    return ssoView();
+  });
+
+  app.delete('/api/admin/sso', async (req) => {
+    requireAdmin(req);
+    saveOidcSettings(db, null);
+    return ssoView();
+  });
+
+  // Reads the provider's openid-configuration with the saved settings, so a typo shows up before anyone signs in.
+  app.post('/api/admin/sso/test', async (req) => {
+    requireAdmin(req);
+    const o = oidcSettings(db);
+    if (!o) throw new HttpError(400, 'Save a provider first');
+    try {
+      const meta = (await discover({ issuer: o.issuer.trim(), clientId: o.clientId, clientSecret: o.clientSecret })).serverMetadata();
+      const warnings: string[] = [];
+      const methods = meta.token_endpoint_auth_methods_supported;
+      if (o.clientSecret && methods && !methods.includes('client_secret_post')) warnings.push(`The provider doesn't take client_secret_post (it offers ${methods.join(', ')}).`);
+      if (!o.clientSecret) warnings.push('No client secret is saved, so Den Duty signs in as a public client. Most providers want the secret.');
+      if (!/^https:/.test(config.publicUrl)) warnings.push(`PUBLIC_URL is ${config.publicUrl}. Providers send people back there, so it must be the https address people use.`);
+      return { ok: true, issuer: meta.issuer, authorizationEndpoint: meta.authorization_endpoint, tokenEndpoint: meta.token_endpoint, warnings };
+    } catch (err) {
+      return { ok: false, error: (err as Error).message };
+    }
+  });
+
   // Help someone who's locked out: turn the account off/on, clear two-factor, or hand them a temporary password.
   app.post('/api/admin/users/:userId/security', async (req) => {
     const admin = requireAdmin(req);
@@ -381,6 +456,14 @@ export function accountRoutes(app: FastifyInstance, db: DatabaseSync): void {
       out.tempPassword = temp;
     }
     if (b.signOut) db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
+    // Single sign-on: link ahead of time by the person's email or username at the provider, or unlink.
+    if (typeof b.oidcLinkHint === 'string') {
+      const hint = b.oidcLinkHint.trim();
+      if (hint.length > 200) throw new HttpError(400, 'That is too long for an email or username');
+      if (hint && db.prepare('SELECT 1 FROM users WHERE oidc_link_hint = ? AND id != ?').get(hint, userId)) throw new HttpError(409, 'Another account is already waiting for that sign-in');
+      db.prepare('UPDATE users SET oidc_link_hint = ? WHERE id = ?').run(hint || null, userId);
+    }
+    if (b.oidcUnlink) db.prepare('UPDATE users SET oidc_sub = NULL, oidc_link_hint = NULL WHERE id = ?').run(userId);
     return out;
   });
 }

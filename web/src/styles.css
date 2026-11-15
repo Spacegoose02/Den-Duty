@@ -851,3 +851,8 @@ button.link { background: none; border: none; padding: 0; min-height: 0; color: 
 .bubble-row.me .bubble { background: var(--primary); color: var(--on-primary); border-radius: 16px 16px 4px 16px; }
 .bubble.urgent { border: 2px solid var(--danger); }
 .ruling .bubble { max-width: 100%; flex: 1; }
+
+/* Settings tabs: each one is its own page at /settings/<tab>. On a phone the row scrolls sideways. */
+.settings-tabs { flex-wrap: nowrap; overflow-x: auto; padding: 4px 2px 6px; scrollbar-width: thin; }
+.settings-tabs .chip { display: inline-flex; align-items: center; white-space: nowrap; text-decoration: none; color: inherit; flex: none; }
+.settings-tabs .chip.on { color: var(--on-primary); }

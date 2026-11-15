@@ -9,8 +9,11 @@ interface AuthConfig { google: boolean; oidc: { name: string } | null; local: bo
 type Mode = 'signin' | 'register' | 'pair' | 'quick' | 'mfa';
 
 const SIGNIN_ERRORS: Record<string, string> = {
-  expired: 'That Google sign-in took too long. Try again.',
-  invite: 'This server is invite-only. Enter a join code from a home first, then sign in with Google.',
+  expired: 'That sign-in took too long. Try again.',
+  denied: 'Sign-in was cancelled.',
+  failed: "Single sign-on didn't work. The admin can press Test under Settings → Server to check the provider.",
+  unreachable: "Den Duty couldn't reach the sign-in provider. Check its issuer URL.",
+  invite: 'This server is invite-only. Enter a join code from a home first, then press the sign-in button again. If you already have an account, sign in with your password and link it under Settings.',
   closed: 'New accounts are turned off on this server. Ask the admin.',
   disabled: 'That account is turned off. Ask the admin.',
 };

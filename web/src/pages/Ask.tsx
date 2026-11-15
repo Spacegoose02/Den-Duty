@@ -35,7 +35,7 @@ export function Ask() {
       {ai && !ai.enabled && (
         <div className="card row">
           <JudgeRaccoon size={56} badge />
-          <span style={{ flex: 1 }}>The judge, the doctor and the coach all use AI ideas, which are off. Turn them on with your own Anthropic key in <Link to="/settings">Settings</Link>.</span>
+          <span style={{ flex: 1 }}>The judge, the doctor and the coach all use AI ideas, which are off. Turn them on with your own Anthropic key in <Link to="/settings/apps#ai">Settings</Link>.</span>
         </div>
       )}
       {ai?.enabled && (tab === 'judge' ? <Judge /> : <Chat key={tab} kind={tab} />)}

@@ -154,7 +154,7 @@ export function ListsPage() {
                   <input type="checkbox" checked={l.ninjaRequests} disabled={!l.ninjaRequests && !ninja?.linked} onChange={(e) => void patch(l, { ninjaRequests: e.target.checked })} />
                   🦝 Kids' picks are requests: you say yes or no in Nighttime Ninja, and yes puts it on the shopping list you choose
                 </label>
-                {!ninja?.linked && !l.ninjaRequests && <p className="small muted" style={{ margin: 0 }}>Link Nighttime Ninja in <a href="/settings#ninja">Settings</a> to turn this on.</p>}
+                {!ninja?.linked && !l.ninjaRequests && <p className="small muted" style={{ margin: 0 }}>Link Nighttime Ninja in <a href="/settings/apps#ninja">Settings</a> to turn this on.</p>}
                 <button className="ghost danger" onClick={async () => { if (!confirm(`Delete the ${l.name} list?`)) return; await api(`${base}/lists/${l.id}`, { method: 'DELETE' }); setEditing(null); await reload(); }}>Delete list</button>
               </div>
             )}

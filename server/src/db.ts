@@ -1296,6 +1296,10 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX finished_books_home ON finished_books(home_id, status);
   `,
+  // An admin can say "the next TinyAuth (OIDC) sign-in with this email or username is this account".
+  `
+  ALTER TABLE users ADD COLUMN oidc_link_hint TEXT COLLATE NOCASE;
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

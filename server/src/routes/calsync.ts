@@ -53,17 +53,17 @@ export function calSyncRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const raw = req.cookies.dn_calsync;
     const un = raw ? req.unsignCookie(raw) : null;
     reply.clearCookie('dn_calsync', { path: '/' });
-    if (q.error) return reply.redirect('/settings?calendar=cancelled#calendar-sync');
-    if (!un?.valid || !un.value) return reply.redirect('/settings?calendar=expired#calendar-sync');
+    if (q.error) return reply.redirect('/settings/calendars?calendar=cancelled#calendar-sync');
+    if (!un?.valid || !un.value) return reply.redirect('/settings/calendars?calendar=expired#calendar-sync');
     const st = JSON.parse(un.value) as { state: string; homeId: string; kind: string };
-    if (st.state !== q.state || st.kind !== kind || !q.code) return reply.redirect('/settings?calendar=expired#calendar-sync');
+    if (st.state !== q.state || st.kind !== kind || !q.code) return reply.redirect('/settings/calendars?calendar=expired#calendar-sync');
     // Still a parent of that home?
     homeCtxFor(db, req, st.homeId, 'parent');
     const secret = await exchangeCode(kind, q.code);
     const id = newAccountId();
     db.prepare('INSERT INTO calendar_accounts (id, home_id, kind, name, secret) VALUES (?, ?, ?, ?, ?)')
       .run(id, st.homeId, kind, kind === 'google' ? 'Google Calendar' : 'Outlook', sealKey(JSON.stringify(secret)));
-    return reply.redirect(`/settings?calendar=${id}#calendar-sync`);
+    return reply.redirect(`/settings/calendars?calendar=${id}#calendar-sync`);
   });
 
   // CalDAV: iCloud (appleid.apple.com → App-Specific Passwords), Nextcloud, Fastmail...
