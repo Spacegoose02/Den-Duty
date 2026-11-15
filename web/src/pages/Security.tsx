@@ -4,7 +4,7 @@ import { api } from '../api.ts';
 import { useApp, useLoad } from '../state.tsx';
 
 interface SecurityInfo {
-  username: string | null; hasPassword: boolean; google: boolean; email: string | null; totpEnabled: boolean;
+  username: string | null; hasPassword: boolean; google: boolean; oidc: boolean; oidcProvider: string | null; email: string | null; totpEnabled: boolean;
   recoveryCodesLeft: number; passkeys: { id: string; name: string; createdAt: string; lastUsedAt: string | null }[]; passkeyOrigin: string;
 }
 interface SessionRow { id: string; current: boolean; userAgent: string | null; ip: string | null; method: string; createdAt: string; lastSeenAt: string | null }
@@ -15,6 +15,15 @@ function deviceName(ua: string | null): string {
   const app = /Electron/.test(ua) ? 'Desktop app' : /wv\)/.test(ua) ? 'Android app' : /Edg\//.test(ua) ? 'Edge' : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : 'Browser';
   return [app, os && `on ${os}`].filter(Boolean).join(' ');
 }
+
+const LINK_RESULTS: Record<string, string> = {
+  linked: 'Linked. You can sign in with it from now on.',
+  taken: 'That account is already linked to someone else here. Ask the admin to unlink it first.',
+  denied: 'Linking was cancelled.',
+  failed: "Linking didn't work. The admin can press Test under Settings → Server to check the provider.",
+  unreachable: "Den Duty couldn't reach the sign-in provider. Ask the admin to check its issuer URL.",
+  expired: 'That took too long. Try again.',
+};
 
 const when = (s: string | null) => (s ? new Date(`${s.replace(' ', 'T')}Z`).toLocaleString() : '');
 
@@ -41,6 +50,13 @@ export function SecurityCard() {
   const [reauth, setReauth] = useState('');
   const [codes, setCodes] = useState<string[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Coming back from linking a single sign-on account (/settings/account?sso=linked).
+  const [linkResult, setLinkResult] = useState<string | null>(() => {
+    const v = new URLSearchParams(window.location.search).get('sso');
+    if (!v) return null;
+    history.replaceState(null, '', window.location.pathname + window.location.hash);
+    return LINK_RESULTS[v] ?? null;
+  });
 
   async function run(fn: () => Promise<void>) {
     setError(null);
@@ -74,6 +90,32 @@ export function SecurityCard() {
         <input placeholder="New password (10+ characters)" type="password" value={pw.newPassword} onChange={(e) => setPw({ ...pw, newPassword: e.target.value })} autoComplete="new-password" style={{ flex: 1 }} />
         <button disabled={pw.newPassword.length < 10}>Save</button>
       </form>
+
+      {info.oidcProvider && (
+        <>
+          <h3>{info.oidcProvider}</h3>
+          {linkResult && <p className="small" style={{ margin: 0 }}>{linkResult}</p>}
+          {info.oidc ? (
+            <div className="row">
+              <span className="pill ok">Linked</span>
+              <span className="small muted" style={{ flex: 1 }}>You can sign in with {info.oidcProvider}.</span>
+              <button className="ghost danger" onClick={() => run(async () => {
+                if (!confirm(`Unlink ${info.oidcProvider}? You'll sign in with your password or a passkey instead.`)) return;
+                await api('/api/auth/oidc/unlink', { body: proof() });
+                setLinkResult(null);
+                toast('Unlinked');
+                await reload();
+              })}>Unlink</button>
+            </div>
+          ) : (
+            <div className="row">
+              <span className="small muted" style={{ flex: 1 }}>Link your {info.oidcProvider} account to sign in with it instead of a password.</span>
+              {/* A full page visit: the provider sends the browser back here when it's done. */}
+              <a className="btn" href="/api/auth/oidc?link=1">Link {info.oidcProvider}</a>
+            </div>
+          )}
+        </>
+      )}
 
       <h3>Two-factor codes</h3>
       {info.totpEnabled ? (
@@ -188,5 +230,27 @@ export function AdminUserActions({ user, onChange }: { user: { id: string; name:
       <button className="ghost" onClick={() => act({ signOut: true }, 'Signed out everywhere')}>Sign out</button>
       <button className="ghost danger" onClick={() => act({ disabled: !user.disabled }, user.disabled ? 'Turned back on' : 'Turned off')}>{user.disabled ? 'Turn on' : 'Turn off'}</button>
     </span>
+  );
+}
+
+/**
+ * Admin: link someone's account to the single sign-on provider ahead of time. Their next sign-in there with this
+ * email or username lands in their existing account. Or unlink it.
+ */
+export function AdminSsoLink({ user, provider, onChange }: { user: { id: string; name: string; has_oidc: number; oidc_link_hint: string | null }; provider: string; onChange: () => void }) {
+  const { toast } = useApp();
+  const act = async (body: object, msg: string) => {
+    try { await api(`/api/admin/users/${user.id}/security`, { body }); toast(msg); } catch (e) { toast((e as Error).message); }
+    onChange();
+  };
+  if (user.has_oidc) {
+    return <button className="ghost" onClick={() => { if (confirm(`Unlink ${user.name}'s ${provider} account?`)) void act({ oidcUnlink: true }, 'Unlinked'); }}>Unlink {provider}</button>;
+  }
+  return (
+    <button className="ghost" onClick={() => {
+      const hint = prompt(`${user.name}'s email or username at ${provider}. Their next ${provider} sign-in with it opens this account. Leave empty to cancel a pending link.`, user.oidc_link_hint ?? '');
+      if (hint == null) return;
+      void act({ oidcLinkHint: hint }, hint.trim() ? `Will link on ${user.name}'s next ${provider} sign-in` : 'Link cancelled');
+    }}>Link {provider}</button>
   );
 }

@@ -123,6 +123,7 @@ export function App() {
           <Route path="/den" element={<Navigate to="/parent-duty" replace />} />
           <Route path="/honeydo" element={<Navigate to="/parent-duty" replace />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/settings/:tab" element={<Settings />} />
           <Route path="/home/new" element={<HomeSetup inline />} />
           <Route path="*" element={<div className="card">That page wandered off. <NavLink to="/">Go home</NavLink></div>} />
         </Routes>

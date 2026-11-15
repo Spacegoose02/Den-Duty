@@ -8,6 +8,7 @@ import type { Row } from './db.ts';
 import { isPrivateAddress, limitAuth } from './security.ts';
 import { isAvatar } from '../../shared/catalog.ts';
 import { isThemeId } from '../../shared/themes.ts';
+import { openKey, sealKey } from './ai.ts';
 
 export const SESSION_COOKIE = 'dn_session';
 /** A family tablet's sign-in. It belongs to a home, not a person. */
@@ -30,6 +31,7 @@ export interface User {
   last_home_id: string | null;
   google_sub: string | null;
   oidc_sub: string | null;
+  oidc_link_hint: string | null;
   forward_user: string | null;
   password_hash: string | null;
   totp_secret: string | null;
@@ -189,8 +191,18 @@ function signedCookie(req: FastifyRequest, name: string): string | null {
  * before the round trip), or closed. Returns the reason instead of a user when it can't.
  */
 export function findOrCreateSsoUser(db: DatabaseSync, req: FastifyRequest, reply: FastifyReply | null,
-  id: { column: 'google_sub' | 'oidc_sub' | 'forward_user'; sub: string; email: string | null; name: string; skipInvite?: boolean }): User | 'closed' | 'invite' {
+  id: { column: 'google_sub' | 'oidc_sub' | 'forward_user'; sub: string; email: string | null; name: string; skipInvite?: boolean; trusted?: boolean; hints?: string[] }): User | 'closed' | 'invite' {
   let user = db.prepare(`SELECT * FROM users WHERE ${id.column} = ?`).get(id.sub) as User | undefined;
+  // An admin linked this account ahead of time by the provider's email or username: claim it on first sign-in.
+  if (!user && id.column === 'oidc_sub') {
+    for (const hint of id.hints ?? []) {
+      user = db.prepare('SELECT * FROM users WHERE oidc_link_hint = ? AND oidc_sub IS NULL').get(hint) as User | undefined;
+      if (user) {
+        db.prepare('UPDATE users SET oidc_sub = ?, oidc_link_hint = NULL WHERE id = ?').run(id.sub, user.id);
+        return getUser(db, user.id)!;
+      }
+    }
+  }
   if (!user && id.email) {
     user = db.prepare('SELECT * FROM users WHERE email = ? COLLATE NOCASE').get(id.email) as User | undefined;
     if (user) db.prepare(`UPDATE users SET ${id.column} = ? WHERE id = ?`).run(id.sub, user.id);
@@ -203,7 +215,9 @@ export function findOrCreateSsoUser(db: DatabaseSync, req: FastifyRequest, reply
     forwardUser: id.column === 'forward_user' ? id.sub : null,
   };
   const mode = signupMode(db);
-  if (!hasUsers(db) || mode === 'open') return createUser(db, fields);
+  // The admin said this provider only lets in people they trust (their own TinyAuth, Authelia...), so it doesn't
+  // need a join code and isn't stopped by "nobody new". They'll create or join a home next.
+  if (!hasUsers(db) || mode === 'open' || id.trusted) return createUser(db, fields);
   if (mode === 'closed') return 'closed';
   // The reverse proxy already decided who gets in, so it doesn't need a join code; they'll create or join a home next.
   if (id.skipInvite) return createUser(db, fields);
@@ -404,24 +418,86 @@ interface Provider {
   scope: string;
   /** The users column that remembers who this is at the provider. */
   column: 'google_sub' | 'oidc_sub';
+  /** Make an account for anyone the provider lets through, whatever the sign-up mode says. */
+  autoCreate: boolean;
 }
 
-function provider(key: string): Provider {
-  if (key === 'google' && config.google) {
-    return { key, label: 'Google', issuer: 'https://accounts.google.com', ...config.google, scope: 'openid email profile', column: 'google_sub' };
+/** The OpenID Connect provider as saved under Settings → Server, or from the OIDC_* variables. */
+export interface OidcSettings {
+  name: string;
+  issuer: string;
+  clientId: string;
+  clientSecret: string;
+  /** Asked for on top of openid, email and profile. */
+  extraScopes: string;
+  autoCreate: boolean;
+  showOnLogin: boolean;
+  /** Where these came from: the admin's editor, or environment variables. */
+  source: 'settings' | 'env';
+}
+
+const BASE_SCOPES = ['openid', 'email', 'profile'];
+
+/** openid, email and profile, then whatever extra the admin typed (commas or spaces), without repeats. */
+export function oidcScope(extra: string): string {
+  const words = [...BASE_SCOPES, ...extra.split(/[\s,]+/).map((w) => w.trim()).filter(Boolean)];
+  return [...new Set(words)].join(' ');
+}
+
+export function oidcSettings(db: DatabaseSync): OidcSettings | null {
+  const raw = getSetting(db, 'oidc');
+  if (raw) {
+    try {
+      const v = JSON.parse(raw) as Row;
+      if (v.issuer && v.clientId) {
+        return {
+          name: String(v.name || 'single sign-on'), issuer: String(v.issuer), clientId: String(v.clientId),
+          clientSecret: v.clientSecret ? openKey(String(v.clientSecret)) ?? '' : '',
+          extraScopes: String(v.extraScopes ?? ''), autoCreate: !!v.autoCreate, showOnLogin: v.showOnLogin !== false, source: 'settings',
+        };
+      }
+    } catch { /* a broken row falls back to the environment */ }
   }
-  if (key === 'oidc' && config.oidc) {
-    return { key, label: config.oidc.name, issuer: config.oidc.issuer, clientId: config.oidc.clientId, clientSecret: config.oidc.clientSecret, scope: config.oidc.scopes, column: 'oidc_sub' };
+  if (config.oidc) {
+    const extra = config.oidc.scopes.split(/\s+/).filter((w) => !BASE_SCOPES.includes(w)).join(' ');
+    return { name: config.oidc.name, issuer: config.oidc.issuer, clientId: config.oidc.clientId, clientSecret: config.oidc.clientSecret,
+      extraScopes: extra, autoCreate: false, showOnLogin: true, source: 'env' };
+  }
+  return null;
+}
+
+export function saveOidcSettings(db: DatabaseSync, v: Omit<OidcSettings, 'source'> | null): void {
+  if (!v) db.prepare("DELETE FROM server_settings WHERE key = 'oidc'").run();
+  else setSetting(db, 'oidc', JSON.stringify({ ...v, clientSecret: v.clientSecret ? sealKey(v.clientSecret) : '' }));
+  discovered.clear();
+}
+
+/** The address the provider sends people back to. It has to be registered at the provider exactly like this. */
+export const callbackUrl = (key: 'google' | 'oidc' = 'oidc') => `${config.publicUrl}/api/auth/${key}/callback`;
+
+function provider(db: DatabaseSync, key: string): Provider {
+  if (key === 'google' && config.google) {
+    return { key, label: 'Google', issuer: 'https://accounts.google.com', ...config.google, scope: 'openid email profile', column: 'google_sub', autoCreate: false };
+  }
+  const o = key === 'oidc' ? oidcSettings(db) : null;
+  if (o) {
+    return { key: 'oidc', label: o.name, issuer: o.issuer.trim(), clientId: o.clientId, clientSecret: o.clientSecret,
+      scope: oidcScope(o.extraScopes), column: 'oidc_sub', autoCreate: o.autoCreate };
   }
   throw new HttpError(404, 'That sign-in method is not configured');
 }
 
 const discovered = new Map<string, Promise<oidc.Configuration>>();
-function discover(p: Provider): Promise<oidc.Configuration> {
-  let cfg = discovered.get(p.key);
+/** Fetches the provider's /.well-known/openid-configuration once per issuer + client, and again after a failure. */
+export function discover(p: Pick<Provider, 'issuer' | 'clientId' | 'clientSecret'>): Promise<oidc.Configuration> {
+  const cacheKey = JSON.stringify([p.issuer, p.clientId, p.clientSecret]);
+  let cfg = discovered.get(cacheKey);
   if (!cfg) {
-    cfg = oidc.discovery(new URL(p.issuer), p.clientId, p.clientSecret).catch((err) => { discovered.delete(p.key); throw err; });
-    discovered.set(p.key, cfg);
+    // A confidential client sends its secret in the token request body (client_secret_post), which Google,
+    // TinyAuth, Authentik, Authelia, Keycloak and Pocket ID all take. Without a secret it's a public client using PKCE.
+    cfg = oidc.discovery(new URL(p.issuer), p.clientId, p.clientSecret || undefined, p.clientSecret ? undefined : oidc.None())
+      .catch((err) => { discovered.delete(cacheKey); throw err; });
+    discovered.set(cacheKey, cfg);
   }
   return cfg;
 }
@@ -442,7 +518,7 @@ function userHomes(db: DatabaseSync, userId: string) {
 export function registerAuthRoutes(app: FastifyInstance, db: DatabaseSync): void {
   app.get('/api/auth/config', async (req) => ({
     google: !!config.google,
-    oidc: config.oidc ? { name: config.oidc.name } : null,
+    oidc: ((o) => (o?.showOnLogin ? { name: o.name } : null))(oidcSettings(db)),
     local: localLoginAllowed(db, req),
     passwords: true,
     passkeys: true,
@@ -466,13 +542,19 @@ export function registerAuthRoutes(app: FastifyInstance, db: DatabaseSync): void
   });
 
   app.get('/api/auth/:provider', async (req, reply) => {
-    const p = provider((req.params as { provider: string }).provider);
-    const cfg = await discover(p);
+    const p = provider(db, (req.params as { provider: string }).provider);
+    // ?link=1 from Settings: attach this provider to the account that's signed in now, instead of signing in.
+    const link = (req.query as Row).link && p.key === 'oidc' ? requireUser(req).id : undefined;
+    let cfg: oidc.Configuration;
+    try { cfg = await discover(p); } catch (err) {
+      req.log.warn({ err, issuer: p.issuer }, `${p.label} sign-in: could not read the provider's openid-configuration`);
+      return reply.redirect(link ? '/settings/account?sso=unreachable' : '/?signin=unreachable');
+    }
     const verifier = oidc.randomPKCECodeVerifier();
     const state = oidc.randomState();
     const nonce = oidc.randomNonce();
     const url = oidc.buildAuthorizationUrl(cfg, {
-      redirect_uri: `${config.publicUrl}/api/auth/${p.key}/callback`,
+      redirect_uri: callbackUrl(p.key),
       scope: p.scope,
       code_challenge: await oidc.calculatePKCECodeChallenge(verifier),
       code_challenge_method: 'S256',
@@ -480,26 +562,51 @@ export function registerAuthRoutes(app: FastifyInstance, db: DatabaseSync): void
       nonce,
       ...(p.key === 'google' ? { prompt: 'select_account' } : {}),
     });
-    reply.setCookie('dn_oidc', JSON.stringify({ verifier, state, nonce, provider: p.key }), { ...cookieOpts(reply), maxAge: 600 });
+    reply.setCookie('dn_oidc', JSON.stringify({ verifier, state, nonce, provider: p.key, link }), { ...cookieOpts(reply), maxAge: 600 });
     return reply.redirect(url.href);
   });
 
   app.get('/api/auth/:provider/callback', async (req, reply) => {
-    const p = provider((req.params as { provider: string }).provider);
-    const cfg = await discover(p);
+    const p = provider(db, (req.params as { provider: string }).provider);
     const raw = req.cookies.dn_oidc;
     const un = raw ? req.unsignCookie(raw) : null;
     if (!un?.valid || !un.value) return reply.redirect('/?signin=expired');
     reply.clearCookie('dn_oidc', { path: '/' });
-    const { verifier, state, nonce, provider: started } = JSON.parse(un.value) as { verifier: string; state: string; nonce: string; provider?: string };
+    const { verifier, state, nonce, provider: started, link } = JSON.parse(un.value) as { verifier: string; state: string; nonce: string; provider?: string; link?: string };
     if (started && started !== p.key) return reply.redirect('/?signin=expired');
-    const current = new URL(req.url, config.publicUrl);
-    const tokens = await oidc.authorizationCodeGrant(cfg, current, { pkceCodeVerifier: verifier, expectedState: state, expectedNonce: nonce });
-    const claims = tokens.claims();
+    const fail = (why: string) => reply.redirect(link ? `/settings/account?sso=${why}` : `/?signin=${why}`);
+    const q = req.query as Row;
+    if (typeof q.error === 'string') {
+      req.log.warn({ error: q.error, description: q.error_description }, `${p.label} sign-in was refused by the provider`);
+      return fail(q.error === 'access_denied' ? 'denied' : 'failed');
+    }
+    // Hand openid-client the exact redirect URI we sent (it strips the query to get it), even when PUBLIC_URL has a path.
+    const current = new URL(callbackUrl(p.key));
+    current.search = new URL(req.url, 'http://x').search;
+    let claims: oidc.IDToken | undefined;
+    try {
+      const cfg = await discover(p);
+      const tokens = await oidc.authorizationCodeGrant(cfg, current, { pkceCodeVerifier: verifier, expectedState: state, expectedNonce: nonce });
+      claims = tokens.claims();
+    } catch (err) {
+      req.log.warn({ err }, `${p.label} sign-in failed while trading the code for tokens`);
+      return fail('failed');
+    }
     if (!claims) throw new HttpError(400, `${p.label} did not return an identity`);
+    if (link) {
+      // Only the same person who pressed "Link" may finish it, and one provider account opens one Den Duty account.
+      if (req.user?.id !== link) return fail('expired');
+      const owner = db.prepare('SELECT id FROM users WHERE oidc_sub = ?').get(claims.sub) as Row | undefined;
+      if (owner && owner.id !== link) return fail('taken');
+      db.prepare('UPDATE users SET oidc_sub = ?, oidc_link_hint = NULL WHERE id = ?').run(claims.sub, link);
+      return reply.redirect('/settings/account?sso=linked');
+    }
     const email = typeof claims.email === 'string' && claims.email_verified ? claims.email.toLowerCase() : null;
     const name = str(claims.name, 60) ?? str(claims.preferred_username, 60) ?? email?.split('@')[0] ?? 'Parent';
-    const user = findOrCreateSsoUser(db, req, reply, { column: p.column, sub: claims.sub, email, name });
+    const user = findOrCreateSsoUser(db, req, reply, {
+      column: p.column, sub: claims.sub, email, name, trusted: p.autoCreate,
+      hints: [claims.email, claims.preferred_username].filter((h): h is string => typeof h === 'string' && !!h),
+    });
     if (typeof user === 'string') return reply.redirect(`/?signin=${user}`);
     if (user.disabled) return reply.redirect('/?signin=disabled');
     if (user.totp_enabled) return reply.redirect(`/?mfa=${encodeURIComponent(startMfa(db, user.id, p.key))}`);

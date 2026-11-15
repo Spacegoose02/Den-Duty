@@ -75,7 +75,7 @@ export function Dashboard() {
           <div className="row">
             <Link className="btn primary" to="/kids">🦝 Add kids</Link>
             <Link className="btn" to="/chores">🧹 Add chores</Link>
-            <Link className="btn" to="/settings">📱 Family tablet</Link>
+            <Link className="btn" to="/settings/home">📱 Family tablet</Link>
           </div>
         </div>
       )}

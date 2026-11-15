@@ -92,7 +92,7 @@ function KidForm({ initial, onSubmit, submitLabel, hasPin, onClearPin }: {
               <span className="small muted">Goal, chore and penalty ideas, daily practice ideas, the den message and Ask Dr. Bandit. Off: built-ins only, nothing is sent.</span></span>
           </button>
         </div>
-        {aiProblem && <span className="small chip-reason">{aiProblem} <Link to="/settings#ai">Open Settings → AI ideas</Link></span>}
+        {aiProblem && <span className="small chip-reason">{aiProblem} <Link to="/settings/apps#ai">Open Settings → AI ideas</Link></span>}
       </div>
       {!d.pagesOff.includes('doctors') && (
         <div className="field">
@@ -111,7 +111,7 @@ function KidForm({ initial, onSubmit, submitLabel, hasPin, onClearPin }: {
           <span>Daily practice ideas</span>
           {aiProblem && (
             <p className="small chip-reason" style={{ margin: 0 }}>
-              {aiProblem} <Link to="/settings#ai">Open Settings → AI ideas</Link>
+              {aiProblem} <Link to="/settings/apps#ai">Open Settings → AI ideas</Link>
             </p>
           )}
           {!aiProblem && !d.aiOn && <p className="small chip-reason" style={{ margin: 0 }}>AI ideas are off for {d.name || 'this kid'} (switch above), so these won't show.</p>}

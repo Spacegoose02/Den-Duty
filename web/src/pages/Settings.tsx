@@ -3,16 +3,17 @@ import { ScreenTimeCard } from '../components/ScreenTime.tsx';
 import { AccessControls, CaregiverControls } from '../components/Caregivers.tsx';
 import { useEffect, useState } from 'react';
 import { PushSettings } from '../components/Push.tsx';
-import { Link } from 'react-router-dom';
+import { Link, Navigate, NavLink, useLocation, useParams } from 'react-router-dom';
 import { api } from '../api.ts';
 import { useApp, useLoad } from '../state.tsx';
 import { AvatarPicker, RaccoonAvatar } from '../components/Raccoon.tsx';
-import { AdminSignIn, AdminUserActions, SecurityCard } from './Security.tsx';
+import { AdminSignIn, AdminSsoLink, AdminUserActions, SecurityCard } from './Security.tsx';
 import { POINT_ICONS } from '../../../shared/catalog.ts';
 import { ThemePicker } from '../components/ThemePicker.tsx';
 import { CalendarsCard } from './Calendars.tsx';
 import { AiCard } from '../components/Ideas.tsx';
 import { BackupsCard } from '../components/Backups.tsx';
+import { SsoProviderCard } from '../components/SsoProvider.tsx';
 import { PhotoFrameCard } from '../components/PhotoFrame.tsx';
 import { LANGUAGES } from '../../../shared/languages.ts';
 import { TradeModeCard } from '../components/Trades.tsx';
@@ -269,14 +270,16 @@ function HomeSettings() {
 }
 
 interface Overview {
-  users: { id: string; name: string; username: string | null; email: string | null; is_admin: number; disabled: number; totp_enabled: number; has_password: number; has_google: number; passkeys: number; homes: number }[];
+  users: { id: string; name: string; username: string | null; email: string | null; is_admin: number; disabled: number; totp_enabled: number; has_password: number; has_google: number; has_oidc: number; has_proxy: number; oidc_link_hint: string | null; passkeys: number; homes: number }[];
   homes: { id: string; name: string; parents: number; kids: number; chores: number }[];
 }
 
 function Admin() {
   const { who, toast } = useApp();
   const [data, reload] = useLoad<Overview>('/api/admin/overview');
+  const [sso] = useLoad<{ provider: { name: string } | null }>('/api/admin/sso');
   if (!data) return null;
+  const ssoName = sso?.provider?.name ?? null;
   const me = who!.user!;
   return (
     <div className="card stack">
@@ -290,18 +293,20 @@ function Admin() {
             {data.users.map((u) => (
               <tr key={u.id}>
                 <td>{u.name}{!!u.disabled && <span className="pill bad"> off</span>}<div className="small muted">{u.username ?? u.email}</div></td>
-                <td className="small">{[u.has_password && 'password', u.has_google && 'Google', u.passkeys && 'passkey', u.totp_enabled && '2FA'].filter(Boolean).join(', ') || 'quick only'}</td>
+                <td className="small">{[u.has_password && 'password', u.has_google && 'Google', u.has_oidc && (ssoName ?? 'single sign-on'), u.has_proxy && 'proxy', u.passkeys && 'passkey', u.totp_enabled && '2FA'].filter(Boolean).join(', ') || 'quick only'}
+                  {u.oidc_link_hint && <div className="small muted">links to {ssoName ?? 'SSO'} user “{u.oidc_link_hint}” on their next sign-in</div>}</td>
                 <td>{u.homes}</td>
                 <td>
                   <input type="checkbox" checked={!!u.is_admin} disabled={u.id === me.id} style={{ width: 24, minHeight: 24 }}
                     onChange={async (e) => { await api(`/api/admin/users/${u.id}`, { method: 'PATCH', body: { isAdmin: e.target.checked } }); await reload(); }} />
                 </td>
-                <td>{u.id !== me.id && (
+                <td>
                   <span className="row" style={{ gap: 4 }}>
-                    <AdminUserActions user={u} onChange={() => void reload()} />
-                    <button className="ghost danger" onClick={async () => { if (confirm(`Delete ${u.name}'s account?`)) { await api(`/api/admin/users/${u.id}`, { method: 'DELETE' }); await reload(); toast('Deleted'); } }}>Delete</button>
+                    {ssoName && <AdminSsoLink user={u} provider={ssoName} onChange={() => void reload()} />}
+                    {u.id !== me.id && <AdminUserActions user={u} onChange={() => void reload()} />}
+                    {u.id !== me.id && <button className="ghost danger" onClick={async () => { if (confirm(`Delete ${u.name}'s account?`)) { await api(`/api/admin/users/${u.id}`, { method: 'DELETE' }); await reload(); toast('Deleted'); } }}>Delete</button>}
                   </span>
-                )}</td>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -605,14 +610,33 @@ function WeatherCard() {
   );
 }
 
+type TabId = 'home' | 'calendars' | 'apps' | 'account' | 'server';
+const TABS: { id: TabId; label: string; adminOnly?: boolean }[] = [
+  { id: 'home', label: '🏠 Home' },
+  { id: 'calendars', label: '📅 Calendars' },
+  { id: 'apps', label: '🧩 Apps and AI' },
+  { id: 'account', label: '🙂 You' },
+  { id: 'server', label: '🛠️ Server', adminOnly: true },
+];
+/** Old links pointed at a card on the one long page (/settings#ninja). Each card now lives on a tab. */
+const CARD_TAB: Record<string, TabId> = {
+  'photo-frame': 'home', 'read-aloud': 'home', 'screen-time': 'home', trades: 'home',
+  'calendar-sync': 'calendars',
+  lootden: 'apps', bookbandit: 'apps', ninja: 'apps', wishes: 'apps', sports: 'apps', weather: 'apps', ai: 'apps',
+  'sign-in-provider': 'server', backups: 'server',
+};
+
 export function Settings() {
   const { who, home, base, toast, refresh } = useApp();
-  // Links like /settings#ai jump to that card once it has loaded.
+  const { tab: tabParam } = useParams();
+  const loc = useLocation();
+  const isAdmin = !!who?.user?.isAdmin;
+  // Links like /settings/apps#ai jump to that card once it has loaded.
   useEffect(() => {
-    if (!location.hash) return;
-    const t = window.setTimeout(() => document.querySelector(location.hash)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 600);
+    if (!loc.hash) return;
+    const t = window.setTimeout(() => document.querySelector(loc.hash)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 400);
     return () => window.clearTimeout(t);
-  }, []);
+  }, [loc.pathname, loc.hash]);
   // Wait for the home so a caregiver never loads the parents' cards.
   if (!home) return null;
   if (home.access === 'caregiver') return (
@@ -632,31 +656,65 @@ export function Settings() {
       <SecurityCard />
     </div>
   );
+  const tabs = TABS.filter((t) => !t.adminOnly || isAdmin);
+  const tab = tabs.find((t) => t.id === tabParam)?.id;
+  if (!tab) {
+    // /settings, an old /settings#card link, or a tab this person can't see: pick the right tab and keep the rest.
+    const fromHash = CARD_TAB[loc.hash.slice(1)];
+    const to = fromHash && tabs.some((t) => t.id === fromHash) ? fromHash : 'home';
+    return <Navigate to={`/settings/${to}${loc.search}${loc.hash}`} replace />;
+  }
   return (
     <div className="stack" style={{ maxWidth: 960 }}>
       <div className="topbar"><h1>Settings</h1></div>
-      <FamilyTablets />
-      <PushSettings />
-      <FamilyWallCard />
-      <PhotoFrameCard />
-      <LootDenCard />
-      <BookBanditCard />
-      <NinjaCard />
-      <WishesCard />
-      <SportsCard />
-      <WeatherCard />
-      <ReadAloudVoiceCard />
-      <HomeSettings />
-      <TradeModeCard />
-      <ScreenTimeCard />
-      <CalendarsCard />
-      <CalendarSyncCard />
-      <AiCard />
-      <Profile />
-      <SecurityCard />
-      {who?.user?.isAdmin && <Admin />}
-      {who?.user?.isAdmin && <BackupsCard />}
-      <p className="small muted">Den Duty is open source under the MIT license.</p>
+      <nav className="chips settings-tabs" role="tablist" aria-label="Settings sections">
+        {tabs.map((t) => (
+          <NavLink key={t.id} to={`/settings/${t.id}`} role="tab" aria-selected={t.id === tab} className={`chip${t.id === tab ? ' on' : ''}`}>{t.label}</NavLink>
+        ))}
+      </nav>
+      {tab === 'home' && (
+        <>
+          <HomeSettings />
+          <FamilyTablets />
+          <FamilyWallCard />
+          <PhotoFrameCard />
+          <TradeModeCard />
+          <ScreenTimeCard />
+          <ReadAloudVoiceCard />
+        </>
+      )}
+      {tab === 'calendars' && (
+        <>
+          <CalendarsCard />
+          <CalendarSyncCard />
+        </>
+      )}
+      {tab === 'apps' && (
+        <>
+          <AiCard />
+          <LootDenCard />
+          <BookBanditCard />
+          <NinjaCard />
+          <WishesCard />
+          <SportsCard />
+          <WeatherCard />
+        </>
+      )}
+      {tab === 'account' && (
+        <>
+          <Profile />
+          <PushSettings />
+          <SecurityCard />
+        </>
+      )}
+      {tab === 'server' && isAdmin && (
+        <>
+          <Admin />
+          <SsoProviderCard />
+          <BackupsCard />
+          <p className="small muted">Den Duty is open source under the MIT license.</p>
+        </>
+      )}
     </div>
   );
 }
