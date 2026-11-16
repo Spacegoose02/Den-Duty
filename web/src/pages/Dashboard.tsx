@@ -1,6 +1,7 @@
 import { TradesWaitingCard } from '../components/Trades.tsx';
 import { FeelingsCard } from '../components/Feelings.tsx';
 import { HabitsWaitingCard } from '../components/Habits.tsx';
+import { SchoolCard } from '../components/School.tsx';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, type QuickReward, type ReviewItem, type Summary } from '../api.ts';
@@ -122,6 +123,7 @@ export function Dashboard() {
 
       <PracticeWaitingCard onChange={reloadSummary} />
       <HabitsWaitingCard />
+      {!caregiver && <SchoolCard />}
       <TradesWaitingCard />
       <FeelingsCard />
       <MedsTodayCard />

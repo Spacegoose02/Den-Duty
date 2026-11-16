@@ -6,6 +6,8 @@ export const KID_PAGES = [
   { id: 'parentduty', label: 'Parent Duty', icon: '📝', hint: 'Your to-dos for this kid' },
   { id: 'timeout', label: 'Time-outs', icon: '⏳', hint: 'Time-outs and buying time back' },
   { id: 'helpdesk', label: 'Helpdesk', icon: '🛎️', hint: 'Asking a grown-up for help' },
+  { id: 'school', label: 'School work', icon: '🎒', hint: 'Homework, tests and projects with due dates' },
+  { id: 'math', label: 'Math facts helper', icon: '🧮', hint: 'Multiplication and division shown different ways, with gentle review' },
   { id: 'habits', label: 'Practice', icon: '🎯', hint: 'Reading, instruments, homework and other practice' },
   { id: 'feelings', label: 'Feelings check-in', icon: '💛', hint: 'A daily “how do you feel?” on their board' },
   { id: 'screentime', label: 'Screen-time bank', icon: '📺', hint: 'Earning and spending screen-time minutes (when the bank is on)' },

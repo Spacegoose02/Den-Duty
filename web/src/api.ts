@@ -1,5 +1,6 @@
 import { enqueue, isQueueable, QueuedError, setOffline } from './offline.tsx';
 import type { FamilyEvent } from './components/Events.tsx';
+import type { SchoolItem } from './components/School.tsx';
 import type { ScheduleKind } from '../../shared/schedule.ts';
 import type { RoutineId } from '../../shared/catalog.ts';
 import type { Achievement, LevelInfo } from '../../shared/progress.ts';
@@ -130,7 +131,7 @@ export interface AppointmentItem {
   /** Parents only: the repeat this visit is part of. */
   repeat?: { seriesId: string; index: number; every: number; unit: 'day' | 'week' | 'month'; endDate: string | null; count: number | null } | null;
 }
-export interface Day { date: string; items: AgendaItem[]; external?: ExternalItem[]; events?: FamilyEvent[]; duty?: DutyItem[]; reminders?: Reminder[]; practices?: PracticeItem[]; appointments?: AppointmentItem[] }
+export interface Day { date: string; items: AgendaItem[]; external?: ExternalItem[]; events?: FamilyEvent[]; duty?: DutyItem[]; reminders?: Reminder[]; practices?: PracticeItem[]; appointments?: AppointmentItem[]; school?: SchoolItem[] }
 
 export interface Goal {
   id: string; memberId: string; title: string; targetPoints: number; reward: string | null; status: 'active' | 'redeemed';

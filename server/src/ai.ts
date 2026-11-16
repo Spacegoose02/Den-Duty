@@ -499,3 +499,39 @@ export async function chat(db: DatabaseSync, homeId: string, kind: ChatKind, nam
   if (!answer) throw new HttpError(502, 'The AI answer was empty. Try again.');
   return { answer, urgent: !!r.urgent };
 }
+
+// ---------- "Ask Rocky" in the math facts helper ----------
+
+const MATH_SYSTEM = `You are Rocky, a friendly raccoon who helps a child understand and remember a multiplication or division fact.
+The child finds remembering math facts hard, so explain the ONE fact you're given in a fresh, concrete way they haven't tried yet:
+everyday objects, a picture they can imagine, a pattern, a funny memory hook or rhyme, or a way to work it out from a fact they already know.
+Never use timers, pressure, or words like "easy" or "just". Be warm and short. Match the reading level to the age.
+explanation: 2 to 4 short sentences, one idea per sentence. picture: a row of emoji that shows the idea (at most 40 emoji, may use line breaks).
+memoryHook: one short sentence to help them remember the answer next time. Always state the correct answer.`;
+
+const MATH_SCHEMA = {
+  type: 'object',
+  properties: {
+    explanation: { type: 'array', items: { type: 'string' } },
+    picture: { type: 'string' },
+    memoryHook: { type: 'string' },
+  },
+  required: ['explanation', 'picture', 'memoryHook'],
+  additionalProperties: false,
+};
+
+/** Only the fact, the age and the ways already tried are sent: no names. */
+export function mathPrompt(fact: string, answer: number, age: number | null, tried: string[]): string {
+  return [
+    `The fact: ${fact} = ${answer}.`,
+    age != null ? `The child is ${age} years old.` : "The child's age isn't known; aim for about 8.",
+    tried.length ? `Ways the child already saw (use something different): ${tried.join(', ')}.` : '',
+  ].filter(Boolean).join('\n');
+}
+
+export async function mathExplain(db: DatabaseSync, homeId: string, fact: string, answer: number, age: number | null, tried: string[]): Promise<{ explanation: string[]; picture: string; memoryHook: string }> {
+  const r = await askJson<{ explanation?: unknown; picture?: unknown; memoryHook?: unknown }>(db, homeId, MATH_SYSTEM, mathPrompt(fact, answer, age, tried), MATH_SCHEMA);
+  const explanation = (Array.isArray(r.explanation) ? r.explanation : []).map((s) => String(s).trim().slice(0, 300)).filter(Boolean).slice(0, 5);
+  if (!explanation.length) throw new HttpError(502, 'Rocky lost his train of thought. Try again?');
+  return { explanation, picture: String(r.picture ?? '').slice(0, 400), memoryHook: String(r.memoryHook ?? '').trim().slice(0, 300) };
+}
