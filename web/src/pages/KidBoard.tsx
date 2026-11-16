@@ -17,6 +17,8 @@ import { KidMedicine, PracticeMode } from '../components/KidPractice.tsx';
 import { RoutineCards, RoutinePlayer } from '../components/Routines.tsx';
 import { KidJars } from '../components/Money.tsx';
 import { KidHabits } from '../components/Habits.tsx';
+import { KidSchool } from '../components/School.tsx';
+import { KidMath } from '../components/MathHelper.tsx';
 import { KidFeelings } from '../components/Feelings.tsx';
 import { KidDen } from '../components/Den.tsx';
 import { KidLists } from '../components/Lists.tsx';
@@ -307,6 +309,10 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
           })}
         </div>
       </section>
+
+      {!kid.pagesOff.includes('school') && <KidSchool memberId={memberId} kidName={kid.name} color={kid.color} asParent={asParent} readAloud={readAloud} />}
+
+      {!kid.pagesOff.includes('math') && <KidMath memberId={memberId} kidName={kid.name} color={kid.color} asParent={asParent} readAloud={readAloud} />}
 
       <KidHabits memberId={memberId} kidName={kid.name} color={kid.color} asParent={asParent} readAloud={readAloud} />
 

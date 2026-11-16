@@ -856,3 +856,82 @@ button.link { background: none; border: none; padding: 0; min-height: 0; color: 
 .settings-tabs { flex-wrap: nowrap; overflow-x: auto; padding: 4px 2px 6px; scrollbar-width: thin; }
 .settings-tabs .chip { display: inline-flex; align-items: center; white-space: nowrap; text-decoration: none; color: inherit; flex: none; }
 .settings-tabs .chip.on { color: var(--on-primary); }
+
+/* School work: the due list on a kid's board, the parent home card and calendar lines. */
+.school-row { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); flex-wrap: wrap; }
+.school-group + .school-row { border-top: 0; }
+.school-group { font-size: .8rem; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-top: 4px; }
+.school-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.school-actions .on-study { background: color-mix(in srgb, var(--ok) 18%, var(--surface)); border-color: var(--ok); }
+.school-step { display: flex; align-items: center; gap: 8px; font-size: .9rem; cursor: pointer; }
+.school-step input { width: 20px; min-height: 20px; }
+.school-step.done { color: var(--muted); text-decoration: line-through; }
+.school-suggest { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 10px; border-radius: 14px; background: color-mix(in srgb, var(--primary) 8%, transparent); }
+.due-chip { display: inline-block; font-size: .78rem; font-weight: 800; padding: 1px 8px; border-radius: 999px; background: var(--surface-2); color: var(--muted); }
+.due-chip.overdue { background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); }
+.due-chip.today, .due-chip.tomorrow { background: color-mix(in srgb, var(--warn) 20%, transparent); color: var(--warn); }
+.due-chip.waiting { background: color-mix(in srgb, var(--primary) 16%, transparent); color: var(--primary); }
+.due-chip.done { background: color-mix(in srgb, var(--ok) 16%, transparent); color: var(--ok); }
+.school-row.overdue .kanban-title { color: var(--danger); }
+.school-kinds { grid-template-columns: repeat(3, 1fr); }
+.school-kinds .help-pick { min-height: 90px; }
+.agenda-ext.school-line { color: var(--text); border-left-width: 4px; }
+.agenda-ext.school-line.overdue { color: var(--danger); }
+.month-line.school { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; font-weight: 700; }
+.month-line.school.done { opacity: .6; font-weight: 500; }
+.month-line.school.overdue { color: var(--danger); }
+
+/* Math facts helper */
+.math-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.math-actions .help-pick { min-height: 120px; }
+.tricky-chip { border-color: #f59f00; background: color-mix(in srgb, #f59f00 14%, var(--surface)); }
+.fact-garden summary { cursor: pointer; padding: 4px 0; }
+.garden-grid { display: grid; gap: 3px; margin-top: 8px; }
+.garden-head { font-size: .75rem; font-weight: 800; color: var(--muted); text-align: center; align-self: center; padding: 0 4px; }
+.garden-cell { min-height: 32px; padding: 0; font-size: .85rem; border-radius: 8px; font-weight: 700; color: var(--muted); }
+.garden-cell.seed { background: color-mix(in srgb, #f59f00 18%, var(--surface)); }
+.garden-cell.growing { background: color-mix(in srgb, var(--ok) 14%, var(--surface)); }
+.garden-cell.known { background: color-mix(in srgb, var(--ok) 32%, var(--surface)); }
+.math-stats .stats { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
+.math-bars { display: flex; align-items: flex-end; gap: 4px; height: 60px; }
+.math-bar { flex: 1; height: 100%; display: flex; align-items: flex-end; background: var(--surface-2); border-radius: 6px; overflow: hidden; }
+.math-bar span { width: 100%; border-radius: 6px; min-height: 3px; }
+.recall-fact { font-size: clamp(2.4rem, 8vw, 3.6rem); font-weight: 900; letter-spacing: -0.02em; display: flex; align-items: center; gap: 12px; justify-content: center; }
+.recall-answer { min-width: 1.6em; padding: 0 10px; border-radius: 16px; background: var(--surface-2); }
+.recall-answer.right { background: color-mix(in srgb, var(--ok) 24%, var(--surface)); color: var(--ok); }
+.recall-answer.wrong { background: color-mix(in srgb, #f59f00 22%, var(--surface)); }
+.answer-peek { font-size: inherit; font-weight: 900; min-width: 1.6em; min-height: 0; padding: 0 12px; border-radius: 16px; line-height: 1.2; }
+.answer-peek.shown { background: color-mix(in srgb, var(--ok) 24%, var(--surface)); color: var(--ok); }
+.math-pad { grid-template-columns: repeat(3, 72px); }
+.math-pad button { min-height: 64px; font-size: 1.7rem; }
+.big-btn { font-size: 1.25rem; min-height: 60px; padding: 0 28px; }
+.trick-list { width: 100%; max-width: 560px; gap: 8px; }
+.trick { display: flex; gap: 12px; align-items: flex-start; text-align: left; padding: 10px 14px; border-radius: 16px; background: color-mix(in srgb, var(--primary) 8%, var(--surface)); border: 1px solid var(--border); }
+.trick-icon { font-size: 2rem; line-height: 1; }
+.mini-array { display: grid; gap: 4px; }
+.mini-array span { width: 14px; height: 14px; border-radius: 50%; }
+.way-tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
+.way-tab { flex: none; display: inline-flex; flex-direction: column; align-items: center; gap: 2px; min-width: 84px; padding: 8px 10px; border-radius: 16px; font-size: .8rem; font-weight: 800; }
+.way-tab > span { font-size: 1.6rem; line-height: 1; }
+.way-tab.seen:not(.on) { border-color: color-mix(in srgb, var(--primary) 40%, var(--border)); }
+.way-tab.on { background: var(--primary); color: var(--on-primary); border-color: transparent; }
+.way-body { min-height: 240px; padding: 14px; border-radius: 18px; background: var(--surface-2); display: flex; flex-direction: column; justify-content: center; }
+.explore-feel { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
+.groups { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+.group { border: 3px dashed; border-radius: 50%; width: 96px; height: 96px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: var(--surface); }
+.group-things { display: flex; flex-wrap: wrap; justify-content: center; gap: 1px; max-width: 76px; font-size: 1rem; line-height: 1.1; }
+.array-wrap { display: flex; gap: 10px; align-items: flex-start; --dot: clamp(14px, 4.2vw, 26px); }
+.array { display: grid; gap: 5px; --dot: clamp(14px, 4.2vw, 26px); }
+.array span { width: var(--dot); height: var(--dot); border-radius: 50%; background: color-mix(in srgb, var(--muted) 25%, transparent); transition: background .25s var(--ease), transform .25s var(--bounce); }
+.array span.on { transform: scale(1.04); }
+.array span.crossed { opacity: .45; outline: 2px dashed var(--danger); }
+.array-counts { display: grid; gap: 5px; }
+.array-counts span { height: var(--dot); display: flex; align-items: center; font-weight: 800; font-size: .85rem; }
+.array-counts span.faded { opacity: .15; }
+.hops { width: 100%; max-width: 680px; color: var(--text); }
+.split-eq { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; font-size: 1.2rem; font-weight: 800; }
+.family-tri { width: 220px; max-width: 70%; color: var(--text); }
+.family-line { font-size: 1.4rem; font-weight: 800; padding: 2px 14px; border-radius: 12px; background: var(--surface); animation: rise .35s var(--ease) backwards; }
+.story-pic { display: flex; flex-direction: column; gap: 2px; font-size: 1.2rem; line-height: 1.2; }
+.rocky-says { max-width: 560px; text-align: left; gap: 8px; }
+.rocky-pic { font-size: 1.6rem; white-space: pre-wrap; text-align: center; line-height: 1.3; }

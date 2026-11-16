@@ -11,6 +11,7 @@ import { ReminderForm } from '../components/Reminders.tsx';
 import type { Reminder } from '../api.ts';
 import { addDays, startOfWeek } from '../../../shared/schedule.ts';
 import { EventForm, SnapFlyer, eventIcon, type FamilyEvent } from '../components/Events.tsx';
+import { SchoolForm, SchoolLine, type SchoolItem } from '../components/School.tsx';
 
 const mark = (i: AgendaItem) => (i.status === 'approved' ? '✅' : i.status === 'submitted' ? '⏳' : i.status === 'rejected' ? '🔁' : '');
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
@@ -103,13 +104,13 @@ function AppointmentLine({ a, kid, withName, onEdit }: { a: AppointmentItem; kid
 }
 
 /** Everything on one day, grouped per kid: chores, practices, appointments; then Parent Duty and subscribed feeds. */
-interface Edits { appt: (a: AppointmentItem) => void; practice: (p: PracticeItem) => void; duty: (d: DutyItem) => void; reminder: (r: Reminder) => void; event: (e: FamilyEvent) => void }
+interface Edits { school: (s: SchoolItem) => void; appt: (a: AppointmentItem) => void; practice: (p: PracticeItem) => void; duty: (d: DutyItem) => void; reminder: (r: Reminder) => void; event: (e: FamilyEvent) => void }
 
 function DayDetail({ d, kids, today, parent, solo, onTap, onTick, edit }: {
   d: Day; kids: Kid[]; today: string; parent: boolean; solo: boolean; onTap?: (i: AgendaItem) => void; onTick?: (p: PracticeItem) => void; edit?: Edits;
 }) {
   const past = d.date <= today;
-  const empty = !d.items.length && !d.events?.length && !d.external?.length && !d.duty?.length && !d.reminders?.length && !d.practices?.length && !d.appointments?.length;
+  const empty = !d.items.length && !d.school?.length && !d.events?.length && !d.external?.length && !d.duty?.length && !d.reminders?.length && !d.practices?.length && !d.appointments?.length;
   return (
     <>
       {d.events?.map((e) => {
@@ -126,9 +127,11 @@ function DayDetail({ d, kids, today, parent, solo, onTap, onTick, edit }: {
         const items = d.items.filter((i) => i.memberId === k.id);
         const practices = d.practices?.filter((p) => p.memberId === k.id) ?? [];
         const appts = d.appointments?.filter((a) => a.memberId === k.id) ?? [];
+        const school = d.school?.filter((s) => s.memberId === k.id) ?? [];
         const who = solo ? (parent ? `${k.name} has` : 'You have') : `${k.name} has`;
         return (
           <div key={k.id} className="stack" style={{ gap: 4 }}>
+            {school.map((s) => <SchoolLine key={s.id} s={s} kidName={solo ? undefined : k.name} color={k.color} onEdit={edit?.school} />)}
             {items.length > 0 && <ChoreGroup name={k.name} avatar={k.avatar} color={k.color} items={items} past={past} label={`${who} ${plural(items.length, 'chore')}`} onTap={onTap} />}
             {practices.length > 0 && <PracticeGroup kid={k} practices={practices} label={`${solo && !parent ? 'You have' : `${k.name}:`} ${practices.some((p) => !p.skipped) ? plural(practices.filter((p) => !p.skipped).length, 'practice') : 'practice skipped'}`} canTick={past} onTick={onTick} onEdit={edit?.practice} />}
             {appts.map((a) => <AppointmentLine key={a.id} a={a} kid={k} withName={!solo} onEdit={edit?.appt} />)}
@@ -220,9 +223,9 @@ export function Calendar({ kidId, title = 'Calendar' }: { kidId?: string; title?
   const step = (n: number) => setAnchor(month ? addMonths(month, n) : addDays(start, 7 * n));
   const label = month ? MONTH_FMT.format(new Date(`${month}T00:00:00Z`)) : `${shortDate(start)} – ${shortDate(addDays(start, 6))}`;
   const pickedDay = data?.days.find((d) => d.date === picked);
-  const [editing, setEditing] = useState<{ appt?: AppointmentItem; practice?: PracticeItem; duty?: DutyItem; reminder?: Reminder; event?: FamilyEvent | null; newEvent?: string; snap?: boolean } | null>(null);
+  const [editing, setEditing] = useState<{ newSchool?: string; school?: SchoolItem; appt?: AppointmentItem; practice?: PracticeItem; duty?: DutyItem; reminder?: Reminder; event?: FamilyEvent | null; newEvent?: string; snap?: boolean } | null>(null);
   // Parents edit straight from the calendar; kids only look.
-  const edits: Edits | undefined = parent ? { appt: (a) => setEditing({ appt: a }), practice: (p) => setEditing({ practice: p }), duty: (d) => setEditing({ duty: d }), reminder: (r) => setEditing({ reminder: r }), event: (e) => setEditing({ event: e }) } : undefined;
+  const edits: Edits | undefined = parent ? { school: (x) => setEditing({ school: x }), appt: (a) => setEditing({ appt: a }), practice: (p) => setEditing({ practice: p }), duty: (d) => setEditing({ duty: d }), reminder: (r) => setEditing({ reminder: r }), event: (e) => setEditing({ event: e }) } : undefined;
   const done = async () => { setEditing(null); await reload(); };
 
   return (
@@ -236,6 +239,7 @@ export function Calendar({ kidId, title = 'Calendar' }: { kidId?: string; title?
         {parent && !kidId && home?.access !== 'caregiver' && <>
           <button onClick={() => setEditing({ newEvent: picked ?? realToday })}>＋ Event</button>
           <button onClick={() => setEditing({ snap: true })}>📸 Snap a flyer</button>
+          <button onClick={() => setEditing({ newSchool: picked ?? realToday })}>＋ School work</button>
         </>}
         <button className="icon" aria-label={`Previous ${view}`} onClick={() => step(-1)}>◀</button>
         {anchor && <button onClick={() => setAnchor(null)}>Today</button>}
@@ -276,6 +280,7 @@ export function Calendar({ kidId, title = 'Calendar' }: { kidId?: string; title?
                       </span>
                     );
                   })}
+                  {d.school?.map((s) => <span key={s.id} className={`month-line school ${s.state}`} style={{ borderLeftColor: kids.find((k) => k.id === s.memberId)?.color }}>{s.icon} {kidId ? '' : `${kids.find((k) => k.id === s.memberId)?.name ?? ''}: `}{s.title}</span>)}
                   {d.appointments?.map((a) => <span key={a.id} className="month-line appt">{KIND_ICONS[a.kind] ?? '📌'} {timeText(a.time)}</span>)}
                   {d.events?.slice(0, 2).map((e) => <span key={e.id} className="month-line event">{eventIcon(e)} {e.title}</span>)}
                   {(d.events?.length ?? 0) > 2 && <span className="month-line muted">+{d.events!.length - 2} more</span>}
@@ -286,7 +291,7 @@ export function Calendar({ kidId, title = 'Calendar' }: { kidId?: string; title?
               );
             })}
           </div>
-          <p className="small muted" style={{ margin: 0 }}>🧹 chores · ✅ done · 🌈 practices. Tap a day to open it.</p>
+          <p className="small muted" style={{ margin: 0 }}>🧹 chores · ✅ done · 🌈 practices · ✏️ homework · 📝 tests · 🔬 projects. Tap a day to open it.</p>
           {pickedDay && (
             <div className={`agenda-day picked-day${pickedDay.date === realToday ? ' today' : ''}`}>
               <div className="agenda-date row">
@@ -300,6 +305,8 @@ export function Calendar({ kidId, title = 'Calendar' }: { kidId?: string; title?
       )}
 
       {(editing?.event || editing?.newEvent) && <EventForm event={editing.event} date={editing.newEvent} onClose={() => setEditing(null)} onSaved={() => void done()} />}
+      {editing?.school && <SchoolForm item={editing.school} onClose={() => setEditing(null)} onDone={() => void done()} />}
+      {editing?.newSchool && <SchoolForm item={{ kind: 'homework', dueDate: editing.newSchool }} kids={(home?.kids ?? []).filter((k) => !k.pagesOff.includes('school'))} onClose={() => setEditing(null)} onDone={() => void done()} />}
       {editing?.snap && <SnapFlyer onClose={() => setEditing(null)} onSaved={() => void done()} />}
       {editing?.appt && (
         <AppointmentForm

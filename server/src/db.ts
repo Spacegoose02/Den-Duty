@@ -1300,6 +1300,61 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE users ADD COLUMN oidc_link_hint TEXT COLLATE NOCASE;
   `,
+  // School work: homework, tests and projects with a due date, per kid. A kid ticks it off (waiting for a grown-up when
+  // it pays points); a test collects the days the kid studied and, afterwards, a score. event_id is the family calendar
+  // event it was made from ("Science SOL"), which the calendar then hides so it doesn't show twice.
+  `
+  CREATE TABLE school_work (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (kind IN ('homework', 'test', 'project')),
+    title TEXT NOT NULL,
+    subject TEXT,
+    due_date TEXT NOT NULL,
+    notes TEXT,
+    steps TEXT NOT NULL DEFAULT '[]',
+    studied TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'todo' CHECK (status IN ('todo', 'waiting', 'done')),
+    points INTEGER NOT NULL DEFAULT 0,
+    paid INTEGER NOT NULL DEFAULT 0,
+    score TEXT,
+    event_id TEXT,
+    done_at TEXT,
+    done_by TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX school_work_kid ON school_work(member_id, due_date);
+  CREATE INDEX school_work_home ON school_work(home_id, due_date);
+  -- Math facts helper: a parent's plan per kid (tables, × and ÷, cards a day, points), each fact's spaced-review box,
+  -- and a log of what the kid did (recall answers, facts explored, which way helped).
+  ALTER TABLE members ADD COLUMN math_plan TEXT;
+  ALTER TABLE members ADD COLUMN math_paid_on TEXT;
+  CREATE TABLE math_facts (
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    fact TEXT NOT NULL,
+    box INTEGER NOT NULL DEFAULT 0,
+    due TEXT NOT NULL,
+    right_count INTEGER NOT NULL DEFAULT 0,
+    wrong_count INTEGER NOT NULL DEFAULT 0,
+    hint_count INTEGER NOT NULL DEFAULT 0,
+    last_seen TEXT,
+    PRIMARY KEY (member_id, fact)
+  );
+  CREATE TABLE math_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    date TEXT NOT NULL,
+    fact TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('recall', 'explore')),
+    result TEXT NOT NULL,
+    way TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX math_log_kid ON math_log(member_id, date);
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {
