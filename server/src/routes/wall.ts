@@ -19,6 +19,7 @@ import { listKids } from './homes.ts';
 import { lootdenWall } from './lootden.ts';
 import { kidSports } from './sports.ts';
 import { homeWeather } from './weather.ts';
+import { holidaySettings, holidayView, niceFor } from './holiday.ts';
 import { wallLists } from './lists.ts';
 import { syncRequests } from './ninja.ts';
 import { framePhotos } from './photoframe.ts';
@@ -67,6 +68,9 @@ export async function wallData(db: DatabaseSync, homeId: string) {
   await refreshStale(db, homeId).catch(() => { /* feeds being down must not blank the wall */ });
   const lunch = (externalBetween(db, homeId, today, today, true).get(today) ?? []).filter((x) => x.kind === 'lunch');
 
+  const holiday = holidayView(db, homeId);
+  const holidayS = holiday ? holidaySettings(db, homeId) : null;
+
   const kidCards = await Promise.all(kids.map(async (k) => {
     const items = on(k, 'chores') ? todayList(db, homeId, k.id, today) : [];
     const goal = on(k, 'goals') ? goalsFor(db, k.id).find((g) => !g.reached) ?? goalsFor(db, k.id)[0] ?? null : null;
@@ -93,6 +97,8 @@ export async function wallData(db: DatabaseSync, homeId: string) {
       doctorGoals: therapy?.goals.map((g) => ({ id: g.id, title: g.title, area: g.area, progress: g.progress })) ?? [],
       // Their followed teams from the sports tracker (when linked): live scores and the next game.
       sports: await kidSports(db, homeId, k.id),
+      // Holiday mode's nice meter (when it's on and showing).
+      nice: holidayS?.nice && on(k, 'chores') ? (({ score, level }) => ({ score, level }))(niceFor(db, home, holidayS, k.id, today)) : null,
     };
   }));
 
@@ -132,6 +138,8 @@ export async function wallData(db: DatabaseSync, homeId: string) {
     lootden: await lootdenWall(db, homeId),
     // Weather Scout (when linked): today's weather, the recess light and any alerts.
     weather: await homeWeather(db, homeId),
+    // Holiday mode (when it's showing): the countdown, sleigh and cams are drawn on the tablet from these settings.
+    holiday,
     // The photo frame (when on): an Immich album and this week's photo-proof highlights.
     photoFrame: await framePhotos(db, homeId),
     // Shared lists marked for the wall (open items only), with Nighttime Ninja's answers to grocery requests.

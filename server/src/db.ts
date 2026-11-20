@@ -1355,6 +1355,28 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX math_log_kid ON math_log(member_id, date);
   `,
+  // Holiday mode (countdown, elf of the day, nice meter, sleigh tracker, North Pole cams): the home's settings as JSON
+  // (NULL = never set up, which is off), and each kid's elf task per day. An elf task that pays points waits for a
+  // grown-up unless the home says not to; points go through the ledger like any bonus.
+  `
+  ALTER TABLE homes ADD COLUMN holiday TEXT;
+  CREATE TABLE elf_tasks (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    date TEXT NOT NULL,
+    task TEXT NOT NULL,
+    elf TEXT NOT NULL,
+    points INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'waiting' CHECK (status IN ('waiting', 'done', 'rejected')),
+    paid INTEGER NOT NULL DEFAULT 0,
+    note TEXT,
+    reviewed_by TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (member_id, date)
+  );
+  CREATE INDEX elf_tasks_home ON elf_tasks(home_id, status);
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

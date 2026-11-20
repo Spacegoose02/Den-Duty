@@ -1,4 +1,5 @@
 import { CalendarSyncCard } from '../components/Events.tsx';
+import { HolidaySettingsCard } from '../components/Holiday.tsx';
 import { ScreenTimeCard } from '../components/ScreenTime.tsx';
 import { AccessControls, CaregiverControls } from '../components/Caregivers.tsx';
 import { useEffect, useState } from 'react';
@@ -620,7 +621,7 @@ const TABS: { id: TabId; label: string; adminOnly?: boolean }[] = [
 ];
 /** Old links pointed at a card on the one long page (/settings#ninja). Each card now lives on a tab. */
 const CARD_TAB: Record<string, TabId> = {
-  'photo-frame': 'home', 'read-aloud': 'home', 'screen-time': 'home', trades: 'home',
+  'photo-frame': 'home', holiday: 'home', 'read-aloud': 'home', 'screen-time': 'home', trades: 'home',
   'calendar-sync': 'calendars',
   lootden: 'apps', bookbandit: 'apps', ninja: 'apps', wishes: 'apps', sports: 'apps', weather: 'apps', ai: 'apps',
   'sign-in-provider': 'server', backups: 'server',
@@ -677,6 +678,7 @@ export function Settings() {
           <HomeSettings />
           <FamilyTablets />
           <FamilyWallCard />
+          <HolidaySettingsCard />
           <PhotoFrameCard />
           <TradeModeCard />
           <ScreenTimeCard />

@@ -55,6 +55,7 @@ import { eventRoutes } from './routes/events.ts';
 import { calSyncRoutes } from './routes/calsync.ts';
 import { schoolRoutes } from './routes/school.ts';
 import { mathRoutes } from './routes/mathfacts.ts';
+import { holidayRoutes } from './routes/holiday.ts';
 
 export async function buildApp(db: DatabaseSync, opts: { logger?: boolean; serveWeb?: boolean } = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 1024 * 1024, trustProxy: config.trustProxy });
@@ -121,6 +122,17 @@ export async function buildApp(db: DatabaseSync, opts: { logger?: boolean; serve
   calSyncRoutes(app, db);
   schoolRoutes(app, db);
   mathRoutes(app, db);
+  holidayRoutes(app, db);
+
+  // Holiday mode's North Pole cams, when a family keeps its own copies of the scenes: <data>/holiday-cams/cam1_morning.mp4 …
+  // Served with range requests so videos can seek and loop. Only the twelve cam file names are served.
+  const camDir = path.join(config.dataDir, 'holiday-cams');
+  if (fs.existsSync(camDir)) {
+    await app.register(fastifyStatic, {
+      root: camDir, prefix: '/holiday-cams/', decorateReply: false, index: false, dotfiles: 'deny',
+      allowedPath: (p) => /^\/cam[1-4]_(morning|day|evening)\.mp4$/.test(p),
+    });
+  }
 
   const hasWeb = opts.serveWeb !== false && fs.existsSync(path.join(config.webDist, 'index.html'));
   if (hasWeb) {

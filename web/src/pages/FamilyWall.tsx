@@ -13,6 +13,7 @@ import type { TeamGoal } from '../api.ts';
 import { TeamBar } from '../components/TeamGoals.tsx';
 import { WallSports, type KidSports } from '../components/Sports.tsx';
 import { WallWeather, type HomeWeather } from '../components/Weather.tsx';
+import { WallHoliday, WallNice, type HolidayView } from '../components/Holiday.tsx';
 
 interface WallKid {
   id: string; name: string; avatar: string; color: string; theme: string | null; hasPin: boolean; pagesOff: KidPage[]; balance: number;
@@ -26,6 +27,8 @@ interface WallKid {
   doctorGoals: { id: string; title: string; area: string; progress: number }[];
   /** Their followed teams from the sports tracker, when linked. */
   sports?: KidSports;
+  /** Holiday mode's nice meter, while it's showing. */
+  nice?: { score: number; level: number } | null;
 }
 interface WallDay { date: string; events?: { id: string; title: string; time: string | null; location: string | null; kidIds: string[] }[]; kids: { kidId: string; chores: number; done: number; practices: number; appointments: { id: string; kind: string; title: string; time: string }[] }[] }
 interface Wall {
@@ -39,6 +42,8 @@ interface Wall {
   lootden?: LootDenWall | null;
   /** Today's weather from Weather Scout, when it's linked. */
   weather?: HomeWeather;
+  /** Holiday mode, while it's showing: the countdown, cams and sleigh. */
+  holiday?: HolidayView | null;
   /** The photo frame: an Immich album and this week's photo-proof highlights, when it's on. */
   lists?: FamilyList[];
   photoFrame?: { seconds: number; photos: { url: string; caption: string | null; kind: 'immich' | 'proof' }[] } | null;
@@ -167,6 +172,8 @@ function WallView({ wall, now, reload }: { wall: Wall; now: Date; reload: () => 
           <Link to="/login" className="btn ghost wall-parents">{t('🔒 Parents')}</Link>
         </header>
 
+        <WallHoliday h={wall.holiday} />
+
         <div className="wall-kids">
           {wall.kids.map((k) => (
             <button key={k.id} className="wall-kid" data-theme={k.theme ?? undefined} style={{ ['--kid' as string]: k.color }} onClick={() => sign.start(k)}
@@ -207,6 +214,7 @@ function WallView({ wall, now, reload }: { wall: Wall; now: Date; reload: () => 
               ))}
               {k.penalties.map((p, i) => <div key={i} className="wall-note">🌱 Working on: {p.reason}</div>)}
               {k.doctorGoals.slice(0, 2).map((g) => <div key={g.id} className="wall-note">{AREA_ICONS[g.area] ?? '🌈'} {g.title} · {g.progress}%</div>)}
+              <WallNice nice={k.nice} />
               <WallSports sports={k.sports} />
               {k.denMessage && <div className="wall-den">{k.denMessage}</div>}
             </button>

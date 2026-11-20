@@ -184,7 +184,7 @@ export function installHardening(app: FastifyInstance): void {
     reply.header('x-content-type-options', 'nosniff');
     reply.header('referrer-policy', 'strict-origin-when-cross-origin');
     reply.header('x-frame-options', 'DENY');
-    reply.header('permissions-policy', 'camera=(), microphone=(), geolocation=(), publickey-credentials-get=(self), publickey-credentials-create=(self)');
+    reply.header('permissions-policy', 'camera=(), microphone=(), geolocation=(self), publickey-credentials-get=(self), publickey-credentials-create=(self)');
     reply.header('cross-origin-opener-policy', 'same-origin');
     if (req.protocol === 'https') reply.header('strict-transport-security', 'max-age=31536000');
     if (!req.url.startsWith('/api/')) {
@@ -193,6 +193,8 @@ export function installHardening(app: FastifyInstance): void {
         "script-src 'self'",
         "style-src 'self' 'unsafe-inline'",
         "img-src 'self' data: blob: https: http:",
+        // Holiday mode's North Pole cams play scenes from Nordpol Card's release or a family's own server.
+        "media-src 'self' blob: https: http:",
         "connect-src 'self'",
         "font-src 'self' data:",
         "object-src 'none'",
