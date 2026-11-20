@@ -27,6 +27,7 @@ import { KidMeetingNote } from './Meeting.tsx';
 import { KidTrades, TradeForm, useTrades } from '../components/Trades.tsx';
 import { KidSportsCards } from '../components/Sports.tsx';
 import { KidWeatherCard } from '../components/Weather.tsx';
+import { KidHoliday } from '../components/Holiday.tsx';
 import { SpeakButton, speak } from '../components/Speak.tsx';
 import { QueuedError, useQueuedDone } from '../offline.tsx';
 import { clockText } from '../../../shared/schedule.ts';
@@ -237,6 +238,8 @@ function BoardView({ memberId, asParent, onExit }: { memberId: string; asParent:
 
       {!asParent && trades && <KidTrades memberId={memberId} trades={trades.trades} mode={trades.mode} onChange={() => { void reloadTrades(); void reload(); }} />}
       {trading && <TradeForm item={trading} onClose={() => setTrading(null)} onDone={() => { setTrading(null); void reloadTrades(); }} />}
+
+      <KidHoliday memberId={memberId} simple={kid.pictureMode} readAloud={readAloud} asParent={asParent} />
 
       <KidMeetingNote memberId={memberId} color={kid.color} />
 
