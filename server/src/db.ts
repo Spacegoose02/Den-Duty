@@ -1377,6 +1377,21 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX elf_tasks_home ON elf_tasks(home_id, status);
   `,
+  // Naughty points: a grown-up takes a few points off a kid's nice meter, with a reason. They live here and never in
+  // the points ledger, so a kid's balance, allowance, stats and charts don't change.
+  `
+  CREATE TABLE naughty_marks (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    date TEXT NOT NULL,
+    points INTEGER NOT NULL CHECK (points BETWEEN 1 AND 25),
+    reason TEXT,
+    given_by TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX naughty_marks_kid ON naughty_marks(member_id, date);
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

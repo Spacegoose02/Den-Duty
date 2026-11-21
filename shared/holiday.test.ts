@@ -67,6 +67,8 @@ test('nice meter', () => {
   assert.equal(niceScore({ done: 5, due: 10, kind: 0, penalties: 0 }), 70);
   assert.equal(niceScore({ done: 0, due: 10, kind: 0, penalties: 20 }), 0);
   assert.equal(niceScore({ done: 5, due: 10, kind: 2, penalties: 1 }), 71);
+  assert.equal(niceScore({ done: 0, due: 0, kind: 0, penalties: 0, naughty: 7 }), 68, 'each naughty point takes one off');
+  assert.equal(niceScore({ done: 0, due: 0, kind: 0, penalties: 0, naughty: 500 }), 0);
   assert.equal(niceLevel(100), 4);
   assert.equal(niceLevel(75), 3);
   assert.equal(niceLevel(0), 0);

@@ -11,7 +11,7 @@ import { homeInfo, homeToday, ledger, writeLedger, type HomeInfo } from '../chor
 import { dailyStats } from '../progress.ts';
 import { getKid, listKids } from './homes.ts';
 import { byOf } from './chores.ts';
-import { cleanHoliday, elfFor, holidayActive, niceLevel, niceScore, type HolidaySettings } from '../../../shared/holiday.ts';
+import { NAUGHTY_MAX, cleanHoliday, elfFor, holidayActive, niceLevel, niceScore, type HolidaySettings } from '../../../shared/holiday.ts';
 import { isLang, type Lang } from '../../../shared/languages.ts';
 import { addDays } from '../../../shared/schedule.ts';
 
@@ -41,6 +41,10 @@ const kidLang = (kid: Row, home: HomeInfo): Lang => {
   return isLang(l) ? l : 'en';
 };
 
+type LogLine = { date: string; at: string };
+/** Elf log order: by day, then by when it was written. */
+const newestFirst = (a: LogLine, b: LogLine) => b.date.localeCompare(a.date) || b.at.localeCompare(a.at);
+
 /** The nice meter: the last two weeks of chores (or since Holiday mode started), kind extras and penalties. */
 export function niceFor(db: DatabaseSync, home: HomeInfo, s: HolidaySettings, memberId: string, today: string) {
   let since = addDays(today, -13);
@@ -53,11 +57,20 @@ export function niceFor(db: DatabaseSync, home: HomeInfo, s: HolidaySettings, me
       SUM(amount < 0 AND kind = 'adjust') AS pen_n
     FROM points_ledger WHERE member_id = ? AND date BETWEEN ? AND ?`).get(memberId, since, today) as Row;
   const kind = Number(rows.kind_n ?? 0), penalties = Number(rows.pen_n ?? 0);
-  const score = niceScore({ done, due, kind, penalties });
-  // The elf log: the latest lines from the points ledger (spending on rewards isn't news for the elves).
-  const log = ledger(db, memberId, 30).filter((e) => e.kind !== 'redeem' && e.date >= since).slice(0, 5)
-    .map((e) => ({ id: e.id, date: e.date, amount: e.amount, reason: e.reason }));
-  return { score, level: niceLevel(score), done, due, kind, penalties, since, log };
+  // Naughty points come from their own table: they pull this meter down and nothing else.
+  const marks = db.prepare('SELECT * FROM naughty_marks WHERE member_id = ? AND date BETWEEN ? AND ? ORDER BY date DESC, created_at DESC')
+    .all(memberId, since, today) as Row[];
+  const naughty = marks.reduce((n, m) => n + (m.points as number), 0);
+  const score = niceScore({ done, due, kind, penalties, naughty });
+  // The elf log: the latest lines from the points ledger (spending on rewards isn't news for the elves) and any
+  // naughty points, newest first.
+  const fromLedger = ledger(db, memberId, 30).filter((e) => e.kind !== 'redeem' && e.date >= since)
+    .map((e) => ({ id: `p${e.id}`, date: e.date, at: e.createdAt, amount: e.amount, reason: e.reason, naughty: false }));
+  const fromMarks = marks.map((m) => ({
+    id: m.id as string, date: m.date as string, at: m.created_at as string, amount: -(m.points as number), reason: (m.reason as string | null) ?? '', naughty: true,
+  }));
+  const log = [...fromMarks, ...fromLedger].sort(newestFirst).slice(0, 6);
+  return { score, level: niceLevel(score), done, due, kind, penalties, naughty, since, log };
 }
 
 function elfView(r: Row) {
@@ -100,6 +113,20 @@ export function holidayRoutes(app: FastifyInstance, db: DatabaseSync): void {
     return { holiday: holidayView(db, ctx.homeId) };
   });
 
+  // The parent home's Nice list: every kid's meter and one elf log for the whole family.
+  app.get('/api/homes/:homeId/holiday/nice', async (req) => {
+    const ctx = homeCtx(db, req, 'parent');
+    const a = active(ctx);
+    if (!a.on || !a.s.nice) return { nice: null };
+    const kids = listKids(db, ctx.homeId).filter((k) => !k.pagesOff.includes('chores' as never)).map((k) => ({ k, n: niceFor(db, a.home, a.s, k.id, a.today) }));
+    return {
+      nice: {
+        kids: kids.map(({ k, n }) => ({ id: k.id, name: k.name, avatar: k.avatar, color: k.color, score: n.score, level: n.level, naughty: n.naughty })),
+        log: kids.flatMap(({ k, n }) => n.log.map((e) => ({ ...e, kid: k.name, memberId: k.id }))).sort(newestFirst).slice(0, 8),
+      },
+    };
+  });
+
   // A kid's board: today's elf (and how their task is going) and the nice meter.
   app.get('/api/homes/:homeId/kids/:memberId/holiday', async (req) => {
     const ctx = homeCtx(db, req);
@@ -117,6 +144,34 @@ export function holidayRoutes(app: FastifyInstance, db: DatabaseSync): void {
         nice: a.s.nice ? niceFor(db, a.home, a.s, memberId, a.today) : null,
       },
     };
+  });
+
+  // Naughty points: a grown-up takes 1 to 25 points off a kid's nice meter, with a reason the kid sees in the elf log.
+  // Only the nice meter changes: nothing goes in the points ledger.
+  app.post('/api/homes/:homeId/kids/:memberId/holiday/naughty', async (req) => {
+    const ctx = homeCtx(db, req, 'parent');
+    const { memberId } = req.params as { memberId: string };
+    getKid(db, ctx, memberId);
+    const a = active(ctx);
+    if (!a.on || !a.s.nice) throw new HttpError(400, "The nice list isn't showing right now");
+    const b = (req.body ?? {}) as Row;
+    const points = Number(b.points);
+    if (!Number.isInteger(points) || points < 1 || points > NAUGHTY_MAX) throw new HttpError(400, `Naughty points are 1 to ${NAUGHTY_MAX}`);
+    const id = newId();
+    db.prepare('INSERT INTO naughty_marks (id, home_id, member_id, date, points, reason, given_by) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(id, ctx.homeId, memberId, a.today, points, str(b.reason, 120), byOf(ctx).name);
+    return { id, nice: niceFor(db, a.home, a.s, memberId, a.today) };
+  });
+
+  // Take naughty points back (a mistake, or they made up for it).
+  app.delete('/api/homes/:homeId/holiday/naughty/:id', async (req) => {
+    const ctx = homeCtx(db, req, 'parent');
+    const { id } = req.params as { id: string };
+    const r = db.prepare('SELECT member_id FROM naughty_marks WHERE id = ? AND home_id = ?').get(id, ctx.homeId) as Row | undefined;
+    if (!r) throw new HttpError(404, 'Those naughty points are already gone');
+    db.prepare('DELETE FROM naughty_marks WHERE id = ?').run(id);
+    const a = active(ctx);
+    return { ok: true, nice: niceFor(db, a.home, a.s, r.member_id as string, a.today) };
   });
 
   const pay = (ctx: HomeCtx, r: Row, today: string, by: { userId: string | null; name: string }) => {
