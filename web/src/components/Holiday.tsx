@@ -23,9 +23,15 @@ export interface HolidayView {
   settings: Pick<HolidaySettings, 'day' | 'time' | 'title' | 'snow' | 'elf' | 'nice' | 'sleigh' | 'eta' | 'place' | 'cams' | 'camUrl' | 'camLabels' | 'camLook'>;
 }
 interface ElfTask { id: string; memberId: string; date: string; task: string; elf: string; points: number; status: 'waiting' | 'done' | 'rejected'; paid: boolean; note: string | null }
+interface NiceView {
+  score: number; level: number; naughty: number;
+  /** Ledger lines and naughty points (naughty: true), newest first. */
+  log: NiceLine[];
+}
+interface NiceLine { id: string; date: string; at: string; amount: number; reason: string; naughty: boolean }
 interface KidHoliday {
   elf: (ElfOfDay & { points: number; needsOk: boolean; done: ElfTask | null }) | null;
-  nice: { score: number; level: number; log: { id: number; date: string; amount: number; reason: string }[] } | null;
+  nice: NiceView | null;
 }
 
 const reducedMotion = () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -179,12 +185,55 @@ function ElfCard({ memberId, elf, asParent, readAloud, onChange }: { memberId: s
 
 const NICE_EMOJI = ['📣', '👀', '🙂', '⭐', '🌟'];
 
-export function NiceMeter({ nice, compact = false }: { nice: NonNullable<KidHoliday['nice']>; compact?: boolean }) {
+const NAUGHTY_PICKS = [1, 2, 3, 5, 10];
+
+/** A grown-up's "naughty points": a few points off the nice meter, with a reason. The kid's points don't change. */
+function NaughtyForm({ memberId, onDone }: { memberId: string; onDone: () => void }) {
+  const { base, toast } = useApp();
+  const [points, setPoints] = useState(3);
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const give = async () => {
+    setBusy(true);
+    try {
+      await api(`${base}/kids/${memberId}/holiday/naughty`, { body: { points, reason } });
+      toast(`😈 −${points} on the nice list`);
+      setReason('');
+      onDone();
+    } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
+  };
+  return (
+    <div className="holiday-naughty stack">
+      <div className="holiday-sub">😈 Naughty points come off the nice list only. Points, allowance and stats stay the same.</div>
+      <div className="row">
+        {NAUGHTY_PICKS.map((n) => (
+          <button key={n} type="button" className={points === n ? 'primary' : 'ghost'} aria-pressed={points === n} onClick={() => setPoints(n)}>−{n}</button>
+        ))}
+      </div>
+      <input type="text" maxLength={120} value={reason} placeholder="Why? (the kid sees this in the elf log)" aria-label="Why?"
+        onChange={(e) => setReason(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !busy) void give(); }} />
+      <button className="primary" disabled={busy} onClick={() => void give()}>😈 Take {points} off the nice list</button>
+    </div>
+  );
+}
+
+export function NiceMeter({ nice, compact = false, memberId, asParent = false, onChange }: {
+  nice: NiceView; compact?: boolean; memberId?: string; asParent?: boolean; onChange?: () => void;
+}) {
   const t = useT();
-  const { home } = useApp();
+  const { base, home, toast } = useApp();
+  const [naughty, setNaughty] = useState(false);
+  const canMark = asParent && !compact && !!memberId;
+  const takeBack = async (id: string) => {
+    try { await api(`${base}/holiday/naughty/${id}`, { method: 'DELETE' }); toast('Naughty points taken back'); onChange?.(); }
+    catch (e) { toast((e as Error).message); }
+  };
   return (
     <section className={`holiday-card stack${compact ? ' compact' : ''}`} aria-label={t('⭐ Nice list')}>
-      <h2 className="holiday-h">{t('⭐ Nice list')}</h2>
+      <div className="row" style={{ flexWrap: 'nowrap' }}>
+        <h2 className="holiday-h" style={{ flex: 1 }}>{t('⭐ Nice list')}</h2>
+        {canMark && <button className="ghost" aria-expanded={naughty} onClick={() => setNaughty((v) => !v)}>{naughty ? 'Close' : '😈 Naughty points'}</button>}
+      </div>
       <div className="holiday-meter" role="meter" aria-valuenow={nice.score} aria-valuemin={0} aria-valuemax={100} aria-label={t(NICE_LEVELS[nice.level])}>
         <i style={{ width: `${nice.score}%` }} />
         <span className="holiday-meter-pin" style={{ left: `${nice.score}%` }} aria-hidden>{NICE_EMOJI[nice.level]}</span>
@@ -193,13 +242,19 @@ export function NiceMeter({ nice, compact = false }: { nice: NonNullable<KidHoli
         <strong>{t(NICE_LEVELS[nice.level])}</strong>
         <span className="holiday-sub">{nice.score} / 100</span>
       </div>
+      {canMark && naughty && <NaughtyForm memberId={memberId} onDone={() => { setNaughty(false); onChange?.(); }} />}
       {!compact && nice.log.length > 0 && (
         <div className="holiday-log">
           <div className="holiday-sub">{t('📜 Elf log')}</div>
           {nice.log.map((e) => (
             <div key={e.id} className="row small" style={{ flexWrap: 'nowrap' }}>
-              <span style={{ flex: 1, minWidth: 0 }}>{e.reason}</span>
-              <strong className={e.amount > 0 ? 'holiday-plus' : 'holiday-minus'}>{e.amount > 0 ? '+' : ''}{e.amount} {home?.pointsIcon ?? ''}</strong>
+              <span style={{ flex: 1, minWidth: 0 }}>{e.naughty ? `😈 ${e.reason || t('Naughty points')}` : e.reason}</span>
+              <strong className={e.amount > 0 ? 'holiday-plus' : 'holiday-minus'}>
+                {e.amount > 0 ? '+' : ''}{e.amount} {e.naughty ? '⭐' : home?.pointsIcon ?? ''}
+              </strong>
+              {canMark && e.naughty && (
+                <button className="ghost holiday-undo" aria-label="Take these naughty points back" title="Take back" onClick={() => void takeBack(e.id)}>✕</button>
+              )}
             </div>
           ))}
         </div>
@@ -415,7 +470,7 @@ export function KidHoliday({ memberId, simple, readAloud, asParent }: { memberId
       {k && (k.elf || k.nice) && (
         <div className="grid-2">
           {k.elf && <ElfCard memberId={memberId} elf={k.elf} asParent={asParent} readAloud={readAloud} onChange={() => void reload()} />}
-          {k.nice && <NiceMeter nice={k.nice} />}
+          {k.nice && <NiceMeter nice={k.nice} memberId={memberId} asParent={asParent} onChange={() => void reload()} />}
         </div>
       )}
       {(h.settings.sleigh || h.settings.cams !== 'off') && (
@@ -500,6 +555,65 @@ export function HolidayReviewCard() {
   );
 }
 
+/** The family Nice list: every kid's bar, a 😈 button each for naughty points, and one elf log with names. */
+export function FamilyNiceList() {
+  const { base, home, toast } = useApp();
+  const h = useHoliday();
+  const [data, reload] = useLoad<{ nice: { kids: { id: string; name: string; avatar: string; color: string; score: number; level: number; naughty: number }[]; log: (NiceLine & { kid: string })[] } | null }>(
+    h?.settings.nice ? `${base}/holiday/nice` : null, [base, !!h?.settings.nice]);
+  const [marking, setMarking] = useState<string | null>(null);
+  const nice = data?.nice;
+  if (!h || !nice?.kids.length) return null;
+  const takeBack = async (id: string) => {
+    try { await api(`${base}/holiday/naughty/${id}`, { method: 'DELETE' }); toast('Naughty points taken back'); await reload(); }
+    catch (e) { toast((e as Error).message); }
+  };
+  return (
+    <section className="holiday-card stack" aria-label="Nice list">
+      <div className="row" style={{ flexWrap: 'nowrap' }}>
+        <h2 className="holiday-h" style={{ flex: 1 }}>⭐ Nice list</h2>
+        <span className="holiday-sub">Santa's notebook</span>
+      </div>
+      {nice.kids.map((k) => (
+        <div key={k.id} className="nice-kid">
+          <div className="row" style={{ flexWrap: 'nowrap' }}>
+            <RaccoonAvatar variant={k.avatar} size={48} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'nowrap' }}>
+                <strong className="nice-kid-name">{k.name}</strong>
+                <span className={`nice-label nice-l${k.level}`}>{NICE_LEVELS[k.level]}</span>
+              </div>
+              <div className="holiday-meter" role="meter" aria-valuenow={k.score} aria-valuemin={0} aria-valuemax={100} aria-label={`${k.name}: ${NICE_LEVELS[k.level]}`}>
+                <i style={{ width: `${k.score}%` }} />
+                <span className="holiday-meter-pin" style={{ left: `${k.score}%` }} aria-hidden>⭐</span>
+              </div>
+            </div>
+            <button className="ghost nice-naughty-btn" aria-expanded={marking === k.id} title={`Naughty points for ${k.name}`} aria-label={`Naughty points for ${k.name}`}
+              onClick={() => setMarking((m) => (m === k.id ? null : k.id))}>😈</button>
+          </div>
+          {marking === k.id && <NaughtyForm memberId={k.id} onDone={() => { setMarking(null); void reload(); }} />}
+        </div>
+      ))}
+      {nice.log.length > 0 && (
+        <div className="holiday-log">
+          <div className="holiday-sub">📜 Elf log</div>
+          {nice.log.map((e) => (
+            <div key={e.id} className="row small" style={{ flexWrap: 'nowrap' }}>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                {e.naughty ? '😈' : '✏️'} {e.kid}{' '}
+                <strong className={e.amount > 0 ? 'holiday-plus' : 'holiday-minus'}>{e.amount > 0 ? '+' : ''}{e.amount}{e.naughty ? ' ⭐' : ` ${home?.pointsIcon ?? ''}`}</strong>
+                : {e.reason || 'Naughty points'}
+              </span>
+              {e.naughty && <button className="ghost holiday-undo" aria-label={`Take back ${e.kid}'s naughty points`} title="Take back" onClick={() => void takeBack(e.id)}>✕</button>}
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="holiday-sub">😈 takes points off the nice list only. Points, allowance and stats never change.</div>
+    </section>
+  );
+}
+
 // ---------- Settings ----------
 
 export function HolidaySettingsCard() {
@@ -577,7 +691,7 @@ export function HolidaySettingsCard() {
 
           <h3 style={{ margin: '6px 0 0' }}>⭐ Nice list</h3>
           <label className="row small check-row"><input type="checkbox" checked={s.nice} onChange={(e) => set({ nice: e.target.checked })} /> Show a nice meter and elf log on each board and the wall</label>
-          {s.nice && <p className="small muted" style={{ margin: 0 }}>It reads the points ledger: chores done over the last two weeks make most of it, bonus chores, quick rewards and elf tasks push it up, penalties pull it down a little. Nothing new to keep track of.</p>}
+          {s.nice && <p className="small muted" style={{ margin: 0 }}>It reads the points ledger: chores done over the last two weeks make most of it, bonus chores, quick rewards and elf tasks push it up, penalties pull it down a little. You can also give naughty points from the Nice list on the parent home or a kid's board: each one takes one off the nice meter for two weeks, with a reason the kid sees, and never touches their points, allowance or stats.</p>}
 
           <h3 style={{ margin: '6px 0 0' }}>🛷 Sleigh tracker</h3>
           <label className="row small check-row"><input type="checkbox" checked={s.sleigh} onChange={(e) => set({ sleigh: e.target.checked })} /> Follow Santa across the world on the night before the big day</label>

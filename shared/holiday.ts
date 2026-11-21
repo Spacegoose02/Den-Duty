@@ -190,15 +190,21 @@ export interface NiceInput {
   kind: number;
   /** Penalties in the same time. */
   penalties: number;
+  /** Naughty points a grown-up gave in the same time. They only ever touch this meter, never the kid's points. */
+  naughty?: number;
 }
+
+/** The most naughty points one mark can take off. */
+export const NAUGHTY_MAX = 25;
 
 /**
  * A 0–100 meter. Doing your chores is most of it; kind extras push it up and penalties pull it down a little.
- * Nobody starts at the bottom: with nothing due yet it sits at 75, like Nordpol Card's starting score.
+ * Each naughty point takes one off. Nobody starts at the bottom: with nothing due yet it sits at 75, like Nordpol
+ * Card's starting score.
  */
 export function niceScore(n: NiceInput): number {
   const base = n.due > 0 ? 40 + Math.round((60 * Math.min(n.done, n.due)) / n.due) : 75;
-  return Math.max(0, Math.min(100, base + 3 * n.kind - 5 * n.penalties));
+  return Math.max(0, Math.min(100, base + 3 * n.kind - 5 * n.penalties - Math.max(0, n.naughty ?? 0)));
 }
 
 /** 0 to 4: cheering you on, watching, almost nice, nice, super nice. */
