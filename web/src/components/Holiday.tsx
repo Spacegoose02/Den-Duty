@@ -498,6 +498,20 @@ export function CamWall({ h, compact = false }: { h: HolidayView; compact?: bool
   );
 }
 
+/** What a kid on the naughty list sees instead of the cams: a lock and how far they are from the nice list. */
+function CamsLocked({ nice }: { nice: NiceView }) {
+  const t = useT();
+  const need = Math.max(1, nice.naughtyBelow - nice.score);
+  return (
+    <section className="holiday-card stack cams-locked">
+      <h2 className="holiday-h">{t('📹 North Pole cams')}</h2>
+      <div className="cams-locked-lock" aria-hidden>🔒</div>
+      <strong>{t('The elves locked the cams')}</strong>
+      <div className="holiday-sub">{t('Secret elf cams are for kids on the nice list. {n} more nice points and they open again!', { n: need })}</div>
+    </section>
+  );
+}
+
 // ---------- on a kid's board ----------
 
 export function KidHoliday({ memberId, simple, readAloud, asParent }: { memberId: string; simple: boolean; readAloud: boolean; asParent: boolean }) {
@@ -509,6 +523,9 @@ export function KidHoliday({ memberId, simple, readAloud, asParent }: { memberId
   const close = useCallback(() => setShow(null), []);
   if (!h) return null;
   const k = data?.holiday;
+  // The cams are for nice kids only: a kid on the naughty list sees a lock instead. A grown-up can still look.
+  const naughty = !!k?.nice?.onNaughty;
+  const camsLocked = naughty && !asParent;
   return (
     <>
       {h.settings.snow && <Snow />}
@@ -522,13 +539,20 @@ export function KidHoliday({ memberId, simple, readAloud, asParent }: { memberId
       {(h.settings.sleigh || h.settings.cams !== 'off') && (
         <div className="row holiday-buttons">
           {h.settings.sleigh && <button className="holiday-btn" onClick={() => setShow('sleigh')}>{t('🛷 Where is Santa?')}</button>}
-          {h.settings.cams !== 'off' && <button className="holiday-btn" onClick={() => setShow('cams')}>{t('📹 North Pole cams')}</button>}
+          {h.settings.cams !== 'off' && <button className="holiday-btn" onClick={() => setShow('cams')}>{camsLocked ? t('🔒 North Pole cams') : t('📹 North Pole cams')}</button>}
         </div>
       )}
       {show && (
         <Modal wide onClose={close}>
           <div className="stack">
-            {show === 'sleigh' ? <SleighTracker h={h} /> : <CamWall h={h} />}
+            {show === 'sleigh' ? <SleighTracker h={h} />
+              : camsLocked && k?.nice ? <CamsLocked nice={k.nice} />
+              : (
+                <>
+                  {naughty && <div className="holiday-sub">{t("🔒 This kid can't open the cams until they're off the naughty list.")}</div>}
+                  <CamWall h={h} />
+                </>
+              )}
             <button className="ghost" style={{ alignSelf: 'flex-end' }} onClick={close}>{t('Close')}</button>
           </div>
         </Modal>

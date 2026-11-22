@@ -996,6 +996,8 @@ button.link { background: none; border: none; padding: 0; min-height: 0; color: 
 .list-badge.nice { color: #0b2a17; background: #7ef0a8; }
 .list-badge.naughty { color: #fff; background: #d6202f; box-shadow: 0 0 0 1px rgba(255,138,146,.6); }
 .holiday-meter-cut { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: rgba(255,255,255,.75); border-radius: 2px; }
+.cams-locked { text-align: center; align-items: center; }
+.cams-locked-lock { font-size: 4rem; line-height: 1; filter: drop-shadow(0 4px 8px rgba(0,0,0,.5)); }
 .holiday-undo { padding: 0 8px; min-height: 0; line-height: 1.6; }
 .sleigh-map { position: relative; width: 100%; aspect-ratio: 2 / 1; border-radius: 14px; overflow: hidden; border: 1px solid rgba(255,214,120,.35);
   background: radial-gradient(ellipse at 50% 120%, #173a6a 0%, #0a1630 60%, #050b1c 100%); }
