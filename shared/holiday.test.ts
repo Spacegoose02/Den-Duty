@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  HOLIDAY_DEFAULTS, bigDayDate, camClips, camPeriod, cleanHoliday, countdown, elfFor, holidayActive, niceLevel, niceScore,
+  HOLIDAY_DEFAULTS, bigDayDate, camClips, camPeriod, cleanHoliday, countdown, elfFor, holidayActive, niceLevel, niceScore, onNaughtyList,
   routePath, sleighAt, sleighRoute, splitJoke, zonedTime,
 } from './holiday.ts';
 import { HOLIDAY_TEXT } from './holiday-data.ts';
@@ -69,6 +69,17 @@ test('nice meter', () => {
   assert.equal(niceScore({ done: 5, due: 10, kind: 2, penalties: 1 }), 71);
   assert.equal(niceScore({ done: 0, due: 0, kind: 0, penalties: 0, naughty: 7 }), 68, 'each naughty point takes one off');
   assert.equal(niceScore({ done: 0, due: 0, kind: 0, penalties: 0, naughty: 500 }), 0);
+  assert.equal(niceScore({ done: 0, due: 0, kind: 0, penalties: 0, nicePoints: 7 }), 82, 'each nice point adds one');
+  assert.equal(niceScore({ done: 0, due: 0, kind: 0, penalties: 0, naughty: 5, nicePoints: 8 }), 78);
+  assert.equal(niceScore({ done: 0, due: 0, kind: 0, penalties: 0, nicePoints: 500 }), 100);
+  assert.equal(onNaughtyList(34, 35), true);
+  assert.equal(onNaughtyList(35, 35), false);
+  assert.equal(onNaughtyList(0, 0), false, '0 turns the naughty list off');
+  assert.equal(cleanHoliday({}).naughtyBelow, 35);
+  assert.equal(cleanHoliday({ naughtyBelow: 50 }).naughtyBelow, 50);
+  assert.equal(cleanHoliday({ naughtyBelow: 0 }).naughtyBelow, 0);
+  assert.equal(cleanHoliday({ naughtyBelow: 101 }).naughtyBelow, 35);
+  assert.equal(cleanHoliday({ naughtyBelow: 'x' }).naughtyBelow, 35);
   assert.equal(niceLevel(100), 4);
   assert.equal(niceLevel(75), 3);
   assert.equal(niceLevel(0), 0);

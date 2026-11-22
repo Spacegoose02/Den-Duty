@@ -26,6 +26,8 @@ export interface HolidaySettings {
   elfNeedsOk: boolean;
   /** The nice meter and elf log on boards. */
   nice: boolean;
+  /** A meter under this score puts a kid on the naughty list (0 = nobody is ever on it). */
+  naughtyBelow: number;
   /** The sleigh tracker: it lands at `place` at `eta` (local time) on the night before the big day. */
   sleigh: boolean;
   eta: string;
@@ -46,7 +48,7 @@ export type CamPeriod = (typeof CAM_PERIODS)[number]['name'];
 
 export const HOLIDAY_DEFAULTS: HolidaySettings = {
   mode: 'off', from: null, to: null, day: '12-25', time: '07:00', title: '🎄 Christmas morning', snow: true,
-  elf: true, elfPoints: 5, elfNeedsOk: true, nice: true, sleigh: true, eta: '23:59', place: null,
+  elf: true, elfPoints: 5, elfNeedsOk: true, nice: true, naughtyBelow: 35, sleigh: true, eta: '23:59', place: null,
   cams: 'hosted', camUrl: LOCAL_CAMS, camLabels: ['CAM 01 – REINDEER PADDOCK', 'CAM 02 – TOY WORKSHOP', 'CAM 03 – MAILROOM', 'CAM 04 – BAKERY'],
   camLook: 'minimal',
 };
@@ -61,6 +63,7 @@ export function cleanHoliday(raw: unknown): HolidaySettings {
   const d = HOLIDAY_DEFAULTS;
   const bool = (k: keyof HolidaySettings) => (typeof b[k] === 'boolean' ? b[k] as boolean : d[k] as boolean);
   const pts = Number(b.elfPoints);
+  const cut = Number(b.naughtyBelow);
   const place = b.place && typeof b.place === 'object' ? b.place as Record<string, unknown> : null;
   const lat = Number(place?.lat), lon = Number(place?.lon);
   const labels = Array.isArray(b.camLabels) ? b.camLabels.slice(0, 4).map((x, i) => text(x, 40) ?? d.camLabels[i]) : d.camLabels;
@@ -74,6 +77,7 @@ export function cleanHoliday(raw: unknown): HolidaySettings {
     title: text(b.title, 60) ?? d.title,
     snow: bool('snow'), elf: bool('elf'), elfNeedsOk: bool('elfNeedsOk'), nice: bool('nice'), sleigh: bool('sleigh'),
     elfPoints: Number.isInteger(pts) && pts >= 0 && pts <= 100 ? pts : d.elfPoints,
+    naughtyBelow: b.naughtyBelow != null && Number.isInteger(cut) && cut >= 0 && cut <= 100 ? cut : d.naughtyBelow,
     eta: typeof b.eta === 'string' && HM.test(b.eta) ? b.eta : d.eta,
     place: place && Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180
       ? { name: text(place.name, 40) ?? 'Home', lat: Math.round(lat * 100) / 100, lon: Math.round(lon * 100) / 100 } : null,
@@ -192,23 +196,29 @@ export interface NiceInput {
   penalties: number;
   /** Naughty points a grown-up gave in the same time. They only ever touch this meter, never the kid's points. */
   naughty?: number;
+  /** Nice points a grown-up gave in the same time. Like naughty points, they only ever touch this meter. */
+  nicePoints?: number;
 }
 
 /** The most naughty points one mark can take off. */
 export const NAUGHTY_MAX = 25;
+/** The most nice points one mark can add. */
+export const NICE_POINTS_MAX = 25;
 
 /**
  * A 0–100 meter. Doing your chores is most of it; kind extras push it up and penalties pull it down a little.
- * Each naughty point takes one off. Nobody starts at the bottom: with nothing due yet it sits at 75, like Nordpol
+ * Each naughty point takes one off and each nice point adds one. Nobody starts at the bottom: with nothing due yet it sits at 75, like Nordpol
  * Card's starting score.
  */
 export function niceScore(n: NiceInput): number {
   const base = n.due > 0 ? 40 + Math.round((60 * Math.min(n.done, n.due)) / n.due) : 75;
-  return Math.max(0, Math.min(100, base + 3 * n.kind - 5 * n.penalties - Math.max(0, n.naughty ?? 0)));
+  return Math.max(0, Math.min(100, base + 3 * n.kind - 5 * n.penalties - Math.max(0, n.naughty ?? 0) + Math.max(0, n.nicePoints ?? 0)));
 }
 
 /** 0 to 4: cheering you on, watching, almost nice, nice, super nice. */
 export const niceLevel = (score: number): number => (score >= 90 ? 4 : score >= 75 ? 3 : score >= 55 ? 2 : score >= 35 ? 1 : 0);
+/** Is this score on the naughty list, with the home's cutoff? */
+export const onNaughtyList = (score: number, naughtyBelow: number): boolean => score < naughtyBelow;
 export const NICE_LEVELS = ['The elves are cheering you on 📣', 'The elves are watching 👀', 'Almost nice 🙂', 'Nice ⭐', 'SUPER nice 🌟'];
 
 // ---------- sleigh ----------

@@ -98,7 +98,7 @@ export async function wallData(db: DatabaseSync, homeId: string) {
       // Their followed teams from the sports tracker (when linked): live scores and the next game.
       sports: await kidSports(db, homeId, k.id),
       // Holiday mode's nice meter (when it's on and showing).
-      nice: holidayS?.nice && on(k, 'chores') ? (({ score, level }) => ({ score, level }))(niceFor(db, home, holidayS, k.id, today)) : null,
+      nice: holidayS?.nice && on(k, 'chores') ? (({ score, level, onNaughty }) => ({ score, level, onNaughty }))(niceFor(db, home, holidayS, k.id, today)) : null,
     };
   }));
 
