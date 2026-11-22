@@ -28,7 +28,7 @@ interface WallKid {
   /** Their followed teams from the sports tracker, when linked. */
   sports?: KidSports;
   /** Holiday mode's nice meter, while it's showing. */
-  nice?: { score: number; level: number } | null;
+  nice?: { score: number; level: number; onNaughty?: boolean } | null;
 }
 interface WallDay { date: string; events?: { id: string; title: string; time: string | null; location: string | null; kidIds: string[] }[]; kids: { kidId: string; chores: number; done: number; practices: number; appointments: { id: string; kind: string; title: string; time: string }[] }[] }
 interface Wall {

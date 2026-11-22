@@ -122,3 +122,65 @@ test('holiday mode: naughty points lower the nice list only, with a reason', asy
   assert.equal((await call(mom, 'DELETE', `${base}/holiday/naughty/${r.id}`)).body.nice.score, 75);
   assert.equal((await call(mom, 'DELETE', `${base}/holiday/naughty/${r.id}`)).status, 404);
 });
+
+test('holiday mode: nice points raise the nice list only, with a reason', async () => {
+  const { call, mom, base, tablet, ava, ben, asKid } = await family();
+  const give = (who: typeof mom, kid: { id: string }, body: object) => call(who, 'POST', `${base}/kids/${kid.id}/holiday/nice`, body);
+  // Not while Holiday mode is off.
+  assert.equal((await give(mom, ava, { points: 3 })).status, 400);
+  await call(mom, 'PUT', `${base}/holiday-settings`, { mode: 'on' });
+  const before = (await call(mom, 'GET', `${base}/kids/${ava.id}/stats`)).body;
+
+  // Only grown-ups, and 1 to 25 at a time.
+  await asKid(ava);
+  assert.equal((await give(tablet, ava, { points: 3 })).status, 403);
+  assert.equal((await give(mom, ava, { points: 0 })).status, 400);
+  assert.equal((await give(mom, ava, { points: 26 })).status, 400);
+  assert.equal((await give(mom, ava, { points: 1.5 })).status, 400);
+
+  const r = (await give(mom, ava, { points: 5, reason: '  Shared her toys  ' })).body;
+  assert.equal(r.nice.score, 80);
+  assert.equal(r.nice.nicePoints, 5);
+  assert.equal(r.nice.naughty, 0);
+  const board = (await call(tablet, 'GET', `${base}/kids/${ava.id}/holiday`)).body.holiday;
+  assert.equal(board.nice.score, 80);
+  assert.equal(board.nice.log[0].id, r.id);
+  assert.equal(board.nice.log[0].amount, 5);
+  assert.equal(board.nice.log[0].reason, 'Shared her toys');
+  assert.equal(board.nice.log[0].nicePoints, true);
+  assert.equal(board.nice.log[0].naughty, false);
+
+  // Naughty and nice points add up on the same meter.
+  const n = (await call(mom, 'POST', `${base}/kids/${ava.id}/holiday/naughty`, { points: 2 })).body;
+  assert.equal(n.nice.score, 78);
+
+  // The family Nice list shows them too.
+  const fam = (await call(mom, 'GET', `${base}/holiday/nice`)).body.nice;
+  assert.deepEqual(fam.kids.map((k: { score: number }) => k.score), [78, 75]);
+  assert.equal(fam.kids[0].nicePoints, 5);
+  assert.equal(fam.log.find((e: { id: string }) => e.id === r.id).kid, 'Avaleigh');
+  assert.equal(fam.naughtyBelow, 35);
+  assert.deepEqual(fam.kids.map((k: { onNaughty: boolean }) => k.onNaughty), [false, false]);
+  // A parent sets where the naughty list starts: Ava's 78 is under 80.
+  await call(mom, 'PUT', `${base}/holiday-settings`, { naughtyBelow: 80 });
+  assert.equal((await call(tablet, 'GET', `${base}/kids/${ava.id}/holiday`)).body.holiday.nice.onNaughty, true);
+  assert.deepEqual((await call(mom, 'GET', `${base}/holiday/nice`)).body.nice.kids.map((k: { onNaughty: boolean }) => k.onNaughty), [true, true]);
+  assert.equal((await call(tablet, 'GET', '/api/kiosk/wall')).body.kids.find((k: { id: string }) => k.id === ava.id).nice.onNaughty, true);
+  await call(mom, 'PUT', `${base}/holiday-settings`, { naughtyBelow: 0 });
+  assert.equal((await call(tablet, 'GET', `${base}/kids/${ava.id}/holiday`)).body.holiday.nice.onNaughty, false, '0: no naughty list');
+  assert.equal((await call(tablet, 'GET', '/api/kiosk/wall')).body.kids.find((k: { id: string }) => k.id === ava.id).nice.score, 78);
+  assert.equal((await call(mom, 'GET', `${base}/kids/${ben.id}/holiday`)).body.holiday.nice.score, 75);
+
+  // Points, the ledger and stats don't change.
+  const kids = (await call(mom, 'GET', base)).body.kids as { id: string; balance: number }[];
+  assert.equal(kids.find((k) => k.id === ava.id)!.balance, 0);
+  assert.equal((await call(mom, 'GET', `${base}/kids/${ava.id}/ledger`)).body.entries.length, 0);
+  assert.deepEqual((await call(mom, 'GET', `${base}/kids/${ava.id}/stats`)).body, before);
+
+  // A grown-up can take them back, and each kind only through its own route.
+  assert.equal((await call(tablet, 'DELETE', `${base}/holiday/nice/${r.id}`)).status, 403);
+  assert.equal((await call(mom, 'DELETE', `${base}/holiday/naughty/${r.id}`)).status, 404);
+  assert.equal((await call(mom, 'DELETE', `${base}/holiday/nice/${n.id}`)).status, 404);
+  assert.equal((await call(mom, 'DELETE', `${base}/holiday/nice/${r.id}`)).body.nice.score, 73);
+  assert.equal((await call(mom, 'DELETE', `${base}/holiday/nice/${r.id}`)).status, 404);
+});

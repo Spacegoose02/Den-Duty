@@ -1392,6 +1392,11 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX naughty_marks_kid ON naughty_marks(member_id, date);
   `,
+  // Nice points: the mirror of naughty points. They share the naughty_marks table, with kind telling them apart, and
+  // just like naughty points they only move the nice meter, never the points ledger.
+  `
+  ALTER TABLE naughty_marks ADD COLUMN kind TEXT NOT NULL DEFAULT 'naughty' CHECK (kind IN ('naughty', 'nice'));
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

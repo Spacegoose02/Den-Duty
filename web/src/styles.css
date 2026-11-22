@@ -981,7 +981,8 @@ button.link { background: none; border: none; padding: 0; min-height: 0; color: 
 .holiday-plus { color: #7ef0a8; }
 .holiday-minus { color: #ff8a92; }
 .holiday-naughty { border: 1px dashed rgba(255,138,146,.5); border-radius: 12px; padding: 10px; }
-.holiday-naughty input { color: inherit; background: rgba(255,255,255,.08); border-color: rgba(255,214,120,.35); }
+.holiday-naughty input, .holiday-nice input { color: inherit; background: rgba(255,255,255,.08); border-color: rgba(255,214,120,.35); }
+.holiday-nice { border: 1px dashed rgba(126,240,168,.5); border-radius: 12px; padding: 10px; }
 .nice-kid { display: flex; flex-direction: column; gap: 8px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,214,120,.15); }
 .nice-kid .holiday-meter { margin: 6px 0 2px; }
 .nice-naughty-btn { padding: 6px 10px; min-height: 0; font-size: 1.2rem; }
@@ -991,6 +992,10 @@ button.link { background: none; border: none; padding: 0; min-height: 0; color: 
 .nice-l2 { color: #ffd878; }
 .nice-l3 { color: #b8f07e; }
 .nice-l4 { color: #7ef0a8; }
+.list-badge { font-weight: 800; font-size: .8rem; padding: 2px 10px; border-radius: 999px; white-space: nowrap; }
+.list-badge.nice { color: #0b2a17; background: #7ef0a8; }
+.list-badge.naughty { color: #fff; background: #d6202f; box-shadow: 0 0 0 1px rgba(255,138,146,.6); }
+.holiday-meter-cut { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: rgba(255,255,255,.75); border-radius: 2px; }
 .holiday-undo { padding: 0 8px; min-height: 0; line-height: 1.6; }
 .sleigh-map { position: relative; width: 100%; aspect-ratio: 2 / 1; border-radius: 14px; overflow: hidden; border: 1px solid rgba(255,214,120,.35);
   background: radial-gradient(ellipse at 50% 120%, #173a6a 0%, #0a1630 60%, #050b1c 100%); }
