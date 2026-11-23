@@ -16,6 +16,7 @@ import { APPOINTMENT_SECTION, appointmentOn, GOAL_AREA_SECTION, goalAreaOn } fro
 import { ageOn } from '../../../shared/ages.ts';
 import { addDays, isIsoDate, timeIn } from '../../../shared/schedule.ts';
 import { cleanQuestions, practiceSlots } from './therapy.ts';
+import { wordsSummary } from './words.ts';
 
 export const LOG_KINDS = ['mood', 'symptom', 'behavior', 'sleep', 'other'] as const;
 type LogKind = (typeof LOG_KINDS)[number];
@@ -164,8 +165,8 @@ function medFields(b: Row, cur?: Row) {
 
 // ---------- the visit summary (also what a share link shows) ----------
 
-export interface SummaryOpts { goalIds: string[] | null; profile: boolean; meds: boolean; log: boolean; notes: boolean; appointments: boolean }
-const ALL: SummaryOpts = { goalIds: null, profile: true, meds: true, log: true, notes: true, appointments: true };
+export interface SummaryOpts { goalIds: string[] | null; profile: boolean; meds: boolean; log: boolean; notes: boolean; appointments: boolean; words: boolean }
+const ALL: SummaryOpts = { goalIds: null, profile: true, meds: true, log: true, notes: true, appointments: true, words: true };
 
 export function buildSummary(db: DatabaseSync, homeId: string, memberId: string, from: string, to: string, opts: SummaryOpts = ALL) {
   const { today, now } = clock(db, homeId);
@@ -234,6 +235,7 @@ export function buildSummary(db: DatabaseSync, homeId: string, memberId: string,
       groups: [...byLabel.values()].sort((a, b) => b.count - a.count).map((e) => ({ kind: e.kind, label: e.label, count: e.count, avgSeverity: avg(e.severity), avgMinutes: avg(e.minutes) })),
       recent: logRows.slice(0, 25).map(logView),
     } : null,
+    words: opts.words ? wordsSummary(db, memberId, from, to) : null,
   };
 }
 
@@ -254,7 +256,7 @@ function rangeParams(q: { from?: string; to?: string; days?: string }, today: st
 
 function linkView(r: Row) {
   return {
-    id: r.id as string, label: r.label as string, goalIds: parseJson<string[] | null>(r.goal_ids, null), showLog: !!r.show_log, showMeds: !!r.show_meds,
+    id: r.id as string, label: r.label as string, goalIds: parseJson<string[] | null>(r.goal_ids, null), showLog: !!r.show_log, showMeds: !!r.show_meds, showWords: !!r.show_words,
     allowNotes: !!r.allow_notes, expiresAt: r.expires_at as string, lastSeenAt: r.last_seen_at as string | null, createdAt: r.created_at as string,
   };
 }
@@ -288,6 +290,8 @@ function exportKid(db: DatabaseSync, memberId: string) {
     goals: rows('SELECT * FROM therapy_goals WHERE member_id = ? ORDER BY created_at').map(strip),
     notes: rows('SELECT * FROM therapy_notes WHERE member_id = ? ORDER BY date, created_at').map(strip),
     practiceRequests: rows('SELECT * FROM practice_requests WHERE member_id = ? ORDER BY created_at').map(strip),
+    words: rows('SELECT * FROM speech_words WHERE member_id = ? ORDER BY added_on, created_at').map(strip),
+    wordSays: rows('SELECT * FROM speech_word_says WHERE member_id = ? ORDER BY date, created_at').map(strip),
   };
 }
 
@@ -558,9 +562,9 @@ export function healthRoutes(app: FastifyInstance, db: DatabaseSync): void {
     if (count >= 20) throw new HttpError(400, '20 links per kid is the limit. Turn some off first.');
     const token = randomToken(24);
     const id = newId();
-    db.prepare(`INSERT INTO share_links (id, home_id, member_id, token_hash, label, goal_ids, show_log, show_meds, allow_notes, expires_at, created_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, ctx.homeId, kid.id as string, sha256(token), requireStr(b.label, 'Who is it for', 80),
-      goalIds ? JSON.stringify(goalIds) : null, b.showLog === true ? 1 : 0, b.showMeds === true ? 1 : 0, b.allowNotes === true ? 1 : 0,
+    db.prepare(`INSERT INTO share_links (id, home_id, member_id, token_hash, label, goal_ids, show_log, show_meds, show_words, allow_notes, expires_at, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, ctx.homeId, kid.id as string, sha256(token), requireStr(b.label, 'Who is it for', 80),
+      goalIds ? JSON.stringify(goalIds) : null, b.showLog === true ? 1 : 0, b.showMeds === true ? 1 : 0, b.showWords === true ? 1 : 0, b.allowNotes === true ? 1 : 0,
       addDays(clock(db, ctx.homeId).today, days), ctx.user?.id ?? null);
     // The token is only ever shown here; the server keeps its hash.
     return { ...linkView(own(db, 'share_links', ctx, id)), url: `/share/${token}` };
@@ -580,7 +584,7 @@ export function healthRoutes(app: FastifyInstance, db: DatabaseSync): void {
     const homeId = link.home_id as string;
     const { from, to } = rangeParams(req.query as Record<string, string>, clock(db, homeId).today);
     const s = buildSummary(db, homeId, link.member_id as string, from, to, {
-      goalIds: parseJson<string[] | null>(link.goal_ids, null), profile: false, meds: !!link.show_meds, log: !!link.show_log, notes: true, appointments: true,
+      goalIds: parseJson<string[] | null>(link.goal_ids, null), profile: false, meds: !!link.show_meds, log: !!link.show_log, notes: true, appointments: true, words: !!link.show_words,
     });
     reply.header('cache-control', 'no-store');
     return {
@@ -631,6 +635,12 @@ export function healthRoutes(app: FastifyInstance, db: DatabaseSync): void {
         const rows = db.prepare('SELECT * FROM health_log WHERE member_id = ? ORDER BY date, time').all(kid.id as string) as Row[];
         reply.header('content-disposition', `attachment; filename="${slug}-health-log-${today}.csv"`).type('text/csv; charset=utf-8');
         return toCsv(['date', 'time', 'kind', 'what', 'strength_1_5', 'minutes', 'trigger', 'note', 'by'], rows.map((r) => [r.date, r.time, r.kind, r.label, r.severity, r.minutes, r.trigger, r.note, r.by_name]));
+      }
+      if (q.what === 'words') {
+        const rows = db.prepare(`SELECT w.word, w.added_on, w.note, COUNT(s.id) AS said, MIN(s.date) AS first, MAX(s.date) AS last, COALESCE(SUM(s.awarded), 0) AS points
+          FROM speech_words w LEFT JOIN speech_word_says s ON s.word_id = w.id WHERE w.member_id = ? GROUP BY w.id ORDER BY w.added_on, lower(w.word)`).all(kid.id as string) as Row[];
+        reply.header('content-disposition', `attachment; filename="${slug}-new-words-${today}.csv"`).type('text/csv; charset=utf-8');
+        return toCsv(['word', 'added', 'times_said', 'first_said', 'last_said', 'points_earned', 'note'], rows.map((r) => [r.word, r.added_on, r.said, r.first, r.last, r.points, r.note]));
       }
       if (q.what === 'progress') {
         const rows = db.prepare(`SELECT n.date, g.title, g.area, n.progress, n.body, n.by_name FROM therapy_notes n LEFT JOIN therapy_goals g ON g.id = n.goal_id

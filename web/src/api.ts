@@ -207,6 +207,16 @@ export interface LogEntry {
   id: string; kind: LogKind; label: string; date: string; time: string | null; severity: number | null; minutes: number | null; trigger: string | null; note: string | null; by: string | null;
 }
 
+export interface Milestone { times: number; points: number }
+export interface SpeechWord {
+  id: string; word: string; note: string | null; addedOn: string; count: number; lastSaid: string | null; pointsEarned: number;
+  ownMilestones: boolean; milestones: Milestone[]; next: Milestone | null; mastered: boolean;
+}
+export interface WordsData { today: string; milestones: Milestone[]; custom: boolean; words: SpeechWord[]; says: { date: string; count: number }[] }
+export interface WordsSummary {
+  total: number; newInRange: number; saysInRange: number;
+  words: { word: string; addedOn: string; note: string | null; total: number; inRange: number; lastSaid: string | null }[];
+}
 export interface VisitSummary {
   kid: { name: string; age: number | null; birthdate: string | null };
   from: string; to: string; today: string;
@@ -223,6 +233,7 @@ export interface VisitSummary {
   log: { total: number; groups: { kind: LogKind; label: string; count: number; avgSeverity: number | null; avgMinutes: number | null }[]; recent: LogEntry[] } | null;
   /** Only on a shared link. */
   link?: { label: string; expiresAt: string; allowNotes: boolean };
+  words: WordsSummary | null;
 }
 
 export interface QuickReward { id: string; title: string; icon: string; amount: number }
