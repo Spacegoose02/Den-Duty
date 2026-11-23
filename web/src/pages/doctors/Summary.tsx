@@ -75,6 +75,27 @@ export function SummaryView({ s, color, extra }: { s: VisitSummary; color: strin
         </div>
       </section>
 
+      {s.words && (
+        <section className="card stack">
+          <h2 style={{ margin: 0 }}>🗣️ New words ({s.words.total})</h2>
+          <div className="small">
+            <span className="pill">🌱 {s.words.newInRange} new this period</span>{' '}
+            <span className="pill">👂 heard {s.words.saysInRange}× this period</span>
+          </div>
+          <table className="summary-table">
+            <thead><tr><th>Word</th><th>First heard</th><th>This period</th><th>All time</th><th>Last said</th></tr></thead>
+            <tbody>
+              {s.words.words.map((w) => (
+                <tr key={w.word}>
+                  <td><strong>{w.word}</strong>{w.addedOn >= s.from && <span className="pill ok" style={{ marginLeft: 6 }}>new</span>}{w.note && <div className="small muted">{w.note}</div>}</td>
+                  <td>{shortDate(w.addedOn)}</td><td>{w.inRange}×</td><td>{w.total}×</td><td>{w.lastSaid ? shortDate(w.lastSaid) : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
+
       {s.meds.length > 0 && (
         <section className="card stack">
           <h2 style={{ margin: 0 }}>💊 Medicines</h2>

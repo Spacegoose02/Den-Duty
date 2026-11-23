@@ -15,6 +15,7 @@ import { MedsTab } from './doctors/Meds.tsx';
 import { HealthTab, type HealthData } from './doctors/Health.tsx';
 import { LogTab } from './doctors/HealthLog.tsx';
 import { ShareTab } from './doctors/Share.tsx';
+import { WordsTab } from './doctors/Words.tsx';
 
 interface Question { text: string; done: boolean }
 /** A repeating visit's rule, which run it's in and which visit of it this is (0 = the first). */
@@ -490,6 +491,7 @@ export const DOCTOR_TABS = [
   { id: 'meds', icon: '💊', label: 'Medicines' },
   { id: 'health', icon: '🪪', label: 'Health card' },
   { id: 'log', icon: '📓', label: 'Log' },
+  { id: 'words', icon: '🗣️', label: 'New words' },
   { id: 'share', icon: '🔗', label: 'Summary & sharing' },
 ] as const;
 type DoctorTab = (typeof DOCTOR_TABS)[number]['id'];
@@ -542,7 +544,7 @@ export function Doctors() {
 
       {kid && (
         <div className="chips doctor-tabs" role="tablist">
-          {DOCTOR_TABS.map((t) => (
+          {DOCTOR_TABS.filter((t) => t.id !== 'words' || !areasOff.includes('speech')).map((t) => (
             <button key={t.id} role="tab" aria-selected={tab === t.id} className={`chip${tab === t.id ? ' on' : ''}`}
               onClick={() => setParams(t.id === 'therapy' ? {} : { tab: t.id }, { replace: true })}>{t.icon} {t.label}</button>
           ))}
@@ -552,6 +554,8 @@ export function Doctors() {
       {kid && tab === 'meds' && health && <MedsTab kid={kid} data={health.meds} today={health.today} reload={reloadHealth} />}
       {kid && tab === 'health' && health && <HealthTab kid={kid} data={health} reload={reloadHealth} color={color} />}
       {kid && tab === 'log' && <LogTab key={kid.id} kid={kid} today={health?.today ?? now.slice(0, 10)} dark={dark} />}
+      {kid && tab === 'words' && !areasOff.includes('speech') && <WordsTab key={kid.id} kid={kid} color={color} />}
+      {kid && tab === 'words' && areasOff.includes('speech') && <div className="card">Speech is turned off for {kid.name}. Turn it on in Kids → Edit.</div>}
       {kid && tab === 'share' && data && <ShareTab key={kid.id} kid={kid} goals={data.goals} />}
 
       {kid && data && tab === 'therapy' && (

@@ -1397,6 +1397,37 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE naughty_marks ADD COLUMN kind TEXT NOT NULL DEFAULT 'naughty' CHECK (kind IN ('naughty', 'nice'));
   `,
+  // New words (Doctors → Speech): words a kid is learning to say, and each time a grown-up heard one. Milestones
+  // ("say it 10 times: 5 points") are the kid's (members.word_milestones, NULL = the defaults) unless a word has its own.
+  // Points go through the ledger like any bonus; each tap remembers what it paid so undoing it takes that back.
+  `
+  ALTER TABLE members ADD COLUMN word_milestones TEXT;
+  ALTER TABLE share_links ADD COLUMN show_words INTEGER NOT NULL DEFAULT 0;
+  CREATE TABLE speech_words (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    word TEXT NOT NULL,
+    note TEXT,
+    milestones TEXT,
+    added_on TEXT NOT NULL,
+    created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE UNIQUE INDEX speech_words_kid_word ON speech_words(member_id, lower(word));
+  CREATE TABLE speech_word_says (
+    id TEXT PRIMARY KEY,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    word_id TEXT NOT NULL REFERENCES speech_words(id) ON DELETE CASCADE,
+    date TEXT NOT NULL,
+    awarded INTEGER NOT NULL DEFAULT 0,
+    by_name TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX speech_word_says_word ON speech_word_says(word_id, created_at);
+  CREATE INDEX speech_word_says_kid ON speech_word_says(member_id, date);
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {
