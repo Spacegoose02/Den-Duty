@@ -55,6 +55,7 @@ import { eventRoutes } from './routes/events.ts';
 import { calSyncRoutes } from './routes/calsync.ts';
 import { schoolRoutes } from './routes/school.ts';
 import { mathRoutes } from './routes/mathfacts.ts';
+import { learningRoutes } from './routes/learning.ts';
 import { holidayRoutes } from './routes/holiday.ts';
 
 export async function buildApp(db: DatabaseSync, opts: { logger?: boolean; serveWeb?: boolean } = {}): Promise<FastifyInstance> {
@@ -122,6 +123,7 @@ export async function buildApp(db: DatabaseSync, opts: { logger?: boolean; serve
   calSyncRoutes(app, db);
   schoolRoutes(app, db);
   mathRoutes(app, db);
+  learningRoutes(app, db);
   holidayRoutes(app, db);
 
   // Holiday mode's North Pole cams, when a family keeps its own copies of the scenes: <data>/holiday-cams/cam1_morning.mp4 …

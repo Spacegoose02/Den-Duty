@@ -9,6 +9,7 @@ import { HttpError, newId, randomToken, readableCode, requireStr, sha256, str } 
 import { hashPassword, limitAuth } from '../security.ts';
 import { balance, homeInfo, homeToday, SURPRISE_LEVELS, type SurpriseLevel } from '../chores.ts';
 import { ageOn, pictureMode } from '../../../shared/ages.ts';
+import { currentLevel, isLevel, schoolYear } from '../../../shared/learning.ts';
 import { DOCTOR_AREA_IDS, IDEAS_OFF_DEFAULT, KID_PAGE_IDS, offList, PRACTICE_IDEA_IDS, type DoctorArea, type KidPage, type PracticeIdea } from '../../../shared/pages.ts';
 import { defaultAvatar, isAvatar, isKidColor, KID_COLORS, POINT_ICONS } from '../../../shared/catalog.ts';
 import { isIsoDate, isTimeZone } from '../../../shared/schedule.ts';
@@ -73,6 +74,9 @@ export function kidView(db: DatabaseSync, r: Row) {
     aiOn: !r.ai_off,
     /** Their own language for their board (null = the home's). */
     language: (r.language as string | null) ?? null,
+    /** School grade: what a parent picked (null = by age) and where they are this school year. */
+    gradeSetting: isLevel(r.grade) ? r.grade : null,
+    grade: currentLevel(r.grade as string | null, r.grade_year as number | null, birthdate, homeToday(homeInfo(db, r.home_id as string))).level,
   };
 }
 
@@ -96,10 +100,20 @@ function applyKidProfile(db: DatabaseSync, id: string, b: Row, today: string): v
     if (!['auto', 'on', 'off'].includes(String(b.readAloud))) throw new HttpError(400, 'readAloud must be auto, on or off');
     db.prepare('UPDATE members SET read_aloud = ? WHERE id = ?').run(String(b.readAloud), id);
   }
+  if ('grade' in b) setGrade(db, id, b.grade, today);
   if ('pictureMode' in b) {
     if (!['auto', 'on', 'off'].includes(String(b.pictureMode))) throw new HttpError(400, 'pictureMode must be auto, on or off');
     db.prepare('UPDATE members SET picture_mode = ? WHERE id = ?').run(String(b.pictureMode), id);
   }
+}
+
+/** A kid's grade ('' or null = by age). Remembers the school year, so it moves up by itself each July. */
+export function setGrade(db: DatabaseSync, id: string, v: unknown, today: string): void {
+  if (v != null && v !== '' && !isLevel(v)) throw new HttpError(400, 'Pick a grade from Talk & play to 5th');
+  // Saving the grade they're already in this year changes nothing (so editing a name doesn't restart the count).
+  const cur = db.prepare('SELECT grade, grade_year FROM members WHERE id = ?').get(id) as Row | undefined;
+  if (isLevel(v) && cur && isLevel(cur.grade) && currentLevel(cur.grade, cur.grade_year as number | null, null, today).level === v) return;
+  db.prepare('UPDATE members SET grade = ?, grade_year = ? WHERE id = ?').run(isLevel(v) ? v : null, isLevel(v) ? schoolYear(today) : null, id);
 }
 
 export function listKids(db: DatabaseSync, homeId: string) {

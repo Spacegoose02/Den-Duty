@@ -71,6 +71,8 @@ export interface Kid {
   readAloudSetting: 'auto' | 'on' | 'off'; readAloud: boolean;
   /** The kid's own language for their screens (null = the family's). */
   language?: string | null;
+  /** School grade a parent picked (null = by age), and the level they're at this school year. */
+  gradeSetting?: string | null; grade?: string | null;
 }
 
 export interface HomeDetail {

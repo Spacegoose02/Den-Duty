@@ -1397,6 +1397,27 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE naughty_marks ADD COLUMN kind TEXT NOT NULL DEFAULT 'naughty' CHECK (kind IN ('naughty', 'nice'));
   `,
+  // Learning time: each kid's grade (null = by age; it moves up each July from the school year it was set in), the plan
+  // (questions a day, points, subjects off) and a log of every answer, by skill, for the parent's stats.
+  `
+  ALTER TABLE members ADD COLUMN grade TEXT;
+  ALTER TABLE members ADD COLUMN grade_year INTEGER;
+  ALTER TABLE members ADD COLUMN learn_plan TEXT;
+  ALTER TABLE members ADD COLUMN learn_paid_on TEXT;
+  CREATE TABLE learn_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    home_id TEXT NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    date TEXT NOT NULL,
+    card INTEGER NOT NULL,
+    level TEXT NOT NULL,
+    skill TEXT NOT NULL,
+    result TEXT NOT NULL CHECK (result IN ('right', 'second', 'wrong')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (member_id, date, card)
+  );
+  CREATE INDEX learn_log_kid ON learn_log(member_id, date);
+  `,
 ];
 
 export function openDb(dataDir: string): DatabaseSync {

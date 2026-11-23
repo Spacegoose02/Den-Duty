@@ -9,10 +9,11 @@ import { defaultAvatar, KID_COLORS } from '../../../shared/catalog.ts';
 import { ThemePicker } from '../components/ThemePicker.tsx';
 import { IdeasButton } from '../components/Ideas.tsx';
 import { LANGUAGES } from '../../../shared/languages.ts';
+import { LEVELS } from '../../../shared/learning.ts';
 import { DOCTOR_AREAS, IDEAS_OFF_DEFAULT, KID_PAGES, PRACTICE_IDEAS, type DoctorArea, type KidPage, type PracticeIdea } from '../../../shared/pages.ts';
 
 interface KidDraft {
-  name: string; avatar: string; color: string; pin: string; theme: string | null; birthdate: string; pictureMode: 'auto' | 'on' | 'off'; readAloud: 'auto' | 'on' | 'off'; language: string | null;
+  name: string; avatar: string; color: string; pin: string; theme: string | null; birthdate: string; pictureMode: 'auto' | 'on' | 'off'; readAloud: 'auto' | 'on' | 'off'; language: string | null; grade: string | null;
   pagesOff: KidPage[]; doctorAreasOff: DoctorArea[]; ideasOff: PracticeIdea[]; aiOn: boolean;
 }
 
@@ -67,6 +68,15 @@ function KidForm({ initial, onSubmit, submitLabel, hasPin, onClearPin }: {
           </div>
         </label>
       </div>
+      <label className="field">🎓 School grade
+        <div className="chips">
+          <button type="button" className={`chip${!d.grade ? ' on' : ''}`} onClick={() => setD({ ...d, grade: null })}>By age</button>
+          {LEVELS.map((l) => (
+            <button key={l.id} type="button" className={`chip${d.grade === l.id ? ' on' : ''}`} title={l.hint} onClick={() => setD({ ...d, grade: l.id })}>{l.id === 'talk' ? '🗣️ ' : ''}{l.label}</button>
+          ))}
+        </div>
+        <span className="small muted" style={{ fontWeight: 400 }}>For Learning time (Virginia SOL). A grade moves up by itself each July. “By age” uses Virginia's Sept 30 kindergarten cutoff. Talk & play is picture questions for kids working on speech.</span>
+      </label>
       <p className="small muted" style={{ margin: 0 }}>The age tailors chore ideas and AI suggestions (only the age is ever sent, never the name). “By age” shows big pictures for kids under 6.</p>
       <div className="field">
         <span>Pages for {d.name.trim() || 'this kid'}</span>
@@ -248,10 +258,10 @@ function KidCard({ kid, onChange }: { kid: Kid; onChange: () => Promise<void> })
         <Modal onClose={() => setEditing(false)}>
           <div className="stack">
             <h2 style={{ margin: 0 }}>Edit {kid.name}</h2>
-            <KidForm initial={{ name: kid.name, avatar: kid.avatar, color: kid.color, pin: '', theme: kid.theme, birthdate: kid.birthdate ?? '', pictureMode: kid.pictureModeSetting, readAloud: kid.readAloudSetting, language: kid.language ?? null, pagesOff: kid.pagesOff, doctorAreasOff: kid.doctorAreasOff, ideasOff: kid.ideasOff, aiOn: kid.aiOn }} hasPin={kid.hasPin} submitLabel="Save"
+            <KidForm initial={{ name: kid.name, avatar: kid.avatar, color: kid.color, pin: '', theme: kid.theme, birthdate: kid.birthdate ?? '', pictureMode: kid.pictureModeSetting, readAloud: kid.readAloudSetting, language: kid.language ?? null, grade: kid.gradeSetting ? kid.grade ?? null : null, pagesOff: kid.pagesOff, doctorAreasOff: kid.doctorAreasOff, ideasOff: kid.ideasOff, aiOn: kid.aiOn }} hasPin={kid.hasPin} submitLabel="Save"
               onClearPin={() => void run(() => api(`${base}/kids/${kid.id}`, { method: 'PATCH', body: { pin: null } }), 'PIN removed').then(() => setEditing(false))}
               onSubmit={async (d) => {
-                await api(`${base}/kids/${kid.id}`, { method: 'PATCH', body: { name: d.name, avatar: d.avatar, color: d.color, theme: d.theme, birthdate: d.birthdate, pictureMode: d.pictureMode, readAloud: d.readAloud, language: d.language, pagesOff: d.pagesOff, doctorAreasOff: d.doctorAreasOff, ideasOff: d.ideasOff, aiOn: d.aiOn, ...(d.pin ? { pin: d.pin } : {}) } });
+                await api(`${base}/kids/${kid.id}`, { method: 'PATCH', body: { name: d.name, avatar: d.avatar, color: d.color, theme: d.theme, birthdate: d.birthdate, pictureMode: d.pictureMode, readAloud: d.readAloud, language: d.language, grade: d.grade ?? '', pagesOff: d.pagesOff, doctorAreasOff: d.doctorAreasOff, ideasOff: d.ideasOff, aiOn: d.aiOn, ...(d.pin ? { pin: d.pin } : {}) } });
                 setEditing(false);
                 toast('Saved');
                 await refreshAll();
@@ -305,7 +315,7 @@ export function Kids() {
         <Modal onClose={() => setAdding(false)}>
           <div className="stack">
             <h2 style={{ margin: 0 }}>Add a kid</h2>
-            <KidForm initial={{ name: '', avatar: defaultAvatar(count), color: KID_COLORS[count % KID_COLORS.length], pin: '', theme: null, birthdate: '', pictureMode: 'auto', readAloud: 'auto', language: null, pagesOff: [], doctorAreasOff: [], ideasOff: IDEAS_OFF_DEFAULT, aiOn: true }} submitLabel="Add"
+            <KidForm initial={{ name: '', avatar: defaultAvatar(count), color: KID_COLORS[count % KID_COLORS.length], pin: '', theme: null, birthdate: '', pictureMode: 'auto', readAloud: 'auto', language: null, grade: null, pagesOff: [], doctorAreasOff: [], ideasOff: IDEAS_OFF_DEFAULT, aiOn: true }} submitLabel="Add"
               onSubmit={async (d) => {
                 await api(`${base}/kids`, { body: { ...d, pin: d.pin || null } });
                 setAdding(false);
